@@ -17,7 +17,18 @@ param(
 
     [string] $Python = ".\.venv\Scripts\python.exe",
 
-    [string] $OutputRoot = ".tmp_tests\live_cli_check"
+    [string] $OutputRoot = ".tmp_tests\live_cli_check",
+
+    [switch] $IncludeAcquisitionActions,
+    [switch] $IncludeAutoscale,
+    [switch] $IncludeStorageWrites,
+    [string] $ImageFilename,
+    [string] $WaveformFilename,
+    [ValidateRange(1, 4)][int] $WaveformSourceChannel,
+    [switch] $IncludeConfigurationActions,
+    [switch] $IncludeScreenshot,
+    [ValidateRange(1, 9)][int] $SetupSlot,
+    [ValidateRange(1, 2)][int] $ReferenceSlot
 )
 
 Set-StrictMode -Version Latest
@@ -27,6 +38,7 @@ $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $script:RepoRoot = $RepoRoot
 . (Join-Path $PSScriptRoot "_validation_helpers.ps1")
 . (Join-Path $PSScriptRoot "_artifact_privacy.ps1")
+. (Join-Path $PSScriptRoot "_live_tektronix_helpers.ps1")
 
 $script:CliInvocationIndex = 0
 $script:CaseResults = [ordered]@{}
@@ -45,21 +57,22 @@ $normalizedTarget = $Target.Trim().ToLowerInvariant()
 if ($normalizedTarget -eq "all") {
     Write-LiveUsageError -Domain cli (
         "Target 'all' is not supported for live validation. " +
-        "Specify one of: $(@(Get-SupportedTargetModelIds) -join ', ')."
+        "Specify one of: $(@(Get-SupportedTargetModelIds -IncludeTektronix) -join ', ')."
     )
 }
 try {
-    $resolvedTargets = @(Resolve-ValidationTargets -Target $normalizedTarget)
+    $resolvedTargets = @(Resolve-ValidationTargets -Target $normalizedTarget -IncludeTektronix)
 } catch {
     Write-LiveUsageError -Domain cli $_.Exception.Message
 }
 if ($resolvedTargets.Count -ne 1) {
     Write-LiveUsageError -Domain cli (
         "Live validation requires a single canonical target. " +
-        "Supported targets: $(@(Get-SupportedTargetModelIds) -join ', ')."
+        "Supported targets: $(@(Get-SupportedTargetModelIds -IncludeTektronix) -join ', ')."
     )
 }
 $script:Target = $resolvedTargets[0]
+$script:IsTektronix = $script:Target -in @($script:TektronixValidationTargetProfiles.model_id)
 $script:Connection = $normalizedConnection
 
 $resourceMatchesConnection =
@@ -84,6 +97,20 @@ try {
 $script:BackendName = if (
     $script:LiveConnectionArguments -contains "--visa-library"
 ) { "pyvisa_py" } else { "system_visa" }
+
+if ($script:IsTektronix) {
+    Assert-TektronixCliOptions -BoundParameters $PSBoundParameters
+} else {
+    foreach ($option in @(
+        "IncludeAcquisitionActions", "IncludeAutoscale", "IncludeStorageWrites",
+        "ImageFilename", "WaveformFilename", "WaveformSourceChannel",
+        "IncludeConfigurationActions", "IncludeScreenshot", "SetupSlot", "ReferenceSlot"
+    )) {
+        if ($PSBoundParameters.ContainsKey($option)) {
+            Write-LiveUsageError -Domain cli "-$option applies only to Tektronix validation."
+        }
+    }
+}
 
 function ConvertTo-InvariantString {
     param(
@@ -2120,6 +2147,12 @@ $runLayout = New-ValidationRunDirectory -BaseRoot $outputBase -Prefix "run"
 $script:RunDirectory = $runLayout.Root
 $script:RunRoot = $runLayout.Private
 $script:ShareableRoot = $runLayout.Shareable
+if ($script:IsTektronix) {
+    Invoke-TektronixCliValidation
+    if ($script:FunctionalFailed -or $script:ShareableGenerationFailed) { exit 1 }
+    exit 0
+}
+
 $preflightRoot = Join-Path $script:RunDirectory "preflight"
 $liveArtifactRoot = Join-Path $script:RunRoot "live"
 New-Item -ItemType Directory -Path $preflightRoot -Force | Out-Null

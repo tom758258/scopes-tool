@@ -3038,7 +3038,7 @@ sys.exit(9)
         encoding="utf-8",
     )
 
-    output_root = tmp_path / "artifacts"
+    output_root = REPO_ROOT / ".tmp_tests" / "preflight_cli_check" / tmp_path.name
     invocation_log = tmp_path / "fake-cli-invocations.jsonl"
     # All migrated validators take the canonical Target/Connection contract,
     # validate Connection against the resource transport, and write
@@ -9330,6 +9330,17 @@ def test_live_cli_check_requires_target_and_connection():
 
 
 @requires_windows
+def test_live_cli_check_accepts_tektronix_target_before_resource_validation():
+    completed = run_live_cli_script(
+        "-Target", "tektronix-tbs2074b", "-Connection", "usb",
+        "-Resource", "TCPIP0::198.51.100.7::inst0::INSTR",
+    )
+    assert completed.returncode == 2
+    assert "does not match resource" in completed.stderr
+    assert "Unsupported target" not in completed.stderr
+
+
+@requires_windows
 def test_live_cli_check_target_model_match_gate():
     body = """
 $results = @{}
@@ -9366,11 +9377,66 @@ try {
 } catch {
     $results.missing = $_.Exception.Message
 }
+$tek = [pscustomobject]@{
+    idn = [pscustomobject]@{ vendor = "Tektronix"; model = "TBS2074B" }
+    capabilities = [pscustomobject]@{ series = "TBS2000B"; analog_channels = 4 }
+}
+try {
+    Assert-TargetModelMatch -Identity $tek -ResolvedTarget "tektronix-tbs2074b"
+    $results.tek_match = ""
+} catch {
+    $results.tek_match = $_.Exception.Message
+}
+$tekWrongVendor = [pscustomobject]@{
+    idn = [pscustomobject]@{ vendor = "Keysight"; model = "TBS2074B" }
+    capabilities = [pscustomobject]@{ series = "TBS2000B"; analog_channels = 4 }
+}
+try {
+    Assert-TargetModelMatch -Identity $tekWrongVendor -ResolvedTarget "tektronix-tbs2074b"
+    $results.tek_wrong_vendor = ""
+} catch {
+    $results.tek_wrong_vendor = $_.Exception.Message
+}
+$tekWrongModel = [pscustomobject]@{
+    idn = [pscustomobject]@{ vendor = "Tektronix"; model = "TDS2024B" }
+    capabilities = [pscustomobject]@{ series = "TBS2000B"; analog_channels = 4 }
+}
+try {
+    Assert-TargetModelMatch -Identity $tekWrongModel -ResolvedTarget "tektronix-tbs2074b"
+    $results.tek_wrong_model = ""
+} catch {
+    $results.tek_wrong_model = $_.Exception.Message
+}
+$tekWrongSeries = [pscustomobject]@{
+    idn = [pscustomobject]@{ vendor = "Tektronix"; model = "TBS2074B" }
+    capabilities = [pscustomobject]@{ series = "TDS2000B"; analog_channels = 4 }
+}
+try {
+    Assert-TargetModelMatch -Identity $tekWrongSeries -ResolvedTarget "tektronix-tbs2074b"
+    $results.tek_wrong_series = ""
+} catch {
+    $results.tek_wrong_series = $_.Exception.Message
+}
+$tekWrongChannels = [pscustomobject]@{
+    idn = [pscustomobject]@{ vendor = "Tektronix"; model = "TBS2074B" }
+    capabilities = [pscustomobject]@{ series = "TBS2000B"; analog_channels = 2 }
+}
+try {
+    Assert-TargetModelMatch -Identity $tekWrongChannels -ResolvedTarget "tektronix-tbs2074b"
+    $results.tek_wrong_channels = ""
+} catch {
+    $results.tek_wrong_channels = $_.Exception.Message
+}
 [ordered]@{
     match_canonical = [string]$results.match_canonical
     match_alias = [string]$results.match_alias
     mismatch = [string]$results.mismatch
     missing = [string]$results.missing
+    tek_match = [string]$results.tek_match
+    tek_wrong_vendor = [string]$results.tek_wrong_vendor
+    tek_wrong_model = [string]$results.tek_wrong_model
+    tek_wrong_series = [string]$results.tek_wrong_series
+    tek_wrong_channels = [string]$results.tek_wrong_channels
 } | ConvertTo-Json -Depth 4 -Compress
 """
     result = run_live_cli_harness(body)
@@ -9382,6 +9448,44 @@ try {
     assert "does not match" in payload["mismatch"]
     assert "keysight-dsox3024a" in payload["mismatch"]
     assert "unavailable" in payload["missing"]
+    assert payload["tek_match"] == ""
+    assert payload["tek_wrong_vendor"]
+    assert payload["tek_wrong_model"]
+    assert payload["tek_wrong_series"]
+    assert payload["tek_wrong_channels"]
+
+
+@requires_windows
+def test_shared_target_resolution_keeps_tektronix_opt_in() -> None:
+    body = """
+$defaultAll = @(Resolve-ValidationTargets -Target "all")
+$tekAll = @(Resolve-ValidationTargets -Target "all" -IncludeTektronix)
+$withoutOptIn = ""
+try {
+    Resolve-ValidationTargets -Target "tektronix-tbs2074b" | Out-Null
+} catch {
+    $withoutOptIn = $_.Exception.Message
+}
+$withOptIn = @(Resolve-ValidationTargets -Target "tektronix-tbs2074b" -IncludeTektronix)
+[ordered]@{
+    default_all = $defaultAll
+    tek_all = $tekAll
+    without_opt_in = $withoutOptIn
+    with_opt_in = $withOptIn
+} | ConvertTo-Json -Depth 4 -Compress
+"""
+    result = run_live_cli_harness(body)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.splitlines()[-1])
+    assert payload["default_all"] == list(CANONICAL_TARGETS)
+    assert payload["tek_all"] == [
+        *CANONICAL_TARGETS,
+        "tektronix-tbs2074b",
+        "tektronix-tds2024b",
+        "tektronix-tbs1052b",
+    ]
+    assert "Unsupported target 'tektronix-tbs2074b'" in payload["without_opt_in"]
+    assert payload["with_opt_in"] == ["tektronix-tbs2074b"]
 
 
 LIVE_VALIDATOR_SCRIPTS = (
@@ -9443,6 +9547,16 @@ def test_live_validators_enforce_canonical_target_contract(tmp_path, script_name
     )
     assert completed.returncode == 2
     assert f"does not match resource '{tcpip}'" in completed.stderr
+
+    tek_target = "tektronix-tbs2074b"
+    completed = run("-Target", tek_target, "-Connection", "usb", "-Resource", tcpip)
+    if domain in {"cli", "workflow"}:
+        assert completed.returncode == 2
+        assert f"does not match resource '{tcpip}'" in completed.stderr
+        assert "Unsupported target" not in completed.stderr
+    else:
+        assert completed.returncode == 2
+        assert f"Unsupported target '{tek_target}'" in completed.stderr
 
     completed = run(
         "-Target", "keysight-dsox4034a", "-Connection", "usb",
@@ -10178,6 +10292,7 @@ Invoke-Expression $functionAst.Extent.Text
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
 $script:FunctionalFailed = $false
+$script:IsTektronix = $false
 $script:WriteDrainErrorsCalls = New-Object System.Collections.Generic.List[object]
 $script:DrainAfterFailureCalls = New-Object System.Collections.Generic.List[object]
 $script:AddCaseResultCalls = New-Object System.Collections.Generic.List[object]

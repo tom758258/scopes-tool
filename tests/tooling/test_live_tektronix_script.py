@@ -1,4 +1,4 @@
-"""Hardware-free checks for the dedicated Tektronix live acceptance runner."""
+"""Hardware-free checks for Tektronix live validation runners."""
 
 from __future__ import annotations
 
@@ -7,14 +7,18 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "scripts" / "live-tektronix-check.ps1"
-TEXT = SCRIPT.read_text(encoding="utf-8")
+SCRIPT = ROOT / "scripts" / "live-cli-check.ps1"
+WORKFLOW_SCRIPT = ROOT / "scripts" / "live-workflow-check.ps1"
+WORKFLOW_HARNESS = Path(__file__).with_name("tektronix_workflow_harness.ps1")
+TEXT = (ROOT / "scripts" / "_live_tektronix_helpers.ps1").read_text(encoding="utf-8")
+VALIDATION_HELPERS_TEXT = (ROOT / "scripts" / "_validation_helpers.ps1").read_text(encoding="utf-8")
 TARGETS = (
     "tektronix-tbs2074b",
     "tektronix-tds2024b",
@@ -44,6 +48,23 @@ def run_script(*arguments: str, env: dict[str, str] | None = None, script: Path 
     )
 
 
+def fake_workflow_run(
+    tmp_path: Path, target: str, scenario: str,
+) -> tuple[subprocess.CompletedProcess[str], dict]:
+    output_root = (
+        ROOT / ".tmp_tests" / "tektronix_workflow_pytest" /
+        target / tmp_path.name / uuid.uuid4().hex
+    )
+    result = run_script(
+        "-ScriptPath", str(WORKFLOW_SCRIPT), "-Target", target,
+        "-Scenario", scenario, "-PythonPath", r".\.venv\Scripts\python.exe",
+        "-OutputRoot", str(output_root), script=WORKFLOW_HARNESS,
+    )
+    reports = list(output_root.glob("run_*/private/report.json"))
+    assert len(reports) == 1, result.stdout + result.stderr
+    return result, json.loads(reports[0].read_text(encoding="utf-8"))
+
+
 @requires_windows
 @pytest.mark.parametrize("target", (*TARGETS, "all", "keysight-dsox4034a"))
 def test_exact_targets_and_explicit_resource(target: str) -> None:
@@ -51,9 +72,11 @@ def test_exact_targets_and_explicit_resource(target: str) -> None:
     result = run_script(*args)
     assert result.returncode != 0
     if target in TARGETS:
-        assert "resource type must match" in result.stderr
+        assert "does not match resource" in result.stderr
+    elif target == "all":
+        assert "not supported for live validation" in result.stderr
     else:
-        assert "Unsupported target" in result.stderr
+        assert "does not match resource" in result.stderr
 
 
 @requires_windows
@@ -71,7 +94,7 @@ def test_backend_and_output_root_are_bounded() -> None:
     assert "Unsupported backend" in backend.stderr
     outside = run_script(*base, "-OutputRoot", str(ROOT / "docs"))
     assert outside.returncode != 0
-    assert "OutputRoot must be under .tmp_tests" in outside.stderr
+    assert "must stay under repository .tmp_tests" in outside.stderr
 
 
 @requires_windows
@@ -94,32 +117,19 @@ def test_storage_write_requires_explicit_slots_in_range(extra: list[str], messag
 
 @requires_windows
 def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
-    stub = tmp_path / "scopes_tool_cli"
-    stub.mkdir()
-    (stub / "__init__.py").write_text("", encoding="utf-8")
-    (stub / "cli.py").write_text(
-        "import json\n"
-        "print(json.dumps({'ok': True, 'idn': {'vendor': 'Tektronix', 'model': 'TDS2024B'}, "
-        "'capabilities': {'analog_channels': 4, 'series': 'TDS2000B'}, 'result': {}}))\n",
-        encoding="utf-8",
-    )
-    output_root = ROOT / ".tmp_tests" / "live_tektronix_check" / "tooling_identity_gate"
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(tmp_path)
-    result = run_script(
-        "-Target", TARGETS[0], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR",
-        "-Python", sys.executable, "-OutputRoot", str(output_root),
-        "-IncludeConfigurationActions", "-IncludeScreenshot", "-IncludeAcquisitionActions",
-        env=env,
+    result, report = fake_run(
+        tmp_path, TARGETS[0], "-IncludeConfigurationActions", "-IncludeScreenshot",
+        "-IncludeAcquisitionActions", live_model=TARGETS[1],
     )
     assert result.returncode != 0, result.stdout + result.stderr
-    runs = sorted(output_root.glob("run_*/private/report.json"), key=lambda path: path.stat().st_mtime)
-    assert runs
-    report = json.loads(runs[-1].read_text(encoding="utf-8"))
-    assert report["hardware_touched"] is True  # Stub process attempted; no instrument opened.
-    assert [(case["name"], case["status"]) for case in report["cases"]] == [("identify", "FAIL")]
-    assert len(report["invocations"]) == 1
-    assert report["invocations"][0]["arguments"][2] == "identify"
+    assert report["hardware_touched"] is True
+    assert [(case["name"], case["status"]) for case in report["cases"]] == [
+        ("preflight", "PASS"), ("identify", "FAIL")
+    ]
+    assert [inv["arguments"][0] for inv in report["invocations"]] == ["identify", "identify"]
+    assert "--simulate" in report["invocations"][0]["arguments"]
+    assert "--live" in report["invocations"][1]["arguments"]
+    assert all(inv["arguments"][0] == "identify" for inv in report["invocations"])
 
 
 def fake_run(
@@ -129,8 +139,9 @@ def fake_run(
     vectors_on: bool = False, vectors_mismatch: bool = False,
     waveform_rows: tuple[str, ...] = ("0,0.5", "0.001,0.6"),
     actual_points: int | None = None, hidden_outcome: str | None = None,
-    subprocess_cli: bool = False, position_mismatch: bool = False,
-    summary_mode: str = "realtime", summary_type: str | None = None,
+    subprocess_cli: bool = False, live_model: str | None = None,
+    native_status_command: str | None = None, native_status_value: int = 0,
+    native_status_raw: str = "0",
     core_supported_operations: tuple[str, ...] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
@@ -138,6 +149,11 @@ def fake_run(
         TARGETS[1]: ("TDS2024B", 4, "TDS2000B"),
         TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
     }[target]
+    live_model_name, live_channels, live_series = {
+        TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
+        TARGETS[1]: ("TDS2024B", 4, "TDS2000B"),
+        TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
+    }[live_model or target]
     screenshot_bytes = b"bad" if bad_bmp else (b"\x89PNG\r\n\x1a\nfake" if target == TARGETS[0] else b"BMfake")
     default_supported_operations = {
         TARGETS[0]: (
@@ -168,7 +184,6 @@ def fake_run(
         if target == TARGETS[0]
         else (4, 16, 64, 128)
     )
-    effective_summary_type = summary_type if summary_type is not None else "normal"
     cursor_source_selection = (
         "selected-waveform" if target == TARGETS[0] else "independent"
     )
@@ -238,39 +253,6 @@ def fake_run(
         " return SimpleNamespace(supported_operations=frozenset(supported_operations), "
         "cursor_source_selection=cursor_source_selection, fixed_acquisition_memory_mode='realtime', "
         "acquisition_modes=acquisition_modes, average_counts=average_counts)\n",
-        encoding="utf-8",
-    )
-    (core_stub / "run_config.py").write_text(
-        "class RunModeOptions:\n"
-        " def __init__(self, **kwargs): self.__dict__.update(kwargs)\n"
-        "class ResolvedRunConfig:\n"
-        " def __init__(self, **kwargs): self.__dict__.update(kwargs)\n"
-        "class FakeScope:\n"
-        " def close(self): pass\n"
-        "def open_scope_for_run(config): return FakeScope()\n",
-        encoding="utf-8",
-    )
-    (core_stub / "operations.py").write_text(
-        f"def query_acquisition_summary(scope): return {{'mode': {summary_mode!r}, 'type': {effective_summary_type!r}}}\n",
-        encoding="utf-8",
-    )
-    (core_stub / "visa_backend.py").write_text(
-        "import json\nfrom pathlib import Path\n"
-        f"state_path = Path({str(raw_state)!r})\n"
-        "class VisaBackend:\n"
-        " def __init__(self, resource, visa_library=None):\n"
-        "  self.state = json.loads(state_path.read_text()) if state_path.exists() else "
-        "{'mode': 'OFF', 'delay': 0.003, 'position': 40, 'length': 1000, 'rate': 1000}\n"
-        " def query(self, command):\n"
-        "  if command == '*IDN?': return 'TEKTRONIX,TBS2074B,FAKE,1'\n"
-        "  key = {'MODE': 'mode', 'TIME': 'delay', 'POSITION': 'position', "
-        "'RECORDLENGTH': 'length', 'SAMPLERATE': 'rate'}[command.rstrip('?').split(':')[-1].upper()]\n"
-        "  return str(self.state[key])\n"
-        " def write(self, command):\n"
-        "  header, value = command.rsplit(' ', 1)\n"
-        "  key = {'MODE': 'mode', 'TIME': 'delay', 'POSITION': 'position'}[header.split(':')[-1].upper()]\n"
-        "  self.state[key] = value if key == 'mode' else float(value)\n"
-        " def close(self): state_path.write_text(json.dumps(self.state))\n",
         encoding="utf-8",
     )
     stub = tmp_path / "scopes_tool_cli"
@@ -354,17 +336,18 @@ def fake_run(
         "-Python", sys.executable, "-OutputRoot", str(output_root), *extra,
     ]
     previous_runs = set(output_root.glob("run_*/private/report.json"))
-    if subprocess_cli:
-        result = run_script(*arguments, env=env)
-    else:
-        fixture = tmp_path / "scenario.json"
-        fixture.write_text(json.dumps({
+    fixture = tmp_path / "scenario.json"
+    fixture.write_text(json.dumps({
             "values": values,
             "idn": {"vendor": "TEKTRONIX", "model": model},
             "capabilities": {"analog_channels": channels, "series": series},
+            "live_idn": {"vendor": "TEKTRONIX", "model": live_model_name},
+            "live_capabilities": {"analog_channels": live_channels, "series": live_series},
+            "native_status_command": native_status_command,
+            "native_status_value": native_status_value,
+            "native_status_raw": native_status_raw,
             "math_error": math_error, "cursor_error": cursor_error,
             "mismatch": mismatch, "vectors_mismatch": vectors_mismatch,
-            "position_mismatch": position_mismatch,
             "hidden_outcome": hidden_outcome,
             "points": len(waveform_rows) if actual_points is None else actual_points,
             "csv_text": "time_s,ch1_v\n" + "\n".join(waveform_rows) + "\n",
@@ -372,24 +355,21 @@ def fake_run(
             "screenshot_format": "PNG" if target == TARGETS[0] else "BMP",
             "arguments": arguments,
         }), encoding="utf-8")
-        result = run_script(
-            "-ScriptPath", str(SCRIPT), "-FixturePath", str(fixture),
-            script=Path(__file__).with_name("tektronix_function_harness.ps1"), env=env,
-        )
+    result = run_script(
+        "-ScriptPath", str(SCRIPT), "-FixturePath", str(fixture),
+        "-PythonPath", sys.executable, "-OutputRoot", str(output_root),
+        script=Path(__file__).with_name("tektronix_function_harness.ps1"), env=env,
+    )
     runs = set(output_root.glob("run_*/private/report.json")) - previous_runs
     assert len(runs) == 1, result.stdout + result.stderr
     report = json.loads(runs.pop().read_text(encoding="utf-8"))
-    if subprocess_cli:
-        received = [json.loads(line) for line in (tmp_path / "argv.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert received == [inv["arguments"][2:] for inv in report["invocations"]]
-    else:
-        assert not (tmp_path / "argv.jsonl").exists()
+    assert not (tmp_path / "argv.jsonl").exists()
     counts = report["summary_counts"]
-    assert counts == {
-        "passed": sum(case["status"] == "PASS" for case in report["cases"]),
-        "failed": sum(case["status"] == "FAIL" for case in report["cases"]),
-        "na": sum(case["status"] == "N/A" for case in report["cases"]),
-    }
+    assert counts["cases"] == len(report["cases"])
+    assert counts["passed"] == sum(case["status"] == "PASS" for case in report["cases"])
+    assert counts["failed"] == sum(case["status"] == "FAIL" for case in report["cases"])
+    assert counts["na"] == sum(case["status"] == "N/A" for case in report["cases"])
+    assert counts["invocations"] == len(report["invocations"])
     return result, report
 
 
@@ -401,8 +381,8 @@ def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["math-operator"]["status"] == "N/A"
-    assert report["status"] == "pass"
-    calls = [inv for inv in report["invocations"] if inv["arguments"][2] == "math-operator"]
+    assert report["status"] == "passed"
+    calls = [inv for inv in report["invocations"] if inv["arguments"][0] == "math-operator"]
     assert len(calls) == 1
     assert "--query" in calls[0]["arguments"]
     assert calls[0]["result"] == "N/A"
@@ -419,7 +399,7 @@ def test_tbs2074b_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Pa
     calls = [
         inv["arguments"]
         for inv in report["invocations"]
-        if inv["arguments"][2] == "cursor" and "--query" not in inv["arguments"]
+        if inv["arguments"][0] == "cursor" and "--query" not in inv["arguments"]
     ]
     assert any("--x1" in args and "--y1" not in args for args in calls)
     assert any("--y1" in args and "--x1" not in args for args in calls)
@@ -443,28 +423,10 @@ def test_tbs2074b_cursor_failure_stops_later_cursor_mutations(tmp_path: Path) ->
     setters = [
         inv["arguments"]
         for inv in report["invocations"]
-        if inv["arguments"][2] == "cursor" and "--query" not in inv["arguments"]
+        if inv["arguments"][0] == "cursor" and "--query" not in inv["arguments"]
     ]
     assert sum("--x1" in args for args in setters) == 1
     assert not any("--y1" in args for args in setters)
-
-
-@requires_windows
-@pytest.mark.parametrize("target", TARGETS)
-@pytest.mark.parametrize(
-    ("summary_mode", "summary_type"),
-    [("unknown", "normal"), ("realtime", "peak")],
-)
-def test_acquisition_summary_mismatch_is_fail(
-    tmp_path: Path, target: str, summary_mode: str, summary_type: str,
-) -> None:
-    result, report = fake_run(
-        tmp_path, target, summary_mode=summary_mode, summary_type=summary_type,
-    )
-    assert result.returncode != 0
-    cases = {case["name"]: case for case in report["cases"]}
-    assert cases["acquisition-summary"]["status"] == "FAIL"
-    assert report["status"] == "fail"
 
 
 @requires_windows
@@ -478,7 +440,7 @@ def test_live_runner_rejects_stale_unsupported_operation_policy(tmp_path: Path) 
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["sample-rate"]["status"] == "FAIL"
     assert "runner drift" in cases["sample-rate"]["detail"].lower()
-    assert report["status"] == "fail"
+    assert report["status"] == "failed"
 
 
 @requires_windows
@@ -492,8 +454,8 @@ def test_cursor_seconds_prerequisite_is_na(tmp_path: Path, target: str) -> None:
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["cursor-set"]["status"] == "N/A"
     assert cases["cursor-off"]["status"] == "PASS"
-    assert report["status"] == "pass"
-    calls = [inv for inv in report["invocations"] if inv["arguments"][2] == "cursor"]
+    assert report["status"] == "passed"
+    calls = [inv for inv in report["invocations"] if inv["arguments"][0] == "cursor"]
     setters = [inv for inv in calls if "--query" not in inv["arguments"]]
     assert len(setters) == 2  # Rejected X setter and the existing opt-in OFF action.
     assert "--x1" in setters[0]["arguments"]
@@ -517,7 +479,7 @@ def test_unrelated_math_or_cursor_errors_remain_fail(
         subprocess_cli=command == "math-operator", **errors,
     )
     assert result.returncode != 0
-    assert report["status"] == "fail"
+    assert report["status"] == "failed"
     assert report["summary_counts"]["failed"] == 1
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["math-operator" if command == "math-operator" else "cursor-set"]["status"] == "FAIL"
@@ -532,9 +494,9 @@ def test_vectors_on_requires_readback(tmp_path: Path, target: str, mismatch: boo
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["display-vectors-query"]["status"] == "PASS"
     assert cases["display-vectors-on"]["status"] == ("FAIL" if mismatch else "PASS")
-    assert report["status"] == ("fail" if mismatch else "pass")
+    assert report["status"] == ("failed" if mismatch else "passed")
     assert report["summary_counts"]["failed"] == int(mismatch)
-    calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][2] == "display-vectors"]
+    calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][0] == "display-vectors"]
     assert len(calls) == 3
     assert "--query" in calls[0]
     assert "--on" in calls[1]
@@ -551,13 +513,11 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
     assert cases["channel-display"]["status"] == "PASS"
     if target == TARGETS[0]:
         assert cases["channel-probe-skew"]["status"] == "PASS"
-        assert cases["timebase-position-modes"]["status"] == "N/A"
         assert cases["display-vectors"]["status"] == "N/A"
     else:
         assert cases["display-vectors-query"]["status"] == "PASS"
         assert cases["display-vectors-on"]["status"] == "N/A"
     assert cases["timebase-position"]["status"] == "PASS"
-    assert cases["acquisition-summary"]["status"] == "PASS"
     assert cases["trigger-mode"]["status"] == "PASS"
     for name in ("channel-units", "math-display", "math-operator", "display-persistence",
                  "cursor-query", "trigger-edge", "trigger-edge-source", "trigger-edge-slope",
@@ -566,21 +526,21 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
     assert cases["autoscale"]["status"] == "N/A"
     assert cases["setup-save"]["status"] == "N/A"
     assert cases["final-standard-event"]["status"] == "PASS"
-    assert report["invocations"][-1]["arguments"][2] == "system-standard-event"
+    assert report["invocations"][-1]["arguments"][0] == "system-standard-event"
     assert not [case for case in report["cases"] if case["status"] == "FAIL"]
-    assert report["status"] == "pass"
-    assert all(invocation["arguments"][2] not in {
+    assert report["status"] == "passed"
+    assert all(invocation["arguments"][0] not in {
         "autoscale", "setup-save", "run", "screenshot", "measure-install", "measure-clear", "save-image", "measure", "capture", "single-wait"
     }
                for invocation in report["invocations"])
-    assert not any(inv["arguments"][2] == "cursor" and "--query" not in inv["arguments"]
+    assert not any(inv["arguments"][0] == "cursor" and "--query" not in inv["arguments"]
                    for inv in report["invocations"])
     unsupported = ({"trigger-tv", "save-image-ink-saver", "display-vectors"}
                    if target == TARGETS[0] else
                    {"sample-rate", "channel-label", "channel-probe-skew",
                     "trigger-edge-level", "trigger-runt", "save-image-format", "save-waveform-format"})
-    assert not unsupported.intersection(inv["arguments"][2] for inv in report["invocations"])
-    commands = [inv["arguments"][2] for inv in report["invocations"]]
+    assert not unsupported.intersection(inv["arguments"][0] for inv in report["invocations"])
+    commands = [inv["arguments"][0] for inv in report["invocations"]]
     assert commands.index("trigger-mode") < commands.index("trigger-edge-source")
     for name in ("sample-rate", "save-image-format", "save-waveform-format", "save-image-ink-saver"):
         assert cases[name]["status"] == ("N/A" if name in unsupported else "PASS")
@@ -598,11 +558,11 @@ def test_non_edge_mode_preserves_trigger_configuration(tmp_path: Path, target: s
         assert cases[name]["status"] == "N/A"
     for inv in report["invocations"]:
         args = inv["arguments"]
-        if args[2].startswith("trigger-edge"):
+        if args[0].startswith("trigger-edge"):
             assert "--query" in args
-        if args[2] == "trigger-mode" and "--mode" in args:
+        if args[0] == "trigger-mode" and "--mode" in args:
             assert args[args.index("--mode") + 1] == mode
-        if args[2] == "trigger-runt" and "--query" not in args:
+        if args[0] == "trigger-runt" and "--query" not in args:
             assert "--time-seconds" not in args  # Unqualified runt preserves dormant width.
 
 
@@ -618,11 +578,6 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
-    if target == TARGETS[0]:
-        assert cases["timebase-position-modes"]["status"] == "PASS"
-        assert cases["timebase-position-restore"]["status"] == "PASS"
-        state = json.loads((tmp_path / "position-state.json").read_text())
-        assert (state["mode"], state["delay"], state["position"]) == ("OFF", 0.003, 40)
     for name in ("cursor-off", "measure-install", "measure-clear", "run", "single", "force-trigger",
                  "stop-acquisition", "autoscale", "save-image", "save-waveform", "setup-save", "setup-recall",
                  "reference-save", "reference-display", "reference-query", "measure", "capture-byte", "single-wait-natural", "single-wait-force"):
@@ -633,10 +588,102 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
         assert cases["cursor-set-y"]["status"] == "PASS"
         assert cases["cursor-set-screen"]["status"] == "PASS"
         assert cases["screenshot-png"]["status"] == "PASS"
-    save = next(inv for inv in report["invocations"] if inv["arguments"][2] == "save-waveform")
+    save = next(inv for inv in report["invocations"] if inv["arguments"][0] == "save-waveform")
     assert "--source-channel" in save["arguments"]
-    assert report["acquisition_final_state"] == "stopped"
+    assert "Stop command succeeded; native status clean" in " ".join(report["diagnostics"]["acquisition-final-state"])
     assert cases["capture-hidden-channel"]["status"] == "N/A"
+
+
+@requires_windows
+@pytest.mark.parametrize(("status_command", "expected_failure"), [
+    ("run", "run"),
+    ("stop-acquisition", "stop-acquisition"),
+])
+def test_acquisition_rejects_dirty_native_status_and_attempts_stop(
+    tmp_path: Path, status_command: str, expected_failure: str,
+) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[0], "-IncludeAcquisitionActions",
+        native_status_command=status_command, native_status_value=4, native_status_raw="4",
+    )
+    assert result.returncode != 0
+    assert report["status"] == "failed"
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases[expected_failure]["status"] == "FAIL"
+    commands = [inv["arguments"][0] for inv in report["invocations"]]
+    assert commands.count("run") == 1
+    assert commands.count("stop-acquisition") == 1
+    assert commands.index("stop-acquisition") > commands.index("run")
+    assert cases["stop-acquisition"]["status"] == ("FAIL" if expected_failure == "stop-acquisition" else "PASS")
+
+
+@requires_windows
+def test_private_and_shareable_reports_keep_common_schema(tmp_path: Path) -> None:
+    result, private_report = fake_run(tmp_path, TARGETS[0])
+    assert result.returncode == 0, result.stdout + result.stderr
+    run_dir = ROOT / private_report["run_root"]
+    private_path = run_dir / "private" / "report.json"
+    shareable_path = run_dir / "shareable" / "report.json"
+    assert private_path.is_file()
+    assert shareable_path.is_file()
+    shared_report = json.loads(shareable_path.read_text(encoding="utf-8"))
+    assert private_report["status"] == shared_report["status"] == "passed"
+    assert private_report["summary_counts"] == shared_report["summary_counts"]
+    assert shared_report["resource"] == "<redacted-resource>"
+    assert "USB0::FAKE::INSTR" not in shareable_path.read_text(encoding="utf-8")
+
+
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS)
+def test_workflow_simulator_happy_path_uses_core_identity(tmp_path: Path, target: str) -> None:
+    result, report = fake_workflow_run(tmp_path, target, "happy")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert report["status"] == "passed"
+    cases = {case["name"]: case for case in report["cases"]}
+    for name in (
+        "preflight", "identity", "target-model-match", "acquisition-precondition",
+        "measure-sweep", "measure-log", "measure-until", "measure-until-timeout",
+        "capture-batch", "capture-until", "capture-monitor", "triggered-measure-loop",
+        "triggered-capture-series", "sequence", "cleanup",
+    ):
+        assert cases[name]["status"] == "PASS", cases[name]
+    sweep = next(inv for inv in report["invocations"] if inv["stage"] == "measure-sweep")
+    sweep_items = sweep["arguments"][sweep["arguments"].index("--items") + 1].split(",")
+    if target == TARGETS[1]:
+        assert "vrms" not in sweep_items
+    assert all("--live" not in inv["arguments"] for inv in report["invocations"])
+
+    timeout = next(inv for inv in report["invocations"] if inv["stage"] == "measure-until-timeout")
+    timeout_payload = json.loads((ROOT / timeout["json"]).read_text(encoding="utf-8"))
+    status = timeout_payload["result"]["post_command_status"]
+    assert status["source"] == "tektronix-sesr"
+    assert status["complete"] is True
+    assert status["is_error"] is False
+    assert status["destructive_read"] is True
+    assert status["value"] == 0
+    assert status["raw"]
+
+
+@requires_windows
+def test_workflow_run_failure_still_stops_acquisition(tmp_path: Path) -> None:
+    result, report = fake_workflow_run(tmp_path, TARGETS[0], "dirty-run")
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["acquisition-precondition"]["status"] == "FAIL"
+    assert "native command status" in cases["acquisition-precondition"]["detail"]
+    assert cases["cleanup"]["status"] == "PASS"
+    stages = [inv["stage"] for inv in report["invocations"]]
+    assert stages.index("acquisition-precondition-run") < stages.index("cleanup-acquisition-stop-acquisition")
+
+
+@requires_windows
+def test_expected_timeout_still_rejects_dirty_native_status(tmp_path: Path) -> None:
+    result, report = fake_workflow_run(tmp_path, TARGETS[0], "dirty-timeout")
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["measure-until-timeout"]["status"] == "FAIL"
+    assert "native command status" in cases["measure-until-timeout"]["detail"]
+    assert cases["cleanup"]["status"] == "PASS"
 
 
 @requires_windows
@@ -676,10 +723,10 @@ def test_hidden_capture_rejection_and_display_readback(tmp_path: Path, outcome, 
     invocations = report["invocations"]
     attempted = next(index for index, invocation in enumerate(invocations)
         if "capture-hidden-channel" in invocation["stdout"])
-    assert invocations[attempted + 1]["arguments"][2] == "channel-display"
+    assert invocations[attempted + 1]["arguments"][0] == "channel-display"
     assert "--query" in invocations[attempted + 1]["arguments"]
     for invocation in invocations:
-        if invocation["arguments"][2] == "channel-display" and "2" in invocation["arguments"]:
+        if invocation["arguments"][0] == "channel-display" and "2" in invocation["arguments"]:
             assert "--query" in invocation["arguments"]
 
 
@@ -693,27 +740,22 @@ def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path)
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["screenshot-bmp"]["status"] == "N/A"
     assert cases["save-image"]["status"] == "N/A"
-    assert not {"screenshot", "save-image"}.intersection(inv["arguments"][2] for inv in report["invocations"])
+    assert not {"screenshot", "save-image"}.intersection(inv["arguments"][0] for inv in report["invocations"])
 
 
 @requires_windows
-@pytest.mark.parametrize("failure", ("mode", "bmp", "position"))
+@pytest.mark.parametrize("failure", ("mode", "bmp"))
 def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0] if failure == "position" else TARGETS[1], "-IncludeScreenshot",
-        *(["-IncludeConfigurationActions"] if failure == "position" else []),
-        mismatch=failure == "mode", bad_bmp=failure == "bmp", position_mismatch=failure == "position",
+        tmp_path, TARGETS[1], "-IncludeScreenshot",
+        mismatch=failure == "mode", bad_bmp=failure == "bmp",
     )
     assert result.returncode != 0
-    assert report["status"] == "fail"
+    assert report["status"] == "failed"
     assert report["summary_counts"]["failed"] == 1
     cases = {case["name"]: case for case in report["cases"]}
-    failed_case = {"mode": "trigger-mode", "bmp": "screenshot-bmp", "position": "timebase-position-modes"}[failure]
+    failed_case = {"mode": "trigger-mode", "bmp": "screenshot-bmp"}[failure]
     assert cases[failed_case]["status"] == "FAIL"
-    if failure == "position":
-        assert cases["timebase-position-restore"]["status"] == "PASS"
-        state = json.loads((tmp_path / "position-state.json").read_text())
-        assert (state["mode"], state["delay"], state["position"]) == ("OFF", 0.003, 40)
     if failure == "mode":
         assert cases["trigger-edge"]["status"] == "N/A"
 
@@ -737,8 +779,7 @@ def test_runner_uses_only_public_cli_and_default_options_are_off() -> None:
     }
     assert "ProcessStartInfo" in TEXT
     assert '"-m", "scopes_tool_cli.cli"' in TEXT
-    public_script = re.sub(r"(?s)function Invoke-PositionProbe \{.*?\nfunction Get-Readback", "function Get-Readback", TEXT)
-    assert not re.search(r"(?i)(?:\bACQuire:|\bTRIGger:|\bCH\d+:|\*ESR\?|\*IDN\?)", public_script)
+    assert not re.search(r"(?i)(?:\bACQuire:|\bTRIGger:|\bCH\d+:|\*ESR\?|\*IDN\?)", TEXT)
     assert not re.search(r"(?i)(?:EVENT\?|EVMsg\?|ALLEv\?|EVQty\?|DISPLAY:STYLE\s+DOTS)", TEXT)
     assert "-IncludeAcquisitionActions" in TEXT
     assert "-IncludeAutoscale" in TEXT
@@ -750,9 +791,9 @@ def test_runner_uses_only_public_cli_and_default_options_are_off() -> None:
 
 def test_identity_gate_and_vectors_safety_are_explicit() -> None:
     assert TEXT.index('Invoke-Cli -Stage "identify"') < TEXT.index("if (-not $script:StopAfterIdentity)")
-    assert "[string]$identity.idn.vendor" in TEXT
-    assert "[string]$identity.idn.model" in TEXT
-    assert "[int]$identity.capabilities.analog_channels" in TEXT
+    assert "[string]$Identity.idn.vendor" in VALIDATION_HELPERS_TEXT
+    assert "[string]$Identity.idn.model" in VALIDATION_HELPERS_TEXT
+    assert "[int]$Identity.capabilities.analog_channels" in VALIDATION_HELPERS_TEXT
     assert 'Invoke-Cli -Stage "display-vectors-query"' in TEXT
     assert "if ($isOn -is [bool] -and $isOn)" in TEXT
     assert "no public OFF setter" in TEXT
@@ -764,7 +805,7 @@ def test_pulse_width_roundtrip_preserves_current_glitch_mode(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["trigger-pulse-width"]["status"] == "PASS"
-    calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][2] == "trigger-pulse-width"]
+    calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][0] == "trigger-pulse-width"]
     assert len(calls) == 3  # Query, same-value set, and readback preserve the current settings.
     assert all("range" not in call for call in calls)
 
@@ -802,10 +843,17 @@ def test_generated_arguments_match_parser_contract(tmp_path: Path, target: str, 
     assert result.returncode == 0, result.stdout + result.stderr
     # Build once in pytest, not in every fake child CLI process.
     parser = _build_parser()
-    arguments = {tuple(inv["arguments"][2:]) for inv in report["invocations"]}
+    arguments = {tuple(inv["arguments"]) for inv in report["invocations"]}
     assert arguments
     for argv in sorted(arguments):
         parsed = parser.parse_args(argv)
         assert parsed.command == argv[0]
         assert parsed.json_output is True
-        assert parsed.resource == "USB0::FAKE::INSTR"
+        if parsed.simulate:
+            assert parsed.model == target
+            assert parsed.resource is None
+            assert parsed.live is False
+        else:
+            assert parsed.live is True
+            assert parsed.resource == "USB0::FAKE::INSTR"
+            assert "--model" not in argv

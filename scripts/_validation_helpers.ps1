@@ -7,9 +7,20 @@ $script:ValidationTargetProfiles = @(
     [pscustomobject]@{ model_id = "keysight-dsox4034a"; model = "DSO-X 4034A" }
 )
 
+# Only the CLI and workflow runners opt into these acceptance profiles.
+$script:TektronixValidationTargetProfiles = @(
+    [pscustomobject]@{ model_id = "tektronix-tbs2074b"; model = "TBS2074B"; series = "TBS2000B"; channels = 4 },
+    [pscustomobject]@{ model_id = "tektronix-tds2024b"; model = "TDS2024B"; series = "TDS2000B"; channels = 4 },
+    [pscustomobject]@{ model_id = "tektronix-tbs1052b"; model = "TBS1052B"; series = "TBS1000B"; channels = 2 }
+)
+
 function Get-ValidationTargetProfiles {
+    param([switch]$IncludeTektronix)
+
+    $profiles = @($script:ValidationTargetProfiles)
+    if ($IncludeTektronix) { $profiles += @($script:TektronixValidationTargetProfiles) }
     $seen = @{}
-    foreach ($profile in @($script:ValidationTargetProfiles)) {
+    foreach ($profile in $profiles) {
         $modelId = [string]$profile.model_id
         if ([string]::IsNullOrWhiteSpace($modelId)) {
             throw "Validation target model_id must not be empty."
@@ -25,11 +36,13 @@ function Get-ValidationTargetProfiles {
         }
         $seen[$modelId] = $true
     }
-    return @($script:ValidationTargetProfiles)
+    return $profiles
 }
 
 function Get-SupportedTargetModelIds {
-    return @(Get-ValidationTargetProfiles | ForEach-Object { $_.model_id })
+    param([switch]$IncludeTektronix)
+
+    return @(Get-ValidationTargetProfiles -IncludeTektronix:$IncludeTektronix | ForEach-Object { $_.model_id })
 }
 
 function Get-LiveConnectionArguments {
@@ -53,16 +66,19 @@ function Get-LiveConnectionArguments {
 }
 
 function Resolve-ValidationTargets {
-    param([AllowNull()][AllowEmptyString()][string]$Target = "all")
+    param(
+        [AllowNull()][AllowEmptyString()][string]$Target = "all",
+        [switch]$IncludeTektronix
+    )
 
     if ([string]::IsNullOrWhiteSpace($Target)) {
-        throw "Missing target. Use 'all' or one of: $(@(Get-SupportedTargetModelIds) -join ', ')."
+        throw "Missing target. Use 'all' or one of: $(@(Get-SupportedTargetModelIds -IncludeTektronix:$IncludeTektronix) -join ', ')."
     }
     $normalized = $Target.Trim().ToLowerInvariant()
     if ($normalized -eq "all") {
-        return @(Get-SupportedTargetModelIds)
+        return @(Get-SupportedTargetModelIds -IncludeTektronix:$IncludeTektronix)
     }
-    $supported = @(Get-SupportedTargetModelIds)
+    $supported = @(Get-SupportedTargetModelIds -IncludeTektronix:$IncludeTektronix)
     if ($normalized -notin $supported) {
         throw "Unsupported target '$Target'. Use 'all' or one of: $($supported -join ', ')."
     }
@@ -70,13 +86,16 @@ function Resolve-ValidationTargets {
 }
 
 function Get-ValidationTargetProfile {
-    param([Parameter(Mandatory = $true)][string]$Target)
+    param(
+        [Parameter(Mandatory = $true)][string]$Target,
+        [switch]$IncludeTektronix
+    )
 
-    $targets = @(Resolve-ValidationTargets -Target $Target)
+    $targets = @(Resolve-ValidationTargets -Target $Target -IncludeTektronix:$IncludeTektronix)
     if ($targets.Count -ne 1) {
         throw "A single canonical target is required, got: $($targets -join ', ')."
     }
-    return @(Get-ValidationTargetProfiles | Where-Object { $_.model_id -eq $targets[0] })[0]
+    return @(Get-ValidationTargetProfiles -IncludeTektronix:$IncludeTektronix | Where-Object { $_.model_id -eq $targets[0] })[0]
 }
 
 function Get-FullPath {
@@ -353,7 +372,7 @@ function Assert-TargetModelMatch {
         [string] $ResolvedTarget
     )
 
-    $profile = Get-ValidationTargetProfile -Target $ResolvedTarget
+    $profile = Get-ValidationTargetProfile -Target $ResolvedTarget -IncludeTektronix
     $expected = Get-NormalizedModelToken -Value ([string]$profile.model)
 
     $detected = ""
@@ -376,6 +395,14 @@ function Assert-TargetModelMatch {
             "target '$ResolvedTarget' (expected $expected). Connect the " +
             "intended instrument or rerun with the matching -Target."
         )
+    }
+    if ($ResolvedTarget -in @($script:TektronixValidationTargetProfiles.model_id)) {
+        if ([string]$Identity.idn.vendor -ine "Tektronix" -or
+            [string]$Identity.idn.model -cne [string]$profile.model -or
+            [int]$Identity.capabilities.analog_channels -ne [int]$profile.channels -or
+            [string]$Identity.capabilities.series -cne [string]$profile.series) {
+            throw "Detected vendor, physical model, channel count, or profile differs from -Target."
+        }
     }
 }
 

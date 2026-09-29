@@ -27,6 +27,7 @@ $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $script:RepoRoot = $RepoRoot
 . (Join-Path $PSScriptRoot "_validation_helpers.ps1")
 . (Join-Path $PSScriptRoot "_artifact_privacy.ps1")
+. (Join-Path $PSScriptRoot "_live_tektronix_helpers.ps1")
 
 $script:CliInvocationIndex = 0
 $script:CaseResults = [ordered]@{}
@@ -36,6 +37,12 @@ $script:OperationConditionRunMask = 8
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:ShareableGenerationFailed = $false
 $script:HardwareTouched = $false
+$script:SweepItems = "vpp,frequency,period,vrms"
+$script:WorkflowCommands = @(
+    "measure-sweep", "measure-log", "measure-until", "capture-batch",
+    "capture-until", "capture-monitor", "triggered-measure-loop",
+    "triggered-capture-series", "sequence"
+)
 
 $normalizedConnection = $Connection.Trim().ToLowerInvariant()
 if ($normalizedConnection -notin @("usb", "tcpip")) {
@@ -47,21 +54,22 @@ $normalizedTarget = $Target.Trim().ToLowerInvariant()
 if ($normalizedTarget -eq "all") {
     Write-LiveUsageError -Domain "workflow" (
         "Target 'all' is not supported for live validation. " +
-        "Specify one of: $(@(Get-SupportedTargetModelIds) -join ', ')."
+        "Specify one of: $(@(Get-SupportedTargetModelIds -IncludeTektronix) -join ', ')."
     )
 }
 try {
-    $resolvedTargets = @(Resolve-ValidationTargets -Target $normalizedTarget)
+    $resolvedTargets = @(Resolve-ValidationTargets -Target $normalizedTarget -IncludeTektronix)
 } catch {
     Write-LiveUsageError -Domain "workflow" $_.Exception.Message
 }
 if ($resolvedTargets.Count -ne 1) {
     Write-LiveUsageError -Domain "workflow" (
         "Live validation requires a single canonical target. " +
-        "Supported targets: $(@(Get-SupportedTargetModelIds) -join ', ')."
+        "Supported targets: $(@(Get-SupportedTargetModelIds -IncludeTektronix) -join ', ')."
     )
 }
 $script:Target = $resolvedTargets[0]
+$script:IsTektronix = $script:Target -in @($script:TektronixValidationTargetProfiles.model_id)
 $script:Connection = $normalizedConnection
 
 $resourceMatchesConnection =
@@ -350,7 +358,15 @@ function Invoke-ModeCli {
     )
 
     $allArguments = @($Command) + $ModeArguments + @("--json") + $Arguments
-    return Invoke-Cli -Stage $Stage -Arguments $allArguments
+    $payload = Invoke-Cli -Stage $Stage -Arguments $allArguments
+    if ($script:IsTektronix -and $ModeArguments -notcontains "--dry-run") {
+        if ($Command -in $script:WorkflowCommands) {
+            Assert-TektronixWorkflowStatus -Payload $payload
+        } elseif ($Command -in @("run", "stop-acquisition")) {
+            Assert-TektronixCommandStatus -Payload $payload
+        }
+    }
+    return $payload
 }
 
 function Invoke-LiveCli {
@@ -454,6 +470,11 @@ function Drain-AfterFailure {
         [string] $CaseName
     )
 
+    if ($script:IsTektronix) {
+        Add-Diagnostic -Name $CaseName -Message "Native status and errors are retained in the CLI artifacts; no extra destructive status read was issued."
+        return
+    }
+
     try {
         $drain = Get-ErrorDrain -Stage $Stage
         Write-DrainErrors -Errors $drain.Errors -CaseName $CaseName
@@ -521,13 +542,15 @@ function Invoke-WorkflowCase {
 
     try {
         & $Action
-        $postDrain = Get-ErrorDrain -Stage "${Name}-post-error-queue"
-        if ($postDrain.Errors.Count -gt 0) {
-            Write-DrainErrors -Errors $postDrain.Errors -CaseName $Name
-            throw "Post-case error queue contained $($postDrain.Errors.Count) error(s) after ${Name}."
-        }
-        if (-not $postDrain.Terminated) {
-            throw "Post-case error queue did not reach code 0 within 30 reads after ${Name}."
+        if (-not $script:IsTektronix) {
+            $postDrain = Get-ErrorDrain -Stage "${Name}-post-error-queue"
+            if ($postDrain.Errors.Count -gt 0) {
+                Write-DrainErrors -Errors $postDrain.Errors -CaseName $Name
+                throw "Post-case error queue contained $($postDrain.Errors.Count) error(s) after ${Name}."
+            }
+            if (-not $postDrain.Terminated) {
+                throw "Post-case error queue did not reach code 0 within 30 reads after ${Name}."
+            }
         }
         Add-CaseResult -Name $Name -Status "PASS"
     } catch {
@@ -538,7 +561,7 @@ function Invoke-WorkflowCase {
 }
 
 function Invoke-HardwareFreePreflight {
-    $model = "keysight-dsox4024a"
+    $model = if ($script:IsTektronix) { $script:Target } else { "keysight-dsox4024a" }
     $simulate = @("--simulate", "--model", $model)
     $dryRun = @("--dry-run", "--model", $model)
     $preflightRoot = Join-Path $script:RunRoot "preflight"
@@ -659,9 +682,11 @@ function Invoke-HardwareFreePreflight {
     Assert-ExpectedFiles -OutputDir $sequenceOutputDir -Names @("manifest.json", "scpi.log") -Stage "Preflight sequence"
     Assert-ExpectedFiles -OutputDir $sequenceOutputDir -Names @("loop_0001/step_0004_capture/waveform.csv", "loop_0001/step_0004_capture/waveform_meta.json") -Stage "Preflight sequence"
 
-    Invoke-ModeCli -Stage "preflight-operation-status" `
-        -Command "system-operation-status" -ModeArguments $simulate `
-        -Arguments @("--query") | Out-Null
+    if (-not $script:IsTektronix) {
+        Invoke-ModeCli -Stage "preflight-operation-status" `
+            -Command "system-operation-status" -ModeArguments $simulate `
+            -Arguments @("--query") | Out-Null
+    }
     foreach ($command in @("run", "stop-acquisition")) {
         Invoke-ModeCli -Stage "preflight-${command}" -Command $command `
             -ModeArguments $dryRun | Out-Null
@@ -771,6 +796,13 @@ try {
 
 try {
     Assert-TargetModelMatch -Identity $identity -ResolvedTarget $script:Target
+    if ($script:IsTektronix) {
+        $items = @("vpp", "frequency", "period", "vrms" | Where-Object {
+            $_ -in @($identity.capabilities.measurement_items)
+        })
+        if ($items.Count -eq 0) { throw "No supported measurement items for the workflow fixture." }
+        $script:SweepItems = $items -join ","
+    }
     Add-CaseResult -Name "target-model-match" -Status "PASS"
 } catch {
     Add-CaseResult -Name "target-model-match" -Status "FAIL" `
@@ -783,6 +815,9 @@ try {
     exit 1
 }
 
+if ($script:IsTektronix) {
+    Add-CaseResult -Name "stale-error-drain" -Status "N/A" -Detail "Native preflight belongs to each Core workflow; no normalized error queue is read or cleared by the runner."
+} else {
 try {
     $initialDrain = Get-ErrorDrain -Stage "stale-error-drain"
     if ($initialDrain.Errors.Count -gt 0) {
@@ -803,6 +838,7 @@ try {
     Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL"
     exit 1
 }
+}
 
 Write-Host ""
 Write-Host "Workflow live validation"
@@ -817,10 +853,17 @@ Write-Host "  - Confirm a stable waveform is present on CH1."
 Write-Host "  - Confirm the existing trigger setup reliably triggers from that CH1 waveform;"
 Write-Host "    an Edge trigger on CH1 with a level inside the waveform is recommended."
 Write-Host "  - The script does not reset, preset, autoscale, or reconfigure the trigger mode."
-Write-Host "  - If acquisition is initially stopped, the validator starts it for workflow validation and restores the original Running/Stopped state during cleanup."
+if ($script:IsTektronix) {
+    Write-Host "  - The validator sends run before workflows and stop-acquisition during cleanup, including failure cleanup."
+    Write-Host "    Original Running/Stopped state is not recorded or restored; final state is not independently read back."
+} else {
+    Write-Host "  - If acquisition is initially stopped, the validator starts it for workflow validation and restores the original Running/Stopped state during cleanup."
+}
 Write-Host "  - Workflow artifacts are written under the run directory shown above."
-Write-Host "  - Triggered workflow cases use Single acquisition and the original Running/Stopped"
-Write-Host "    acquisition state is restored at cleanup."
+Write-Host "  - Triggered workflow cases use Single acquisition."
+if (-not $script:IsTektronix) {
+    Write-Host "    The original Running/Stopped acquisition state is restored at cleanup."
+}
 Write-Host ""
 Write-Host "Press Enter when ready."
 Write-Host "Ctrl+C to cancel."
@@ -828,6 +871,19 @@ Write-Host "Ctrl+C to cancel."
 
 $wasRunning = $false
 $snapshotTaken = $false
+$tekRunAttempted = $false
+try {
+if ($script:IsTektronix) {
+    Add-CaseResult -Name "state-snapshot" -Status "N/A" -Detail "Original Running/Stopped state is outside this runner contract."
+    try {
+        $tekRunAttempted = $true
+        Invoke-LiveCli -Stage "acquisition-precondition-run" -Command "run" | Out-Null
+        Add-CaseResult -Name "acquisition-precondition" -Status "PASS" -Detail "Run command succeeded with clean native command status; state was not read back."
+    } catch {
+        $script:FunctionalFailed = $true
+        Add-CaseResult -Name "acquisition-precondition" -Status "FAIL" -Detail $_.Exception.Message
+    }
+} else {
 try {
     $operationStatus = Invoke-LiveCli -Stage "snapshot-operation-status" `
         -Command "system-operation-status" -Arguments @("--query")
@@ -843,6 +899,7 @@ try {
     Add-CaseResult -Name "state-snapshot" -Status "FAIL" -Detail $_.Exception.Message
     Drain-AfterFailure -Stage "state-snapshot-error-drain" -CaseName "state-snapshot"
 }
+}
 
 $liveArtifactRoot = Join-Path $script:RunRoot "workflows"
 New-Item -ItemType Directory -Path $liveArtifactRoot -Force | Out-Null
@@ -850,7 +907,7 @@ New-Item -ItemType Directory -Path $liveArtifactRoot -Force | Out-Null
 if (-not $script:FunctionalFailed) {
     Invoke-WorkflowCase -Name "measure-sweep" -Action {
         $payload = Invoke-LiveCli -Stage "measure-sweep" -Command "measure-sweep" `
-            -Arguments @("--channel", "1", "--items", "vpp,frequency,period,vrms")
+            -Arguments @("--channel", "1", "--items", $script:SweepItems)
         $summary = Get-RequiredResultValue -Payload $payload -Name "summary" `
             -Stage "measure-sweep"
         if ([int]$summary.error_count -ne 0) {
@@ -925,6 +982,9 @@ if (-not $script:FunctionalFailed) {
             -Stage "measure-until timeout"
         if ([string]$errorValue.type -ne "condition_timeout") {
             throw "measure-until timeout case returned unexpected error type: $($errorValue.type)"
+        }
+        if ($script:IsTektronix) {
+            Assert-TektronixWorkflowStatus -Payload $invocation.Payload
         }
         Assert-ExpectedFiles -OutputDir $outputDir `
             -Names @("measurements.csv", "manifest.json", "scpi.log") `
@@ -1117,6 +1177,23 @@ if (-not $script:FunctionalFailed) {
     }
 }
 
+} catch {
+    $script:FunctionalFailed = $true
+    Add-CaseResult -Name "workflow-runner" -Status "FAIL" -Detail $_.Exception.Message
+} finally {
+if ($script:IsTektronix) {
+    if ($tekRunAttempted) {
+        try {
+            Invoke-LiveCli -Stage "cleanup-acquisition-stop-acquisition" -Command "stop-acquisition" | Out-Null
+            Add-CaseResult -Name "cleanup" -Status "PASS" -Detail "Stop command succeeded with clean native command status; Running/Stopped was not read back and original state was not restored."
+        } catch {
+            $script:FunctionalFailed = $true
+            Add-CaseResult -Name "cleanup" -Status "FAIL" -Detail $_.Exception.Message
+        }
+    } else {
+        Add-CaseResult -Name "cleanup" -Status "N/A" -Detail "No acquisition action was attempted."
+    }
+} else {
 if ($snapshotTaken) {
     try {
         Restore-AcquisitionState -WasRunning $wasRunning
@@ -1130,7 +1207,12 @@ if ($snapshotTaken) {
     Add-CaseResult -Name "cleanup" -Status "PASS" `
         -Detail "No workflow case ran because acquisition state snapshot failed."
 }
+}
+}
 
+if ($script:IsTektronix) {
+    Add-CaseResult -Name "final-error-queue" -Status "N/A" -Detail "Native workflow checkpoints and cleanup command status were checked; no normalized queue or independent STOPPED readback is available."
+} else {
 try {
     $finalDrain = Get-ErrorDrain -Stage "final-error-queue"
     if ($finalDrain.Errors.Count -gt 0) {
@@ -1147,6 +1229,7 @@ try {
     $script:FunctionalFailed = $true
     Add-CaseResult -Name "final-error-queue" -Status "FAIL" `
         -Detail $_.Exception.Message
+}
 }
 
 Write-Host ""

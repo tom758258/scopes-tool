@@ -2717,42 +2717,52 @@ validation run.
 
 ### Tektronix Live Acceptance
 
-Use the dedicated runner with one exact registered Tektronix target and an
+Use `live-cli-check.ps1` with one exact registered Tektronix target and an
 operator-selected VISA resource. It accepts `tektronix-tbs2074b`,
 `tektronix-tds2024b`, or `tektronix-tbs1052b` and `usb` or `tcpip` as the
 connection type. The resource must match that type. System VISA is the default;
 select pyvisa-py explicitly when needed:
 
 ```powershell
-.\scripts\live-tektronix-check.ps1 -Target tektronix-tbs2074b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
-.\scripts\live-tektronix-check.ps1 -Target tektronix-tds2024b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -Backend "@py"
+.\scripts\live-cli-check.ps1 -Target tektronix-tbs2074b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+.\scripts\live-cli-check.ps1 -Target tektronix-tds2024b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -Backend "@py"
 ```
 
-The runner first checks the detected physical identity against the target and
-stops before state-changing cases on a mismatch. Its default cases query
+After a hardware-free Core profile check and simulated identify, the runner
+checks the detected physical identity against the target and stops before
+state-changing cases on a mismatch. Its default cases query
 supported status and settings and write back current values where the public
 CLI provides a safe path. It skips acquisition actions, autoscale, storage
-writes, cursor/measurement configuration actions, and BMP capture by default.
-`-IncludeAcquisitionActions` leaves acquisition stopped;
+writes, cursor/measurement configuration actions, and screenshots by default.
+`-IncludeAcquisitionActions` sends `stop-acquisition` during cleanup; success
+confirms the command and native status, without independent Running/Stopped
+readback or restoration of the original state;
 `-IncludeAutoscale` changes front-panel settings without restoring them.
 `-IncludeStorageWrites` requires explicit `-SetupSlot` (1-9) and
 `-ReferenceSlot` (1-2); those slots may be overwritten. The runner does not
 preserve their previous contents. Supply `-ImageFilename` with that storage
 opt-in to test image saving on available instrument storage; the requested file
-may be overwritten. Without a filename, image saving remains N/A.
+may be overwritten. Without a filename, image saving remains N/A. To test
+waveform saving, supply both `-WaveformFilename` and `-WaveformSourceChannel`
+with `-IncludeStorageWrites`; the channel must exist on the selected model.
 `-IncludeConfigurationActions` tests supported cursor setting, cursor off,
 measurement installation, and measurement clear. It does not restore previous
 cursor or measurement configurations; successful actions leave cursors off and
-measurements cleared. For TBS2074B, it also temporarily switches Horizontal
-Delay Mode ON/OFF and sets POSITION to 50 for timebase-position validation.
-The runner restores the original POSITION, DELAY:TIME, and DELAY:MODE values;
-a restore mismatch makes validation FAIL.
-`-IncludeScreenshot` enables explicit BMP host capture
-only for TDS2024B over USBTMC. Core restores temporary hardcopy settings and
-timeout; the artifact stays in the private run directory.
+measurements cleared. For TBS2074B, the runner checks X, physical-voltage Y,
+and combined SCREEN cursor settings when their prerequisites hold. Selecting
+the cursor source may change the selected waveform, display that channel, or
+restart acquisition through Core. Those effects are not restored. Horizontal
+position validation uses only public `timebase-position` query/set/readback;
+the runner does not actively switch Delay Mode ON/OFF.
+`-IncludeScreenshot` enables native PNG capture for TBS2074B and explicit BMP
+capture for TDS2024B over USBTMC. Core handles temporary instrument files,
+hardcopy settings, and timeout restoration as applicable. TBS1052B screenshot
+capture is not supported. These opt-in parameters apply only to Tektronix
+targets; the Keysight baseline retains its existing operator gate and cases.
 
-Results are stored under `.tmp_tests/live_tektronix_check/` in a timestamped
-private directory. The presence of the runner is not hardware validation.
+Results use the common CLI report and artifact privacy handling under
+`.tmp_tests/live_cli_check/`, with timestamped `private/` and redacted
+`shareable/` directories. The presence of the runner is not hardware validation.
 A PASS case from a run against the specified real resource provides direct
 hardware evidence for that case. N/A cases remain unverified; an overall PASS
 means all applicable runner cases passed, not that every Core/WebUI operation
@@ -2767,9 +2777,10 @@ missing opt-ins, or current settings that cannot safely use a public setter.
 
 ### Live CLI Validation
 
-Run the maintained manual baseline for registered Keysight InfiniiVision
-oscilloscopes with an expected model target, transport, and explicit VISA
-resource:
+The public runner accepts the four registered Keysight InfiniiVision targets
+and the three Tektronix targets listed above. It selects the appropriate cases
+before running hardware checks. For the Keysight baseline, provide an expected
+model target, transport, and explicit VISA resource:
 
 ```powershell
 .\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
@@ -2786,7 +2797,8 @@ The runner temporarily changes acquisition, CH1 display and coupling,
 timebase, Edge Trigger, and waveform transfer settings. It promises to restore
 the acquisition type and applicable average count, CH1 display and coupling,
 timebase scale, position, and reference, Edge source and slope, and CH1 Edge
-level. It does not modify the run/stop state.
+level. Acquisition-action cases change the run/stop state; the CLI baseline
+does not snapshot or restore the original Running/Stopped state.
 
 The original generic trigger mode is not restored by this validator, so the
 instrument may remain in Edge mode. Waveform source, format,
@@ -2798,6 +2810,43 @@ FAIL.
 
 Hardware-free preflight and automated tests are not live validation evidence.
 Run this script on the prepared instrument before claiming a live PASS.
+
+#### Workflow Live Validation
+
+Use `live-workflow-check.ps1` for the existing workflow suite on either a
+registered Keysight target or one of the three Tektronix targets:
+
+```powershell
+.\scripts\live-workflow-check.ps1 -Target tektronix-tds2024b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+```
+
+The runner performs hardware-free preflight, verifies the detected model, and
+waits for Enter before acquisition actions. Prepare a visible, stable CH1
+Probe Comp waveform and a reliable existing trigger. The suite covers
+`measure-sweep`, `measure-log`, `measure-until` (match and expected timeout),
+`capture-batch`, `capture-until`, `capture-monitor`, `triggered-measure-loop`,
+`triggered-capture-series`, and `sequence`. Measurement sweep items follow
+Core capabilities, so TDS2024B omits `vrms` while retaining the other cases.
+
+Keysight validation restores the original Running/Stopped state and verifies
+the readback. Tektronix validation does not snapshot the original acquisition
+state: it sends `run` before the suite and `stop-acquisition` in cleanup,
+including after a failed start or workflow. Tek cleanup PASS means the stop
+command succeeded with clean native command status; it does not mean STOPPED
+was independently read back or the original state restored. The report marks
+the original-state snapshot and normalized error-queue checks N/A.
+
+Tek workflow cases validate Core's native SESR/event status, including the
+expected timeout case. The runner does not add destructive status reads after
+workflows or substitute a Keysight error-queue result. Stale event handling
+belongs to Core workflow preflight; an error reported by the initial `run`
+command fails validation and still triggers stop cleanup.
+
+Reports and artifacts use `.tmp_tests/live_workflow_check/` with the common
+private/shareable layout. DVM, Serial, and Segmented Memory live runners do
+not accept these Tektronix targets. The standalone `preflight-cli.ps1` target
+list and `all` selection continue to cover the four Keysight targets; Tek
+preflight is selected inside the CLI and workflow live runners.
 
 #### DVM Live Validation
 

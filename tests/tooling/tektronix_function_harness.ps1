@@ -1,4 +1,4 @@
-param([string]$ScriptPath, [string]$FixturePath)
+param([string]$ScriptPath, [string]$FixturePath, [string]$PythonPath, [string]$OutputRoot)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -11,32 +11,24 @@ $script:CursorState = $null
 $script:ValidatorRoot = Split-Path -Parent $ScriptPath
 $script:PositionState = $null
 
-function Invoke-FakePositionProbe {
-    param([string]$Action, [object]$Original = $null)
-    if ($null -eq $script:PositionState) {
-        $script:PositionState = @{ mode = "OFF"; delay = 0.003; position = 40; length = 1000; rate = 1000 }
-    }
-    if ($Action -in @("on", "off")) { $script:PositionState.mode = $Action.ToUpperInvariant() }
-    if ($Action -eq "center") { $script:PositionState.position = 50 }
-    if ($Action -eq "restore") { $script:PositionState = $Original.Clone() }
-    [IO.File]::WriteAllText((Join-Path (Split-Path $FixturePath) "position-state.json"), ($script:PositionState | ConvertTo-Json))
-    return $script:PositionState.Clone()
-}
-
 function Invoke-FakeTransport {
-    param([string]$Command, [string[]]$Options)
+    param([string]$Command, [string[]]$Options, [switch]$Simulate)
 
     # Fresh values match the independent fake CLI invocations; only explicit state persists.
     $scenario = $script:FixtureJson | ConvertFrom-Json
     $property = $scenario.values.PSObject.Properties[$Command]
     $value = if ($null -eq $property) { [pscustomobject]@{} } else { $property.Value }
-    if ($Command -eq "timebase-position" -and $null -ne $script:PositionState) {
-        $value.position_seconds = if ($script:PositionState.mode -eq "ON") { $script:PositionState.delay } else {
-            (50 - $script:PositionState.position) / 100 * ($script:PositionState.length / $script:PositionState.rate)
+    if ($Command -in @("run", "stop-acquisition")) {
+        $status = @{ value = 0; raw = "0" }
+        if ($scenario.native_status_command -eq $Command) {
+            $status.value = [int]$scenario.native_status_value
+            $status.raw = [string]$scenario.native_status_raw
         }
-        if ($scenario.position_mismatch) { $value.position_seconds += 1 }
+        $value | Add-Member -Force -NotePropertyName post_command_status -NotePropertyValue $status
     }
-    $payload = @{ ok = $true; idn = $scenario.idn; capabilities = $scenario.capabilities; result = $value }
+    $idn = if ($Simulate) { $scenario.idn } else { $scenario.live_idn }
+    $capabilities = if ($Simulate) { $scenario.capabilities } else { $scenario.live_capabilities }
+    $payload = @{ ok = $true; idn = $idn; capabilities = $capabilities; result = $value }
     $fakeError = $null
     if ($Command -eq "math-operator" -and $Options -contains "--query") { $fakeError = $scenario.math_error }
     if ($Command -eq "cursor" -and $Options -contains "--x1") { $fakeError = $scenario.cursor_error }
@@ -122,17 +114,81 @@ function Invoke-FakeTransport {
     return @{ ExitCode = 0; Payload = $payload }
 }
 
+$fixture = $script:FixtureJson | ConvertFrom-Json
+$script:RepoRoot = (Resolve-Path -LiteralPath (Join-Path (Split-Path -Parent $ScriptPath) "..")).Path
+$RepoRoot = $script:RepoRoot
+. (Join-Path $script:RepoRoot "scripts/_validation_helpers.ps1")
+. (Join-Path $script:RepoRoot "scripts/_artifact_privacy.ps1")
+. (Join-Path $script:RepoRoot "scripts/_live_tektronix_helpers.ps1")
+
+$script:Target = switch ([string]$fixture.idn.model.ToUpperInvariant()) {
+    "TBS2074B" { "tektronix-tbs2074b" }
+    "TDS2024B" { "tektronix-tds2024b" }
+    "TBS1052B" { "tektronix-tbs1052b" }
+    default { throw "Unsupported fake model: $($fixture.idn.model)" }
+}
+$script:Connection = "usb"
+$script:BackendName = "system_visa"
+$script:LiveConnectionArguments = @("--live", "--resource", "USB0::FAKE::INSTR")
+$script:CliInvocationIndex = 0
+$script:CaseResults = [ordered]@{}
+$script:Diagnostics = [ordered]@{}
+$script:FunctionalFailed = $false
+$script:ShareableGenerationFailed = $false
+$script:HardwareTouched = $false
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:ModeQueries = 0
+$script:VectorsSet = $false
+$script:HiddenCaptured = $false
+$script:CursorState = $null
+$script:PositionState = $null
+$script:FixtureJson = [IO.File]::ReadAllText($FixturePath)
+$script:TargetProfile = Get-ValidationTargetProfile -Target $script:Target -IncludeTektronix
+$Resource = "USB0::FAKE::INSTR"
+$Python = $PythonPath
+$script:Python = $PythonPath
+$script:RunLayout = New-ValidationRunDirectory -BaseRoot $OutputRoot -Prefix "run"
+$script:RunDirectory = $script:RunLayout.Root
+$script:RunRoot = $script:RunLayout.Private
+$script:ShareableRoot = $script:RunLayout.Shareable
+$script:RunPaths = [pscustomobject]@{ Private = $script:RunRoot }
+
 $tokens = $null
 $parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile($ScriptPath, [ref]$tokens, [ref]$parseErrors)
-if ($parseErrors.Count) { throw "Failed to parse validator: $($parseErrors[0].Message)" }
-$invoke = $ast.Find({
+$cliAst = [System.Management.Automation.Language.Parser]::ParseFile(
+    $ScriptPath, [ref]$tokens, [ref]$parseErrors
+)
+if ($parseErrors.Count) { throw "Failed to parse CLI runner: $($parseErrors[0].Message)" }
+$summaryAst = $cliAst.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Write-Summary"
+}, $true)
+if ($null -eq $summaryAst) { throw "Write-Summary was not found" }
+Invoke-Expression $summaryAst.Extent.Text
+$diagnosticAst = $cliAst.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Add-Diagnostic"
+}, $true)
+if ($null -eq $diagnosticAst) { throw "Add-Diagnostic was not found" }
+Invoke-Expression $diagnosticAst.Extent.Text
+
+$helperPath = Join-Path (Split-Path -Parent $ScriptPath) "_live_tektronix_helpers.ps1"
+$helperAst = [System.Management.Automation.Language.Parser]::ParseFile(
+    $helperPath, [ref]$tokens, [ref]$parseErrors
+)
+if ($parseErrors.Count) { throw "Failed to parse Tektronix helper: $($parseErrors[0].Message)" }
+$runnerAst = $helperAst.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Invoke-TektronixCliValidation"
+}, $true)
+if ($null -eq $runnerAst) { throw "Invoke-TektronixCliValidation was not found" }
+$invokeAst = $runnerAst.Find({
     param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Invoke-Cli"
 }, $true)
-if ($null -eq $invoke) { throw "Invoke-Cli was not found" }
-# Replace only transport, retaining the real argv, error classification, readback and report code.
-$assignments = @($invoke.Body.EndBlock.Statements | Where-Object {
+if ($null -eq $invokeAst) { throw "Nested Invoke-Cli was not found" }
+$assignments = @($invokeAst.Body.EndBlock.Statements | Where-Object {
     $_ -is [System.Management.Automation.Language.AssignmentStatementAst]
 })
 $first = @($assignments | Where-Object { $_.Left.Extent.Text -eq '$psi' })
@@ -140,31 +196,46 @@ $last = @($assignments | Where-Object { $_.Left.Extent.Text -eq '$stderr' })
 if ($first.Count -ne 1 -or $last.Count -ne 1) { throw "Invoke-Cli transport boundary changed" }
 $transport = @'
 $start = Get-Date
-    $fake = Invoke-FakeTransport -Command $Command -Options $Options
+    $fake = Invoke-FakeTransport -Command $Command -Options $Options -Simulate:$Simulate
     $process = [pscustomobject]@{ ExitCode = $fake.ExitCode }
-    $script:HardwareTouched = $true
+    if (-not $Simulate) { $script:HardwareTouched = $true }
     $timedOut = $false
     $stdout = $fake.Payload | ConvertTo-Json -Depth 20 -Compress
     $stderr = ""
 '@
-$source = $ast.Extent.Text
-$probe = $ast.Find({
-    param($node)
-    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Invoke-PositionProbe"
-}, $true)
-$source = $source.Remove($probe.Extent.StartOffset, $probe.Extent.EndOffset - $probe.Extent.StartOffset).Insert(
-    $probe.Extent.StartOffset, 'function Invoke-PositionProbe { param($Action, $Original) Invoke-FakePositionProbe $Action $Original }')
-$offset = $first[0].Extent.StartOffset
-$source = $source.Remove($offset, $last[0].Extent.EndOffset - $offset).Insert($offset, $transport)
-# The in-memory script retains the validator's helper and repository locations.
-$source = $source.Replace('$PSScriptRoot', '$script:ValidatorRoot')
-$switches = @($ast.ParamBlock.Parameters | Where-Object { $_.StaticType -eq [switch] } |
-    ForEach-Object { $_.Name.VariablePath.UserPath })
-$parameters = @{}
-for ($index = 0; $index -lt $fixture.arguments.Count; $index++) {
-    $name = $fixture.arguments[$index].TrimStart('-')
-    if ($name -in $switches) { $parameters[$name] = $true }
-    else { $index++; $parameters[$name] = $fixture.arguments[$index] }
+$source = $runnerAst.Extent.Text
+$startOffset = $first[0].Extent.StartOffset - $runnerAst.Extent.StartOffset
+$endOffset = $last[0].Extent.EndOffset - $runnerAst.Extent.StartOffset
+$source = $source.Remove($startOffset, $endOffset - $startOffset).Insert($startOffset, $transport)
+
+$arguments = @($fixture.arguments)
+$parameterValues = @{}
+$connection = "usb"
+$resource = "USB0::FAKE::INSTR"
+for ($index = 0; $index -lt $arguments.Count; $index++) {
+    $name = $arguments[$index].TrimStart('-')
+    if ($name -in @("IncludeAcquisitionActions", "IncludeAutoscale", "IncludeStorageWrites", "IncludeConfigurationActions", "IncludeScreenshot")) {
+        $parameterValues[$name] = $true
+    } elseif ($name -in @("SetupSlot", "ReferenceSlot", "ImageFilename", "WaveformFilename", "WaveformSourceChannel", "Connection", "Resource")) {
+        $index++
+        if ($name -eq "Connection") { $connection = $arguments[$index] }
+        elseif ($name -eq "Resource") { $resource = $arguments[$index] }
+        else { $parameterValues[$name] = $arguments[$index] }
+    }
 }
-& ([scriptblock]::Create($source)) @parameters
-if ($script:Failure) { exit 1 }
+$script:Connection = $connection
+$script:LiveConnectionArguments = @("--live", "--resource", $resource)
+$Resource = $resource
+$IncludeAcquisitionActions = [bool]$parameterValues["IncludeAcquisitionActions"]
+$IncludeAutoscale = [bool]$parameterValues["IncludeAutoscale"]
+$IncludeStorageWrites = [bool]$parameterValues["IncludeStorageWrites"]
+$IncludeConfigurationActions = [bool]$parameterValues["IncludeConfigurationActions"]
+$IncludeScreenshot = [bool]$parameterValues["IncludeScreenshot"]
+$SetupSlot = if ($parameterValues.ContainsKey("SetupSlot")) { [int]$parameterValues["SetupSlot"] } else { 1 }
+$ReferenceSlot = if ($parameterValues.ContainsKey("ReferenceSlot")) { [int]$parameterValues["ReferenceSlot"] } else { 1 }
+$ImageFilename = [string]$parameterValues["ImageFilename"]
+$WaveformFilename = [string]$parameterValues["WaveformFilename"]
+$WaveformSourceChannel = if ($parameterValues.ContainsKey("WaveformSourceChannel")) { [int]$parameterValues["WaveformSourceChannel"] } else { 1 }
+
+& ([scriptblock]::Create($source + "`nInvoke-TektronixCliValidation`n"))
+if ($script:FunctionalFailed -or $script:ShareableGenerationFailed) { exit 1 }

@@ -137,6 +137,10 @@ def test_script_rejects_noncanonical_target_with_usage_error() -> None:
     for model_id in CANONICAL_TARGETS:
         assert model_id in completed.stderr
 
+    completed = run_preflight("-Target", "tektronix-tbs2074b")
+    assert completed.returncode == 2
+    assert "Unsupported target 'tektronix-tbs2074b'" in completed.stderr
+
 
 @requires_windows
 def test_list_targets_prints_registered_models() -> None:
