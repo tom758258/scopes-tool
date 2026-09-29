@@ -41,6 +41,17 @@ def test_cursor_command_carries_cursor_editor_metadata() -> None:
         assert entry.get("browser_hidden") is not True
         assert entry.get("hidden") is not True
 
+    assert (
+        public["cursor-set"]["presentation"]["models"]["tektronix-tbs2074b"]
+        ["cursor_source_selection"]
+        == "selected-waveform"
+    )
+    assert (
+        public["cursor-set"]["presentation"]["models"]["tektronix-tbs1052b"]
+        ["cursor_source_selection"]
+        == "independent"
+    )
+
     assert public["cursor-query"]["fields"] == []
     assert public["cursor-off"]["fields"] == []
     assert public["cursor-query"]["presentation"]["action"] == "read"
@@ -62,6 +73,13 @@ def test_cursor_command_carries_cursor_editor_metadata() -> None:
         "cursor.y1",
         "cursor.y2",
     }
+    english_hint = next(
+        line
+        for line in read_static("locale_en.js").splitlines()
+        if '"cursor.editor.selectedWaveform":' in line
+    )
+    for concept in ("selected and displayed", "resets acquisition", "current waveform"):
+        assert concept in english_hint
 
 
 def test_cursor_set_form_layout_is_scoped() -> None:
@@ -350,6 +368,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         const hooks = {
           calls,
           contextKey: () => "simulate||keysight-dsox4024a",
+          modelId: () => "tektronix-tbs2074b",
           selectedCommand: () => catalog.commands.find((command) => command.id === selectedId),
           isAvailable: () => true,
           isExecutionBusy: () => false,
@@ -437,6 +456,8 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         assert.equal(editor.entry.form.container.hidden, false);
         const setSection = editor.sectionsHost.children[0];
         assert.equal(setSection.hidden, false);
+        assert.equal(setSection.children[0].className, "compact-note");
+        assert.equal(setSection.children[0].textContent, "cursor.editor.selectedWaveform");
         // The page header shows the command label/description; the section
         // must not repeat them.
         assert.ok(setSection.children.every((node) => node.className !== "trigger-editor-heading"));

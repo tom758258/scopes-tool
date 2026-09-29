@@ -1031,10 +1031,9 @@ class TektronixOscilloscope(Oscilloscope):
             units, _ = self._query("CURSor:HBArs:UNIts?")
             volts = False
             voltage_units = {"BASE", "BAS"} if self._is_tbs2000b else {"VOLTS", "V"}
-            voltage_sources = {f"CH{channel}" for channel in range(1, self.capabilities.analog_channels + 1)
-                               if self._units_available(channel)}
+            voltage_sources = {f"CH{channel}" for channel in range(1, self.capabilities.analog_channels + 1)}
             if units.upper() in voltage_units and source.upper() in voltage_sources:
-                volts = self.query_channel_units(int(source[-1])) == "volt"
+                volts = self._cursor_channel_is_voltage(int(source[-1]))
             if volts:
                 y1 = self._float("CURSor:HBArs:POSITION1?")
                 y2 = self._float("CURSor:HBArs:POSITION2?")
@@ -1049,6 +1048,12 @@ class TektronixOscilloscope(Oscilloscope):
                                 y1_volts=y1_volts, y2_volts=y2_volts,
                                 auto_timebase=auto_timebase, auto_vertical=auto_vertical)
         channel = self._channel(source_channel)
+        if self.capabilities.cursor_source_selection == "selected-waveform":
+            self._configure_selected_waveform_cursor(channel, x1_seconds=x1_seconds,
+                x2_seconds=x2_seconds, y1_volts=y1_volts, y2_volts=y2_volts,
+                auto_timebase=auto_timebase)
+            return
+        self._require_tds2000b_or_tbs1000b("independent cursor source")
         x_axis = x1_seconds is not None or x2_seconds is not None
         values = (x1_seconds, x2_seconds) if x_axis else (y1_volts, y2_volts)
         if x_axis:
@@ -1079,6 +1084,82 @@ class TektronixOscilloscope(Oscilloscope):
         for index, value in enumerate(values, 1):
             if value is not None:
                 self._write_number(f"CURSor:{axis}:POSITION{index}", value)
+
+    def _cursor_channel_is_voltage(self, channel: int) -> bool:
+        if self._units_available(channel):
+            return self.query_channel_units(channel) == "volt"
+        self._require_tbs2000b("cursor waveform units")
+        # The waveform preamble also covers channels without a YUNit control.
+        source, _ = self._query("DATa:SOUrce?")
+        source = source.upper()
+        sources = {f"CH{i}" for i in range(1, self.capabilities.analog_channels + 1)}
+        if source not in sources | {"MATH", "REF1", "REF2"}:
+            raise OscilloscopeError("Unsupported waveform source readback")
+        target = f"CH{channel}"
+        try:
+            if source != target:
+                self.scpi.write(f"DATa:SOUrce {target}")
+            units, _ = self._query("WFMOutpre:YUNit?")
+            return units.strip('"').upper() in {"V", "VOLTS"}
+        finally:
+            if source != target:
+                self.scpi.write(f"DATa:SOUrce {source}")
+
+    def plan_cursor_auto_timebase(self, *, x1_seconds=None, x2_seconds=None):
+        start = len(self.backend.history)
+        plan = cursor_auto_timebase_plan(self.query_timebase_scale(), self.query_timebase_position(),
+            x1_seconds=x1_seconds, x2_seconds=x2_seconds,
+            display_divisions=self.capabilities.horizontal_display_divisions)
+        commands = list(self.backend.history[start:])
+        if plan.changed:
+            commands.append(f"HORizontal:MAIn:SCAle {plan.target_scale_seconds_per_division:g}")
+        return replace(plan, commands=tuple(commands))
+
+    def _configure_selected_waveform_cursor(self, channel: int, *, x1_seconds=None,
+            x2_seconds=None, y1_volts=None, y2_volts=None, auto_timebase=False) -> None:
+        self._require_tbs2000b("selected waveform cursor")
+        x_values, y_values = (x1_seconds, x2_seconds), (y1_volts, y2_volts)
+        x_axis = any(value is not None for value in x_values)
+        y_axis = any(value is not None for value in y_values)
+        # Validate coordinates before selecting or enabling the source waveform.
+        if y_axis:
+            if self._units_available(channel) and not self._cursor_channel_is_voltage(channel):
+                raise ParameterValidationError("Y cursors require a channel with volt units")
+            scale, offset = self.query_channel_scale(channel), self.query_channel_offset(channel)
+            position = self._float(f"CH{channel}:POSition?")
+            if scale <= 0:
+                raise OscilloscopeError("Invalid channel scale")
+            if any(value is not None and abs((value - offset) / scale + position) >
+                   self.capabilities.vertical_display_divisions / 2 for value in y_values):
+                raise ParameterValidationError("Y cursor position is outside the graticule")
+        if x_axis:
+            plan = self.plan_cursor_auto_timebase(x1_seconds=x1_seconds, x2_seconds=x2_seconds)
+            scale = plan.original_scale_seconds_per_division
+            position = plan.original_position_seconds
+            if auto_timebase and plan.changed:
+                self.set_timebase_scale(plan.target_scale_seconds_per_division)
+                scale, position = self.query_timebase_scale(), self.query_timebase_position()
+            if any(value is not None and abs(value - position) >
+                   self.capabilities.horizontal_display_divisions / 2 * scale for value in x_values):
+                raise ParameterValidationError("X cursor position is outside the graticule")
+        source, _ = self._query("SELect:CONTROl?")
+        if source.upper() != f"CH{channel}" or not self.query_channel_display(channel):
+            self.scpi.write(f"SELect:CONTROl CH{channel}")
+        source, _ = self._query("SELect:CONTROl?")
+        if source.upper() != f"CH{channel}" or not self.query_channel_display(channel):
+            raise OscilloscopeError("Cursor source selection did not take effect")
+        if y_axis and not self._units_available(channel) and not self._cursor_channel_is_voltage(channel):
+            raise ParameterValidationError("Y cursors require a channel with volt units")
+        mode = "SCREEN" if x_axis and y_axis else "TIME" if x_axis else "AMPLitude"
+        self.scpi.write(f"CURSor:FUNCtion {mode}")
+        if not (x_axis and y_axis):
+            self.scpi.write("CURSor:MODe INDependent")
+        for axis, values, units in (("VBArs", x_values, "SECOnds"), ("HBArs", y_values, "BASe")):
+            if any(value is not None for value in values):
+                self.scpi.write(f"CURSor:{axis}:UNIts {units}")
+                for index, value in enumerate(values, 1):
+                    if value is not None:
+                        self._write_number(f"CURSor:{axis}:POSITION{index}", value)
 
     def _math_function(self, function: int) -> None:
         if isinstance(function, bool) or function != 1:
@@ -1562,7 +1643,7 @@ class TektronixOscilloscope(Oscilloscope):
                 trigger['units'] = entries[channel - 1].units
         position = self.query_timebase_position()
         return dict(channels=channels, timebase=dict(scale=self.query_timebase_scale(), position=position),
-                    trigger=trigger, acquisition={"mode": "unknown"})
+                    trigger=trigger)
 
 
 def _unsupported(self: TektronixOscilloscope, *args: object, **kwargs: object) -> None:

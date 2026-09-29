@@ -59,7 +59,7 @@ def test_instrument_summary_normalizes_acquisition_mode(segmented_mode, expected
 
     summary = query_instrument_summary(scope)
 
-    assert summary["acquisition"] == {"mode": expected}
+    assert summary["acquisition"] == {"mode": expected, "type": "normal"}
 
 
 def test_instrument_summary_survives_acquisition_mode_failure(monkeypatch):
@@ -77,9 +77,27 @@ def test_instrument_summary_survives_acquisition_mode_failure(monkeypatch):
 
     summary = query_instrument_summary(scope)
 
-    assert summary["acquisition"] == {"mode": "unknown"}
+    assert summary["acquisition"] == {"mode": "unknown", "type": "normal"}
     assert len(summary["channels"]) == 4
     assert set(summary["timebase"]) == {"scale", "position"}
+
+
+def test_instrument_summary_survives_acquisition_type_failure(monkeypatch):
+    backend = SimulatorBackend(segmented_mode="SEGM")
+    scope = Oscilloscope(backend)
+    scope.query_idn()
+    original_query = SimulatorBackend.query
+
+    def fail_type_query(self, command):
+        if command.strip().upper() == ":ACQUIRE:TYPE?":
+            raise RuntimeError("simulated type read failure")
+        return original_query(self, command)
+
+    monkeypatch.setattr(SimulatorBackend, "query", fail_type_query)
+
+    summary = query_instrument_summary(scope)
+
+    assert summary["acquisition"] == {"mode": "segmented", "type": "unknown"}
 
 
 def test_parse_acquisition_mode_tolerates_casing_and_whitespace():

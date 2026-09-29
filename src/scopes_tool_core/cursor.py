@@ -238,6 +238,7 @@ def cursor_auto_timebase_plan(
     *,
     x1_seconds: float | None = None,
     x2_seconds: float | None = None,
+    display_divisions: int = 10,
 ) -> CursorAutoTimebaseResult:
     current_scale_seconds_per_division = validate_finite_number(
         current_scale_seconds_per_division,
@@ -251,13 +252,13 @@ def cursor_auto_timebase_plan(
         raise ParameterValidationError("timebase scale must be greater than 0 s/div.")
     x_targets = _cursor_x_targets(x1_seconds=x1_seconds, x2_seconds=x2_seconds)
 
-    visible_half_span_seconds = current_scale_seconds_per_division * 4.5
+    visible_half_span_seconds = current_scale_seconds_per_division * (display_divisions * 0.45)
     max_delta_seconds = max(
         abs(target - current_position_seconds) for target in x_targets
     )
     changed = max_delta_seconds > visible_half_span_seconds
     target_scale = (
-        max(current_scale_seconds_per_division, max_delta_seconds / 4.0)
+        max(current_scale_seconds_per_division, max_delta_seconds / (display_divisions * 0.4))
         if changed
         else current_scale_seconds_per_division
     )

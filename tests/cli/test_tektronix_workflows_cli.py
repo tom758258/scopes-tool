@@ -49,3 +49,39 @@ def test_worker_native_workflows(model, command, arguments):
     assert job.result["system_error"] is None
     assert result["result"]["post_command_status"]["complete"] is True
     assert "ALLEv?" in job.result["scpi"]["sent"]
+
+
+def test_cli_tbs2074b_cursor_set_uses_core_tektronix_commands(capsys):
+    assert cli.main(
+        [
+            "cursor",
+            "--simulate",
+            "--json",
+            "--model",
+            "tektronix-tbs2074b",
+            "--source-channel",
+            "2",
+            "--x1",
+            "0",
+        ]
+    ) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    commands = payload["scpi"]["sent"]
+    assert "SELect:CONTROl CH2" in commands
+    assert "CURSor:FUNCtion TIME" in commands
+    assert not any(":MARKer:" in command for command in commands)
+
+
+def test_worker_tbs2074b_cursor_set_uses_core_tektronix_commands():
+    job, result = _execute_worker_job(
+        _runtime(model="tektronix-tbs2074b"),
+        "cursor",
+        {"source_channel": 2, "x1": 0.0},
+    )
+
+    assert result["state"] == "succeeded"
+    commands = job.result["scpi"]["sent"]
+    assert "SELect:CONTROl CH2" in commands
+    assert "CURSor:FUNCtion TIME" in commands
+    assert not any(":MARKer:" in command for command in commands)

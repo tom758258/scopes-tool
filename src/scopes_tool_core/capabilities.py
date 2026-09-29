@@ -90,6 +90,9 @@ class ScopeCapabilities:
     supported_sequence_actions: tuple[str, ...] | None = None
     horizontal_display_divisions: int = 10
     timebase_reference_mode: str = "configurable"
+    vertical_display_divisions: int = 8
+    cursor_source_selection: str = "independent"
+    fixed_acquisition_memory_mode: str | None = None
 
     def __post_init__(self) -> None:
         if self.screenshot_formats is not None:
@@ -168,8 +171,10 @@ _CAPABILITY_PROFILES = {
     "tektronix-tbs2074b": ScopeCapabilities(
         supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup", "screenshot"),
         timebase_reference_mode="fixed-center",
+        fixed_acquisition_memory_mode="realtime",
         save_waveform_requires_source=True,
-        horizontal_display_divisions=15,
+        horizontal_display_divisions=15, vertical_display_divisions=10,
+        cursor_source_selection="selected-waveform",
         series="TBS2000B", analog_channels=4,
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
@@ -199,7 +204,7 @@ _CAPABILITY_PROFILES = {
         supports_setup_file_target=False,
         supports_channel_label=True, channel_label_max_length=30,
         supported_operations=_TEK_COMMON_OPERATIONS | {
-            "channel-label", "channel-probe-skew", "timebase-position",
+            "cursor-set", "channel-label", "channel-probe-skew", "timebase-position",
             "trigger-edge-level", "trigger-runt", "sample-rate",
             "save-image-format", "save-waveform-format", "screenshot", "smoke",
         },
@@ -207,6 +212,7 @@ _CAPABILITY_PROFILES = {
     "tektronix-tds2024b": ScopeCapabilities(
         supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup"),
         timebase_reference_mode="fixed-center",
+        fixed_acquisition_memory_mode="realtime",
         save_waveform_requires_source=True,
         series="TDS2000B", analog_channels=4,
         measurement_install_items=_TEK_TDS2000B_INSTALL_ITEMS, measurement_items=_TEK_TDS2000B_INSTALL_ITEMS,
@@ -243,6 +249,7 @@ _CAPABILITY_PROFILES = {
     "tektronix-tbs1052b": ScopeCapabilities(
         supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup"),
         timebase_reference_mode="fixed-center",
+        fixed_acquisition_memory_mode="realtime",
         save_waveform_requires_source=True,
         series="TBS1000B", analog_channels=2,
         measurement_install_items=_TEK_INSTALL_ITEMS, measurement_items=_TEK_INSTALL_ITEMS,

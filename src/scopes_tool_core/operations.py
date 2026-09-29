@@ -1666,7 +1666,9 @@ def query_instrument_summary(scope: Oscilloscope) -> dict[str, object]:
 
     from .tektronix import TektronixOscilloscope
     if isinstance(scope, TektronixOscilloscope):
-        return scope._query_instrument_summary()
+        summary = scope._query_instrument_summary()
+        summary["acquisition"] = query_acquisition_summary(scope)
+        return summary
 
     channel_entries = scope.query_channel_summary()
     channels = [
@@ -1716,14 +1718,26 @@ def query_instrument_summary(scope: Oscilloscope) -> dict[str, object]:
             "position": scope.query_timebase_position(),
         },
         "trigger": trigger,
-        "acquisition": {"mode": query_acquisition_mode_best_effort(scope)},
+        "acquisition": query_acquisition_summary(scope),
     }
+
+
+def query_acquisition_summary(scope: Oscilloscope) -> dict[str, str]:
+    """Keep memory mode and sampling type independent, including read failures."""
+    mode = query_acquisition_mode_best_effort(scope)
+    try:
+        acquisition_type = scope.query_acquisition_type()
+    except Exception:
+        acquisition_type = "unknown"
+    return {"mode": mode, "type": acquisition_type}
 
 
 def query_acquisition_mode_best_effort(scope: Oscilloscope) -> str:
     """Read the acquisition mode without failing the surrounding summary."""
 
     from .capabilities import operation_supported
+    if scope.capabilities is not None and scope.capabilities.fixed_acquisition_memory_mode is not None:
+        return scope.capabilities.fixed_acquisition_memory_mode
     if scope.capabilities is not None and not operation_supported(scope.capabilities, "segmented-memory"):
         return "unknown"
     try:

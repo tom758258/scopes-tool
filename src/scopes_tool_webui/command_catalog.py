@@ -2605,6 +2605,8 @@ def _model_command_presentation(
         if override:
             fields[name] = override
     result = {"supported": supported, "fields": fields}
+    if entry["id"] in {"cursor", "cursor-set"}:
+        result["cursor_source_selection"] = capabilities.cursor_source_selection
     if entry["id"] == "timebase-position":
         result["timebase_position"] = {
             "display_divisions": capabilities.horizontal_display_divisions,

@@ -237,6 +237,12 @@ Worker `/command` supports the existing Scopes capability surface:
 may return `statistics_items`. It is unrelated to Counter or
 `measure-counter`.
 
+`cursor` reuses the Core model-specific source, axis, units and readback
+behavior described in the [CLI cursor contract](scopes-cli-jsonl-contract.md).
+On a `selected-waveform` profile, set can select/display the source and reset
+acquisition; it retains that selection. This does not change queue admission,
+lifecycle, result correlation or exit-code meanings.
+
 `channel-summary` reuses the CLI/Core read-only analog-channel query path with
 empty arguments and returns the existing `result.channels` shape.
 

@@ -62,6 +62,7 @@ const elements = {
   liveTriggerSlope: document.querySelector("#live-trigger-slope"),
   liveTriggerSweep: document.querySelector("#live-trigger-sweep"),
   liveAcquisitionMode: document.querySelector("#live-acquisition-mode"),
+  liveAcquisitionType: document.querySelector("#live-acquisition-type"),
   liveAcquisitionSegmentedHint: document.querySelector("#live-acquisition-segmented-hint"),
   mode: [...document.querySelectorAll("input[name=mode]")],
   model: document.querySelector("#model-select"),
@@ -459,6 +460,7 @@ async function initialize() {
   });
   cursorEditor = new CursorEditor(elements.cursorEditor, catalog, {
     executeCommand,
+    modelId: currentModelId,
     headerActions: elements.workspaceHeaderActions,
     isExecutionBusy,
     isAvailable: () => {
@@ -1537,6 +1539,7 @@ function renderLiveData() {
       triggerSlope: elements.liveTriggerSlope,
       triggerSweep: elements.liveTriggerSweep,
       acquisitionMode: elements.liveAcquisitionMode,
+      acquisitionType: elements.liveAcquisitionType,
       acquisitionSegmentedHint: elements.liveAcquisitionSegmentedHint,
     },
     liveDataSnapshot.value,

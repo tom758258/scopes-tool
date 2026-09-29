@@ -497,8 +497,25 @@ Control and setup:
 - `cursor`: `operation`, `commands`, `source_channel`, `x1_seconds`,
   `x2_seconds`, `y1_volts`, `y2_volts`, `auto_timebase`,
   `auto_vertical`, and `diagnostic`. `x1_seconds`, `x2_seconds`, `y1_volts`,
-  and `y2_volts` are nullable; positions not supplied for a configure
-  operation are reported as `null`.
+  and `y2_volts` are nullable. Keysight configure results report requested
+  positions, with omitted positions `null`; Tek configure results report actual
+  active-axis readbacks and inactive/unestablished axes as `null`.
+  Core `cursor_source_selection` describes source behavior. With `independent`
+  selection, existing source isolation and supported axis subsets apply. With
+  `selected-waveform` selection (TBS2074B), setting cursors leaves the requested
+  source selected and displayed. Selecting/enabling it resets acquisition and
+  may replace waveform data; no selection write is sent when already selected
+  and displayed. X-only uses TIME, Y-only AMPLitude, and combined X/Y SCREEN;
+  single-axis sets disable tracking. Requested axes use seconds/physical volts,
+  and only supplied position registers are written. Changing source, mode or
+  units can alter the presentation of omitted positions. Auto-timebase follows
+  the model's horizontal span; auto-vertical remains unsupported on Tek.
+  CH3/CH4 voltage-unit verification temporarily selects the waveform transfer
+  source and restores it even on failure; it does not restore front-panel
+  selection. Hardware errors or a later unit-check failure can leave earlier
+  authorized selection/scale changes in place. Query/off do not select or
+  enable a front-panel source. A CH3/CH4 Y query uses the same temporary
+  transfer-source verification and restoration.
 - `acquisition`: `operation`, `commands`, `type`, `scpi_type`, `count`.
 - `sample-rate`: `operation`, `sample_rate_hz` for current-rate queries,
   `query_kind` and `maximum_sample_rate_hz` for maximum-rate queries,

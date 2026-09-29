@@ -413,11 +413,14 @@ Selecting a Cursor, Annotation, WGEN, or DEMO command opens the matching dedicat
 editor instead of a plain command form. The Command Browser remains the only
 navigation; the editors add no second tab layer. Cursor offers explicit
 Read cursor state (`cursor-query`), manual cursor configuration (`cursor-set`:
-source channel plus any of X1/X2/Y1/Y2; unspecified positions stay unchanged),
+source channel plus model-supported X1/X2/Y1/Y2 positions; only supplied position registers are written),
 and Turn off cursors (`cursor-off`),
 plus current state readback (mode, positions, deltas, and DYDX where the
-instrument reports it). Applying cursor settings switches the cursors to
-Manual mode and enables them. Annotation offers explicit Read annotation settings
+instrument reports it). Core chooses the active cursor mode from the model
+and requested axes. TBS2074B supports combined X/Y and shows a notice that
+applying retains the selected/displayed source and can reset acquisition when
+selection is needed. Existing Keysight Manual behavior and the older Tek
+single-axis subset are retained. Annotation offers explicit Read annotation settings
 (`annotation-query`), text/color/background editing (`annotation-set`, which never
 switches the annotation on), on/off actions (`annotation-on`, `annotation-off`),
 clearing only the annotation text (`annotation-clear`), and current state readback;
@@ -523,7 +526,7 @@ deterministic simulator; Live opens the explicit resource through Core.
 
 Live Data keeps the existing WebUI, command, and Live status indicators and
 adds a small read-only summary of analog channels, horizontal settings,
-acquisition mode, and the common trigger state, presented as channel cards with
+acquisition memory mode, acquisition processing type, and the common trigger state, presented as channel cards with
 channel identity colors plus Horizontal, Trigger, and Acquisition cards. **Read live data** is an explicit foreground action that
 uses the same Core-backed job admission as other commands. Selecting a live
 resource after identification, or selecting a simulator model that supports the
@@ -531,6 +534,12 @@ snapshot, automatically reads live data once; the manual button remains availabl
 for retries on supported models. Live requires a
 selected resource with confirmed identity, Simulate uses the Core simulator,
 and Dry-run reports the summary as unavailable.
+
+`acquisition.mode` is realtime, segmented, equivalent_time or unknown, derived
+from an explicit fixed Core profile or a matching query. `acquisition.type`
+separately reports normal, average, peak, high_resolution or unknown through
+the driver's acquisition-type query. A failed read affects only its own field;
+the UI does not infer either value from the vendor or the other field.
 
 The summary is cleared when its mode, resource, detected model, or planning
 model changes. A failed Read live data action leaves the previous successful summary visible

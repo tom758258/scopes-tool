@@ -867,13 +867,13 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             command = scope.backend.history[-1]
             runtime._json_update_result(operation="off", command=command)
             print(f"Command: {command}")
-        elif scope.capabilities.cursor_single_axis_only:
+        elif (scope.capabilities.cursor_single_axis_only
+              or scope.capabilities.cursor_source_selection == "selected-waveform"):
             validate_cursor_request(scope.capabilities, x1_seconds=args.x1, x2_seconds=args.x2,
                 y1_volts=args.y1, y2_volts=args.y2, auto_timebase=args.auto_timebase, auto_vertical=args.auto_vertical)
             auto_timebase = None
             if args.auto_timebase:
-                auto_timebase = cursor_auto_timebase_plan(scope.query_timebase_scale(), scope.query_timebase_position(),
-                    x1_seconds=args.x1, x2_seconds=args.x2)
+                auto_timebase = scope.plan_cursor_auto_timebase(x1_seconds=args.x1, x2_seconds=args.x2)
             scope.configure_cursor(args.source_channel, x1_seconds=args.x1, x2_seconds=args.x2,
                 y1_volts=args.y1, y2_volts=args.y2, auto_timebase=args.auto_timebase, auto_vertical=args.auto_vertical)
             state = scope.query_cursor()

@@ -131,3 +131,48 @@ def test_cursor_query_rejects_configure_arguments(capsys):
 def test_cursor_auto_timebase_rejects_missing_x(capsys):
     message = _cursor_dry_run_error(capsys, ["--source-channel", "1", "--y1", "0.5", "--auto-timebase"])
     assert message == "--auto-timebase requires --x1 or --x2."
+
+
+def test_tek_b2_cursor_simulation_uses_native_scpi(capsys):
+    assert cli.main(
+        [
+            "cursor",
+            "--simulate",
+            "--json",
+            "--model",
+            "tektronix-tbs2074b",
+            "--source-channel",
+            "2",
+            "--x1",
+            "0",
+        ]
+    ) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    commands = payload["scpi"]["sent"]
+    assert "SELect:CONTROl CH2" in commands
+    assert "CURSor:FUNCtion TIME" in commands
+    assert "CURSor:VBArs:UNIts SECOnds" in commands
+    assert not any(":MARKer:" in command for command in commands)
+
+
+def test_tbs1052b_rejects_dual_axis_cursor_set_without_cursor_scpi(capsys):
+    assert cli.main(
+        [
+            "cursor",
+            "--simulate",
+            "--json",
+            "--model",
+            "tektronix-tbs1052b",
+            "--source-channel",
+            "1",
+            "--x1",
+            "0",
+            "--y1",
+            "0",
+        ]
+    ) == 1
+
+    payload = json.loads(capsys.readouterr().out)
+    assert "single axis only" in payload["error"]["message"]
+    assert not any("CURSor:" in command for command in payload["scpi"]["sent"])

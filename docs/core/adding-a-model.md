@@ -37,6 +37,13 @@ SCPI or model-name branches.
    CLI validation, Worker validation and runtime, including bypassed UI inputs.
    Set `horizontal_display_divisions` and `timebase_reference_mode` in Core;
    the position editor consumes their projection without testing series names.
+   Set `vertical_display_divisions` for cursor bounds and
+   `cursor_source_selection` for independent versus selected-waveform source
+   behavior. The latter requires a driver adapter and a projected UI notice of
+   source/display/acquisition effects. Declare `fixed_acquisition_memory_mode`
+   only when the model's acquisition architecture establishes a fixed mode;
+   absence of segmented support is insufficient. Acquisition processing type
+   remains a separate driver query.
 
 Verify identity rejection, profile/driver consistency, dry-run plans, simulator
 execution, adapter payloads and unsupported-option rejection before writes.

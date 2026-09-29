@@ -142,6 +142,13 @@ export class CursorEditor {
     // duplicate it, so only set/off keep a section button. The button is
     // recreated on every rebuild, so hidden state always follows the selection.
     actionButton.hidden = command.id === "cursor-query";
+    const presentation = command.presentation?.models?.[this.hooks.modelId?.()];
+    if (command.id === "cursor-set" && presentation?.cursor_source_selection === "selected-waveform") {
+      const note = document.createElement("p");
+      note.className = "compact-note";
+      note.textContent = translate("cursor.editor.selectedWaveform");
+      section.append(note);
+    }
     section.append(formContainer);
     if (this.hooks.headerActions) {
       this.hooks.headerActions.append(actionButton);
