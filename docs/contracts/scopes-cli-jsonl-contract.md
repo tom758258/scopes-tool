@@ -613,7 +613,7 @@ contains `source: "tektronix-sesr"`, integer `value`, SESR `raw`, `event_raw`,
 SESR/event cohort, not a normalized system-error queue. Invalid responses,
 overflow or incomplete status fail closed. Preflight stale events are reported;
 Doctor stops on preexisting errors, while other workflows may proceed after a
-complete preflight. See the [Tektronix status boundary](../core/tektronix-support-matrix.md#native-workflow-status).
+complete preflight. See the [Tektronix status boundary](../core/supported-models.md#native-workflow-status).
 
 Acquisition-check reports unsupported profile modes as skipped. For native
 status models, requested restoration includes a status checkpoint and actual
