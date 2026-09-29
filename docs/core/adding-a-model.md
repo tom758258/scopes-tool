@@ -40,10 +40,14 @@ SCPI or model-name branches.
    Set `vertical_display_divisions` for cursor bounds and
    `cursor_source_selection` for independent versus selected-waveform source
    behavior. The latter requires a driver adapter and a projected UI notice of
-   source/display/acquisition effects. Declare `fixed_acquisition_memory_mode`
-   only when the model's acquisition architecture establishes a fixed mode;
-   absence of segmented support is insufficient. Acquisition processing type
-   remains a separate driver query.
+   source/display/acquisition effects. Semantic metadata is fail-closed:
+   display-division counts are positive integers,
+   `timebase_reference_mode` is `configurable` or `fixed-center`, and
+   `cursor_source_selection` is `independent` or `selected-waveform`.
+   Declare `fixed_acquisition_memory_mode` only when the model's acquisition
+   architecture establishes a fixed `realtime`, `segmented`, or
+   `equivalent_time` mode; absence of segmented support is insufficient.
+   Acquisition processing type remains a separate driver query.
 
 Verify identity rejection, profile/driver consistency, dry-run plans, simulator
 execution, adapter payloads and unsupported-option rejection before writes.
@@ -58,7 +62,10 @@ so capability support does not imply adding a new public adapter surface.
 Exercise meaningful error paths: malformed/incomplete status, temporary-state
 restoration, timeout, force, cancellation and a sequence containing a later
 unsupported step. Reuse the acceptance matrix across registered models rather
-than taking the intersection of their capabilities.
+than taking the intersection of their capabilities. Live acceptance tooling
+must consume Core capability metadata rather than maintain a second support
+matrix: if a runner labels an operation unsupported while Core admits it, the
+runner must fail as stale instead of reporting N/A.
 
 Follow [Testing Guidelines](../testing-guidelines.md). Hardware-free results do
 not establish live behavior. Live validation is explicit, bounded and uses only

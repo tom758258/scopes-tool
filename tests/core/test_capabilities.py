@@ -12,6 +12,62 @@ from scopes_tool_core.errors import UnsupportedModelError
 from scopes_tool_core.identity import PhysicalModelInfo
 
 
+def _minimal_capabilities(**overrides):
+    values = {
+        "series": "TEST",
+        "analog_channels": 1,
+        "default_waveform_points": 1000,
+        "safe_max_waveform_points": 1000,
+        "supports_word_format": False,
+        "supports_raw_points_mode": False,
+        "supports_measurements": False,
+        "supports_delay_measurement": False,
+    }
+    values.update(overrides)
+    return ScopeCapabilities(**values)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("horizontal_display_divisions", 0, "positive integer"),
+        ("horizontal_display_divisions", -1, "positive integer"),
+        ("horizontal_display_divisions", True, "positive integer"),
+        ("vertical_display_divisions", 0, "positive integer"),
+        ("timebase_reference_mode", "middle", "timebase_reference_mode"),
+        ("cursor_source_selection", "selected-wavefrom", "cursor_source_selection"),
+        ("fixed_acquisition_memory_mode", "real_time", "fixed_acquisition_memory_mode"),
+    ],
+)
+def test_scope_capability_semantic_metadata_rejects_invalid_values(field, value, message):
+    with pytest.raises(ValueError, match=message):
+        _minimal_capabilities(**{field: value})
+
+
+@pytest.mark.parametrize(
+    ("field", "values"),
+    [
+        ("timebase_reference_mode", ("configurable", "fixed-center")),
+        ("cursor_source_selection", ("independent", "selected-waveform")),
+        (
+            "fixed_acquisition_memory_mode",
+            (None, "realtime", "segmented", "equivalent_time"),
+        ),
+    ],
+)
+def test_scope_capability_semantic_metadata_accepts_declared_values(field, values):
+    for value in values:
+        capabilities = _minimal_capabilities(**{field: value})
+        assert getattr(capabilities, field) == value
+
+
+def test_registered_profiles_satisfy_capability_invariants():
+    for physical_model in PHYSICAL_MODEL_REGISTRY:
+        capabilities = capabilities_for_model_id(physical_model.model_id)
+        assert capabilities.horizontal_display_divisions > 0
+        assert capabilities.vertical_display_divisions > 0
+
+
 def test_scope_capabilities_preserves_existing_optional_positional_order():
     capabilities = ScopeCapabilities(
         "TEST",
