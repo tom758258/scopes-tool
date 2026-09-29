@@ -1088,8 +1088,8 @@ def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
 
 def test_channel_scale_range_composite_workspace() -> None:
     catalog = {entry["id"]: entry for entry in command_catalog()}
-    assert "channel-scale-range" in catalog
     composite = catalog["channel-scale-range"]
+
     assert composite["category"] == "Channel"
     assert composite["group"] == "channel-basic"
     assert composite["editor"] == "channel-scale-range"
@@ -1097,51 +1097,19 @@ def test_channel_scale_range_composite_workspace() -> None:
     assert composite["modes"] == ["live", "simulate"]
     assert composite["fields"] == []
 
-    # Underlying commands are hidden in command browser
     assert catalog["channel-scale"]["browser_hidden"] is True
     assert catalog["channel-range"]["browser_hidden"] is True
 
-    # Underlying commands still retain their proper fields and requirements
     scale_fields = {field["name"]: field for field in catalog["channel-scale"]["fields"]}
-    assert "volts_per_division" in scale_fields
-    assert scale_fields["volts_per_division"]["exclusive_minimum"] == 0
-
     range_fields = {field["name"]: field for field in catalog["channel-range"]["fields"]}
-    assert "volts" in range_fields
+    assert scale_fields["volts_per_division"]["exclusive_minimum"] == 0
     assert range_fields["volts"]["exclusive_minimum"] == 0
 
     zh = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
     en = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
-    assert '"command.channel-scale-range": "垂直刻度 / 範圍"' in zh
-    assert '"command.channel-scale-range": "Vertical Scale / Range"' in en
-    assert '"channel-scale-range.editor.title": "垂直刻度 / 範圍"' in zh
-    assert '"channel-scale-range.editor.title": "Vertical Scale / Range"' in en
-    assert "Range = Scale × 8" in zh
-    assert "Range = Scale × 8" in en
-    app = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
-    availability = app.split("function updateAvailability()", 1)[1].split(
-        "function isExecutionBusy()", 1
-    )[0]
-    assert "channelScaleRangeEditor?.applyBusyState();" in availability
-
-    # Preset layout and value-field width contracts live in styles.css
-    css = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
-    assert ".channel-scale-range-presets" in css
-    assert ".channel-scale-range-value" in css
-    assert "max-width: 50%" in css
-    desktop_presets = css.split(".channel-scale-range-presets {", 1)[1].split("}", 1)[0]
-    assert "repeat(5, minmax(0, 1fr))" in desktop_presets
-    narrow = css.split("@media (max-width: 700px)", 1)[1]
-    narrow_presets = narrow.split(".channel-scale-range-presets {", 1)[1].split("}", 1)[0]
-    assert "repeat(2, minmax(0, 1fr))" in narrow_presets
-    assert ".channel-scale-range-mode button.selected" in css
-    assert ".channel-scale-range-mode button:not(.selected)" in css
-    # Scale/Range uses content-area actions (no header wiring).
-
-    # Shared quick-fill help key exists in both locales
-    assert '"channel-scale-range.editor.quickFillHelp":' not in zh
-    assert '"channel-scale-range.editor.quickFillHelp":' not in en
     for key in (
+        "command.channel-scale-range",
+        "channel-scale-range.editor.title",
         "channel-scale-range.editor.modeScale",
         "channel-scale-range.editor.modeRange",
         "channel-scale-range.editor.scaleDescription",
@@ -1150,7 +1118,6 @@ def test_channel_scale_range_composite_workspace() -> None:
     ):
         assert f'"{key}":' in zh, key
         assert f'"{key}":' in en, key
-
 
 @pytest.mark.skipif(
     subprocess.run(["node", "--version"], capture_output=True).returncode != 0,

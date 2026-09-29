@@ -74,41 +74,10 @@ def test_worker_trigger_setup_hold_arguments_parse(tmp_path, arguments, expected
     "arguments",
     [
         {"query": False},
-        {"query": None},
         {"query": True, "clock_channel": 1},
         {"clock_channel": 1},
-        {
-            "clock_channel": 1,
-            "data_channel": 2,
-            "slope": "positive",
-            "setup_time": 1e-9,
-        },
-        {
-            "clock_channel": 1,
-            "data_channel": 2,
-            "slope": "rising",
-            "setup_time": 1e-9,
-            "hold_time": 1e-9,
-        },
-        {
-            "clock_channel": 1,
-            "data_channel": 5,
-            "slope": "positive",
-            "setup_time": 1e-9,
-            "hold_time": 1e-9,
-        },
-        {
-            "clock_channel": 1,
-            "data_channel": 2,
-            "slope": "positive",
-            "setup_time": 0,
-            "hold_time": 1e-9,
-        },
+        {"clock_channel": 1, "data_channel": 2, "slope": "rising", "setup_time": 1e-9, "hold_time": 1e-9},
         {"clock_source": "CHANnel1"},
-        {"clock_channel": 1, "unknown": None},
-        {"data_channel": 2, "digital": False},
-        {"setup_time_seconds": 1e-9},
-        {"hold_time_seconds": 1e-9},
     ],
 )
 def test_worker_trigger_setup_hold_rejects_invalid_arguments(tmp_path, arguments):

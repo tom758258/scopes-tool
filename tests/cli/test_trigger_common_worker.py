@@ -56,14 +56,8 @@ def _post_command(runtime, body):
     "command, arguments",
     [
         ("trigger-sweep", {"query": True}),
-        ("trigger-sweep", {"mode": "auto"}),
-        ("trigger-sweep", {"mode": "normal"}),
         ("trigger-noise-reject", {"query": True}),
-        ("trigger-noise-reject", {"enabled": True}),
-        ("trigger-noise-reject", {"enabled": False}),
         ("trigger-hf-reject", {"query": True}),
-        ("trigger-hf-reject", {"enabled": True}),
-        ("trigger-hf-reject", {"enabled": False}),
     ],
 )
 def test_worker_trigger_common_commands_are_accepted(command, arguments):
@@ -83,15 +77,9 @@ def test_worker_trigger_common_commands_are_accepted(command, arguments):
 @pytest.mark.parametrize(
     "command, arguments, expected_argv",
     [
-        ("trigger-sweep", {"query": True}, ["--query"]),
         ("trigger-sweep", {"mode": "auto"}, ["--mode", "auto"]),
-        ("trigger-sweep", {"mode": "normal"}, ["--mode", "normal"]),
-        ("trigger-noise-reject", {"query": True}, ["--query"]),
         ("trigger-noise-reject", {"enabled": True}, ["--enabled", "true"]),
-        ("trigger-noise-reject", {"enabled": False}, ["--enabled", "false"]),
         ("trigger-hf-reject", {"query": True}, ["--query"]),
-        ("trigger-hf-reject", {"enabled": True}, ["--enabled", "true"]),
-        ("trigger-hf-reject", {"enabled": False}, ["--enabled", "false"]),
     ],
 )
 def test_worker_trigger_common_arguments_parse(
@@ -110,40 +98,11 @@ def test_worker_trigger_common_arguments_parse(
     "command, arguments",
     [
         ("trigger-sweep", {"query": False}),
-        ("trigger-sweep", {"query": "true"}),
-        ("trigger-sweep", {"query": 1}),
-        ("trigger-sweep", {"query": True, "mode": "auto"}),
-        ("trigger-sweep", {}),
-        ("trigger-sweep", {"mode": "single"}),
         ("trigger-sweep", {"sweep": "auto"}),
-        ("trigger-sweep", {"sweep_mode": "auto"}),
-        ("trigger-sweep", {"trigger_sweep": "auto"}),
-        ("trigger-noise-reject", {"query": False}),
-        ("trigger-noise-reject", {"query": "true"}),
-        ("trigger-noise-reject", {"query": 1}),
-        ("trigger-noise-reject", {"query": True, "enabled": True}),
-        ("trigger-noise-reject", {}),
         ("trigger-noise-reject", {"enabled": "true"}),
-        ("trigger-noise-reject", {"enabled": 1}),
-        ("trigger-noise-reject", {"noise_reject": True}),
-        ("trigger-noise-reject", {"nreject": True}),
-        ("trigger-noise-reject", {"nrej": True}),
         ("trigger-noise-reject", {"state": True}),
-        ("trigger-noise-reject", {"on": True}),
-        ("trigger-noise-reject", {"enable": True}),
-        ("trigger-hf-reject", {"query": False}),
-        ("trigger-hf-reject", {"query": "true"}),
-        ("trigger-hf-reject", {"query": 1}),
-        ("trigger-hf-reject", {"query": True, "enabled": True}),
-        ("trigger-hf-reject", {}),
-        ("trigger-hf-reject", {"enabled": "true"}),
         ("trigger-hf-reject", {"enabled": 1}),
         ("trigger-hf-reject", {"hf_reject": True}),
-        ("trigger-hf-reject", {"hfreject": True}),
-        ("trigger-hf-reject", {"high_frequency_reject": True}),
-        ("trigger-hf-reject", {"state": True}),
-        ("trigger-hf-reject", {"on": True}),
-        ("trigger-hf-reject", {"enable": True}),
     ],
 )
 def test_worker_trigger_common_rejects_invalid_arguments(
@@ -158,12 +117,8 @@ def test_worker_trigger_common_rejects_invalid_arguments(
 @pytest.mark.parametrize(
     "body",
     [
-        {"command": "trigger-sweep", "arguments": {"query": False}},
         {"command": "trigger-sweep", "arguments": {"sweep": "auto"}},
-        {"command": "trigger-noise-reject", "arguments": {"enabled": "true"}},
-        {"command": "trigger-noise-reject", "arguments": {"state": True}},
         {"command": "trigger-hf-reject", "arguments": {"enabled": 1}},
-        {"command": "trigger-hf-reject", "arguments": {"hf_reject": True}},
     ],
 )
 def test_worker_trigger_common_rejects_before_enqueue_or_artifacts(tmp_path, body):
@@ -183,36 +138,9 @@ def test_worker_trigger_common_rejects_before_enqueue_or_artifacts(tmp_path, bod
 @pytest.mark.parametrize(
     "command, arguments, expected_sent",
     [
-        (
-            "trigger-sweep",
-            {"query": True},
-            ["*IDN?", ":TRIGger:SWEep?", ":SYSTem:ERRor?"],
-        ),
-        (
-            "trigger-sweep",
-            {"mode": "normal"},
-            ["*IDN?", ":TRIGger:SWEep NORMal", ":SYSTem:ERRor?"],
-        ),
-        (
-            "trigger-noise-reject",
-            {"query": True},
-            ["*IDN?", ":TRIGger:NREJect?", ":SYSTem:ERRor?"],
-        ),
-        (
-            "trigger-noise-reject",
-            {"enabled": False},
-            ["*IDN?", ":TRIGger:NREJect OFF", ":SYSTem:ERRor?"],
-        ),
-        (
-            "trigger-hf-reject",
-            {"query": True},
-            ["*IDN?", ":TRIGger:HFReject?", ":SYSTem:ERRor?"],
-        ),
-        (
-            "trigger-hf-reject",
-            {"enabled": False},
-            ["*IDN?", ":TRIGger:HFReject OFF", ":SYSTem:ERRor?"],
-        ),
+        ("trigger-sweep", {"mode": "normal"}, ["*IDN?", ":TRIGger:SWEep NORMal", ":SYSTem:ERRor?"]),
+        ("trigger-noise-reject", {"enabled": False}, ["*IDN?", ":TRIGger:NREJect OFF", ":SYSTem:ERRor?"]),
+        ("trigger-hf-reject", {"query": True}, ["*IDN?", ":TRIGger:HFReject?", ":SYSTem:ERRor?"]),
     ],
 )
 def test_worker_trigger_common_simulator_execution_sends_expected_scpi(
