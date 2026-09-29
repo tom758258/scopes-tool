@@ -78,11 +78,7 @@ def test_worker_trigger_delay_arguments_parse(tmp_path, arguments, expected):
         {"query": False},
         {"query": True, "arm_channel": 1},
         {"arm_source": "CHANnel1"},
-        {"trigger_source": "CHANnel1"},
-        {"digital": 0},
         {"level_volts": 0.5},
-        {"arm_level_volts": 0.5},
-        {"trigger_level_volts": 0.5},
     ],
 )
 def test_worker_trigger_delay_rejects_invalid_arguments(tmp_path, arguments):

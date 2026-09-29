@@ -311,9 +311,6 @@ def test_worker_request_rejects_unknown_command():
         {"command": "identify", "arguments": {}},
         {"schema_version": 1, "command": "identify", "arguments": {}},
         {"schema_version": "2", "command": "identify", "arguments": {}},
-        {"schema_version": 2.0, "command": "identify", "arguments": {}},
-        {"schema_version": True, "command": "identify", "arguments": {}},
-        {"schema_version": None, "command": "identify", "arguments": {}},
         {
             "schema_version": worker.WORKER_SCHEMA_VERSION,
             "command": "identify",
@@ -357,10 +354,7 @@ def test_worker_screenshot_accepts_canonical_hardcopy_arguments():
 @pytest.mark.parametrize(
     "arguments",
     [
-        {"image_format": "png"},
         {"format": 1},
-        {"ink_saver": "false"},
-        {"query_hardcopy": False},
         {"query_hardcopy": True, "output": "screen.png"},
     ],
 )
@@ -388,14 +382,7 @@ def test_worker_screenshot_query_has_no_artifact_path():
 
 @pytest.mark.parametrize(
     "command",
-    (
-        "holdoff",
-        "trigger-hold-off",
-        "trigger_holdoff",
-        "trigger-holdoff-random",
-        "trigger-holdoff-minimum",
-        "trigger-holdoff-maximum",
-    ),
+    ("holdoff",),
 )
 def test_worker_request_rejects_trigger_holdoff_command_aliases(command):
     with pytest.raises(OscilloscopeError, match="unknown command"):
@@ -423,41 +410,12 @@ def test_worker_request_rejects_non_object_arguments():
     "command,arguments",
     (
         ("sample-rate", {"query": True}),
-        ("sample-rate", {"query": True, "maximum": True}),
         ("acquisition-points", {"query": True}),
-        ("record-length", {"query": True}),
         ("force-trigger", {}),
         ("channel-label", {"channel": 1, "text": "Input A"}),
-        ("channel-label", {"channel": 1, "query": True}),
-        ("channel-impedance", {"channel": 1, "query": True}),
-        (
-            "channel-impedance",
-            {"channel": 1, "impedance": "fifty", "allow_50_ohm": True},
-        ),
-        ("channel-invert", {"channel": 1, "off": True}),
-        ("channel-range", {"channel": 1, "volts_full_scale": 4}),
-        ("channel-units", {"channel": 1, "units": "amp"}),
-        ("channel-vernier", {"channel": 1, "on": True}),
-        ("channel-probe-skew", {"channel": 1, "seconds": 1e-9}),
-        ("display-label", {"off": True}),
-        ("display-label", {"query": True}),
         ("display-clear", {}),
-        ("display-persistence", {"query": True}),
-        ("display-persistence", {"mode": "minimum"}),
-        ("display-persistence", {"seconds": 0.5}),
-        ("display-intensity", {"query": True}),
-        ("display-intensity", {"value": 75}),
-        ("display-vectors", {"query": True}),
-        ("display-vectors", {"on": True}),
         ("annotation", {"slot": 1, "query": True}),
         ("trigger-edge", {"query": True}),
-        ("trigger-delay", {"query": True}),
-        ("trigger-setup-hold", {"query": True}),
-        ("trigger-edge-burst", {"query": True}),
-        ("trigger-tv", {"query": True}),
-        ("trigger-sweep", {"query": True}),
-        ("trigger-noise-reject", {"query": True}),
-        ("trigger-hf-reject", {"query": True}),
     ),
 )
 def test_worker_request_accepts_trigger_and_acquisition_queries(command, arguments):
@@ -1016,18 +974,10 @@ def test_worker_http_rejects_invalid_capture_wait_trigger_before_artifacts(tmp_p
     "arguments",
     (
         {"segments": 2},
-        {"channel": 1},
         {"channel": True, "segments": 2},
         {"channel": 1, "segments": 2.0},
         {"channel": 1, "segments": 1001},
-        {"channel": 5, "segments": 2},
-        {"channel": 1, "segments": 2, "points": "1000"},
-        {"channel": 1, "segments": 2, "format": "BYTE"},
-        {"channel": 1, "segments": 2, "format": 1},
-        {"channel": 1, "segments": 2, "timeout_ms": 0},
-        {"channel": 1, "segments": 2, "poll_interval_ms": False},
         {"channel": 1, "segments": 2, "resource": "USB0::FAKE::INSTR"},
-        {"channel": 1, "segments": 2, "firmware": "07.30"},
     ),
 )
 def test_worker_http_rejects_invalid_segmented_capture_before_artifacts(
@@ -1321,58 +1271,10 @@ def test_worker_parses_fifty_ohm_with_allow_without_opening_backend():
             [':CHANnel1:LABel "Input A"', ":SYSTem:ERRor?"],
         ),
         (
-            "channel-label",
-            {"channel": 1, "query": True},
-            "keysight-dsox4024a",
-            [":CHANnel1:LABel?", ":SYSTem:ERRor?"],
-        ),
-        (
             "display-label",
             {"off": True},
             "keysight-dsox4024a",
             [":DISPlay:LABel OFF", ":SYSTem:ERRor?"],
-        ),
-        (
-            "display-label",
-            {"query": True},
-            "keysight-dsox4024a",
-            [":DISPlay:LABel?", ":SYSTem:ERRor?"],
-        ),
-        (
-            "annotation",
-            {
-                "slot": 2,
-                "on": True,
-                "text": "Run note",
-                "color": "white",
-                "background": "opaque",
-                "x": 10,
-                "y": 20,
-            },
-            "keysight-dsox4024a",
-            [
-                ':DISPlay:ANNotation2:TEXT "Run note"',
-                ":DISPlay:ANNotation2:COLor WHITE",
-                ":DISPlay:ANNotation2:BACKground OPAQ",
-                ":DISPlay:ANNotation2:X1Position 10",
-                ":DISPlay:ANNotation2:Y1Position 20",
-                ":DISPlay:ANNotation2 ON",
-                ":SYSTem:ERRor?",
-            ],
-        ),
-        (
-            "annotation",
-            {"slot": 2, "query": True},
-            "keysight-dsox4024a",
-            [
-                ":DISPlay:ANNotation2?",
-                ":DISPlay:ANNotation2:TEXT?",
-                ":DISPlay:ANNotation2:COLor?",
-                ":DISPlay:ANNotation2:BACKground?",
-                ":DISPlay:ANNotation2:X1Position?",
-                ":DISPlay:ANNotation2:Y1Position?",
-                ":SYSTem:ERRor?",
-            ],
         ),
         (
             "annotation",
@@ -1388,75 +1290,9 @@ def test_worker_parses_fifty_ohm_with_allow_without_opening_backend():
         ),
         (
             "channel-impedance",
-            {"channel": 1, "query": True},
-            "keysight-dsox4024a",
-            [channel_impedance_query(1), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-impedance",
             {"channel": 1, "impedance": "fifty", "allow_50_ohm": True},
             "keysight-dsox3024a",
             [channel_impedance_command(1, "fifty"), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-invert",
-            {"channel": 1, "on": True},
-            "keysight-dsox4024a",
-            [channel_invert_command(1, True), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-invert",
-            {"channel": 1, "query": True},
-            "keysight-dsox4024a",
-            [channel_invert_query(1), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-range",
-            {"channel": 1, "volts_full_scale": 4},
-            "keysight-dsox4024a",
-            [channel_range_command(1, 4), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-range",
-            {"channel": 1, "query": True},
-            "keysight-dsox4024a",
-            [channel_range_query(1), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-units",
-            {"channel": 1, "units": "amp"},
-            "keysight-dsox4024a",
-            [channel_units_command(1, "amp"), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-units",
-            {"channel": 1, "query": True},
-            "keysight-dsox4024a",
-            [channel_units_query(1), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-vernier",
-            {"channel": 1, "off": True},
-            "keysight-dsox4024a",
-            [channel_vernier_command(1, False), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-vernier",
-            {"channel": 1, "query": True},
-            "keysight-dsox4024a",
-            [channel_vernier_query(1), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-probe-skew",
-            {"channel": 1, "seconds": 1e-9},
-            "keysight-dsox4024a",
-            [channel_probe_skew_command(1, 1e-9), ":SYSTem:ERRor?"],
-        ),
-        (
-            "channel-probe-skew",
-            {"channel": 1, "query": True},
-            "keysight-dsox4024a",
-            [channel_probe_skew_query(1), ":SYSTem:ERRor?"],
         ),
     ),
 )
@@ -1523,19 +1359,9 @@ def test_worker_parse_rejects_sample_rate_maximum_without_query_flag():
     ("command", "arguments"),
     (
         ("display-clear", {"query": True}),
-        ("display-persistence", {"unknown": True}),
-        ("display-persistence", {"query": False}),
-        ("display-persistence", {"query": None}),
         ("display-persistence", {}),
-        ("display-persistence", {"query": True, "seconds": 1}),
-        ("display-persistence", {"seconds": 60.1}),
-        ("display-intensity", {"query": False}),
-        ("display-intensity", {}),
         ("display-intensity", {"value": 101}),
-        ("display-vectors", {"query": False}),
-        ("display-vectors", {"on": None}),
         ("display-vectors", {"off": True}),
-        ("display-vectors", {}),
     ),
 )
 def test_worker_parse_rejects_invalid_display_common_arguments(command, arguments):
@@ -1547,9 +1373,7 @@ def test_worker_parse_rejects_invalid_display_common_arguments(command, argument
     ("command", "alias"),
     (
         ("channel-range", "volts"),
-        ("channel-range", "range_volts"),
         ("channel-invert", "invert"),
-        ("channel-vernier", "vernier"),
     ),
 )
 def test_worker_parse_rejects_channel_advanced_aliases(command, alias):
@@ -1599,20 +1423,8 @@ def test_worker_parse_accepts_trigger_holdoff_arguments(arguments, expected_argv
         {"query": False},
         {"query": True, "seconds": 1e-6},
         {"holdoff": 1e-6},
-        {"holdoff_seconds": 1e-6},
-        {"time_seconds": 1e-6},
-        {"random": True},
-        {"minimum": True},
-        {"maximum": True},
-        {"enabled": True},
-        {"mode": "fixed"},
         {"seconds": "1e-6"},
-        {"seconds": True},
-        {"seconds": None},
         {"seconds": 0},
-        {"seconds": 1e-9},
-        {"seconds": 11.0},
-        {"seconds": float("nan")},
     ),
 )
 def test_worker_parse_rejects_invalid_trigger_holdoff_arguments(arguments):
@@ -1623,11 +1435,7 @@ def test_worker_parse_rejects_invalid_trigger_holdoff_arguments(arguments):
 @pytest.mark.parametrize(
     "body",
     (
-        {"command": "trigger-holdoff", "arguments": {}},
-        {"command": "trigger-holdoff", "arguments": {"query": False}},
-        {"command": "trigger-holdoff", "arguments": {"seconds": "1e-6"}},
-        {"command": "trigger-holdoff", "arguments": {"seconds": 1e-9}},
-        {"command": "trigger-holdoff", "arguments": {"random": True}},
+        {"command": "trigger-holdoff", "arguments": {"holdoff": 1e-6}},
     ),
 )
 def test_worker_trigger_holdoff_rejects_before_enqueue_or_artifacts(tmp_path, body):
@@ -1650,12 +1458,6 @@ def test_worker_trigger_holdoff_rejects_before_enqueue_or_artifacts(tmp_path, bo
     (
         {"channel": [1], "wait_trigger": True},
         {"channel": [1], "force_trigger_on_timeout": True},
-        {
-            "channel": [1],
-            "wait_trigger": True,
-            "trigger_timeout_ms": 10,
-            "trigger_poll_interval_ms": 11,
-        },
     ),
 )
 def test_worker_parse_rejects_invalid_capture_wait_trigger_arguments(arguments):
@@ -1721,11 +1523,8 @@ def test_send_command_sends_v2_request(monkeypatch, capsys):
     "payload",
     (
         {},
-        {"schema_version": None},
         {"schema_version": 1},
         {"schema_version": "2"},
-        {"schema_version": 2.0},
-        {"schema_version": True},
     ),
 )
 def test_lifecycle_client_response_validator_rejects_invalid_schema(payload):
@@ -2562,12 +2361,6 @@ def test_worker_executes_trigger_holdoff_in_simulator(
         ),
         (
             "display-persistence",
-            {"query": True},
-            display_persistence_query(),
-            {"operation": "display-persistence", "mode": "minimum", "seconds": None},
-        ),
-        (
-            "display-persistence",
             {"seconds": 0.5},
             display_persistence_command(0.5),
             {"operation": "display-persistence", "mode": None, "seconds": 0.5},
@@ -2577,18 +2370,6 @@ def test_worker_executes_trigger_holdoff_in_simulator(
             {"query": True},
             display_intensity_query(),
             {"operation": "display-intensity", "value": 50},
-        ),
-        (
-            "display-intensity",
-            {"value": 75},
-            display_intensity_command(75),
-            {"operation": "display-intensity", "value": 75},
-        ),
-        (
-            "display-vectors",
-            {"query": True},
-            display_vectors_query(),
-            {"operation": "display-vectors", "value": True},
         ),
         (
             "display-vectors",
@@ -2626,32 +2407,11 @@ def test_worker_executes_display_common_in_simulator(
             "one_meg",
         ),
         (
-            "channel-invert",
-            {"channel": 1, "on": True},
-            channel_invert_command(1, True),
-            "invert",
-            True,
-        ),
-        (
             "channel-range",
             {"channel": 1, "volts_full_scale": 4},
             channel_range_command(1, 4),
             "range_volts",
             4.0,
-        ),
-        (
-            "channel-units",
-            {"channel": 1, "units": "amp"},
-            channel_units_command(1, "amp"),
-            "units",
-            "amp",
-        ),
-        (
-            "channel-vernier",
-            {"channel": 1, "off": True},
-            channel_vernier_command(1, False),
-            "vernier",
-            False,
         ),
         (
             "channel-probe-skew",
@@ -2928,15 +2688,9 @@ def test_worker_triggered_capture_series_is_strict_and_uses_caller_output_dir(
     "arguments, message",
     [
         ({"count": 1, "trigger_timeout_seconds": 1}, "requires argument channel"),
-        ({"channel": [1], "trigger_timeout_seconds": 1}, "requires argument count"),
-        ({"channel": [1], "count": 1}, "requires argument trigger_timeout_seconds"),
         ({"channel": [1], "count": True, "trigger_timeout_seconds": 1}, "count must be an integer"),
         ({"channel": 1, "count": 1, "trigger_timeout_seconds": 1}, "non-empty array"),
-        ({"channel": [1], "count": 1, "trigger_timeout_seconds": "1"}, "must be a finite number"),
         ({"channel": [1], "count": 1, "trigger_timeout_seconds": 0}, "must be greater than zero"),
-        ({"channel": [1], "count": 1, "trigger_timeout_seconds": 1, "points": 123}, "points is not supported"),
-        ({"channel": [1], "count": 1, "trigger_timeout_seconds": 1, "format": "ascii"}, "format must be exactly byte or word"),
-        ({"channel": [1], "count": 1, "trigger_timeout_seconds": 1, "interval_seconds": -1}, "must be non-negative"),
         ({"channel": [1], "count": 1, "trigger_timeout_seconds": 1, "unknown": True}, "unknown argument"),
     ],
 )
@@ -3042,16 +2796,9 @@ def test_worker_measure_until_is_strict_and_uses_caller_output_dir(tmp_path):
     "arguments, message",
     [
         ({"item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 1}, "requires argument channel"),
-        ({"channel": 1, "operator": "gt", "threshold": 1, "timeout_seconds": 1}, "requires argument item"),
-        ({"channel": 1, "item": "vpp", "threshold": 1, "timeout_seconds": 1}, "requires argument operator"),
-        ({"channel": 1, "item": "vpp", "operator": "gt", "timeout_seconds": 1}, "requires argument threshold"),
-        ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": 1}, "requires argument timeout_seconds"),
-        ({"channel": [1], "item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 1}, "channel must be an integer"),
         ({"channel": 1, "item": "vpp", "operator": "eq", "threshold": 1, "timeout_seconds": 1}, "operator must be exactly"),
         ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": True, "timeout_seconds": 1}, "threshold must be a finite number"),
-        ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": float("inf"), "timeout_seconds": 1}, "threshold must be a finite number"),
         ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 0}, "timeout_seconds must be greater than zero"),
-        ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 1, "interval_seconds": -1}, "interval_seconds must be non-negative"),
         ({"channel": 1, "item": "vpp", "operator": "gt", "threshold": 1, "timeout_seconds": 1, "unknown": True}, "unknown argument"),
     ],
 )

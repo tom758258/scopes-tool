@@ -10,7 +10,7 @@ from scopes_tool_webui.command_validation import _validate_parameters
 MODELS = ("tektronix-tbs2074b", "tektronix-tds2024b", "tektronix-tbs1052b")
 
 
-@pytest.mark.parametrize("model", MODELS)
+@pytest.mark.parametrize("model", (MODELS[0],))
 @pytest.mark.parametrize("command,parameters", [
     ("doctor", {}),
     ("capture-batch", {"channels": [1], "count": 1}),

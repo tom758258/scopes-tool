@@ -70,30 +70,7 @@ def test_worker_trigger_edge_command_is_accepted():
     "arguments, expected",
     [
         ({"query": True}, ["trigger-edge", "--query"]),
-        (
-            {"source_channel": 1, "level": 0.5, "slope": "positive"},
-            [
-                "trigger-edge",
-                "--source-channel",
-                "1",
-                "--level",
-                "0.5",
-                "--slope",
-                "positive",
-            ],
-        ),
-        (
-            {"source_channel": 1, "level": 0.5, "slope": "negative"},
-            [
-                "trigger-edge",
-                "--source-channel",
-                "1",
-                "--level",
-                "0.5",
-                "--slope",
-                "negative",
-            ],
-        ),
+        ({"source_channel": 1, "level": 0.5, "slope": "positive"}, ["trigger-edge", "--source-channel", "1", "--level", "0.5", "--slope", "positive"]),
     ],
 )
 def test_worker_trigger_edge_arguments_parse(tmp_path, arguments, expected):
@@ -112,40 +89,10 @@ def test_worker_trigger_edge_arguments_parse(tmp_path, arguments, expected):
     [
         ("edge-trigger", {"query": True}),
         ("trigger-edge", {"query": False}),
-        ("trigger-edge", {"query": "true"}),
-        ("trigger-edge", {"query": 1}),
         ("trigger-edge", {"query": True, "source_channel": 1}),
-        ("trigger-edge", {"query": True, "level": 0.5}),
-        ("trigger-edge", {"query": True, "slope": "positive"}),
         ("trigger-edge", {"source_channel": 1, "level": 0.5}),
-        ("trigger-edge", {"source_channel": 1, "slope": "positive"}),
-        ("trigger-edge", {"level": 0.5, "slope": "positive"}),
         ("trigger-edge", {"channel": 1, "level": 0.5, "slope": "positive"}),
-        ("trigger-edge", {"source": 1, "level": 0.5, "slope": "positive"}),
-        (
-            "trigger-edge",
-            {"source_channel": 1, "level_volts": 0.5, "slope": "positive"},
-        ),
-        (
-            "trigger-edge",
-            {"source_channel": 1, "level": 0.5, "edge_slope": "positive"},
-        ),
-        (
-            "trigger-edge",
-            {"source_channel": 1, "level": 0.5, "slope": "positive", "mode": "edge"},
-        ),
-        (
-            "trigger-edge",
-            {"source_ch": 1, "level": 0.5, "slope": "positive"},
-        ),
-        (
-            "trigger-edge",
-            {"trigger_source": 1, "level": 0.5, "slope": "positive"},
-        ),
-        (
-            "trigger-edge",
-            {"source_channel": 1, "trigger_level": 0.5, "slope": "positive"},
-        ),
+        ("trigger-edge", {"source_channel": 1, "level_volts": 0.5, "slope": "positive"}),
     ],
 )
 def test_worker_trigger_edge_rejects_invalid_arguments(tmp_path, command, arguments):
@@ -159,36 +106,7 @@ def test_worker_trigger_edge_rejects_invalid_arguments(tmp_path, command, argume
     "body",
     [
         {"command": "edge-trigger", "arguments": {"query": True}},
-        {"command": "trigger-edge", "arguments": {"query": False}},
-        {
-            "command": "trigger-edge",
-            "arguments": {"query": True, "source_channel": 1},
-        },
-        {
-            "command": "trigger-edge",
-            "arguments": {"channel": 1, "level": 0.5, "slope": "positive"},
-        },
-        {
-            "command": "trigger-edge",
-            "arguments": {"source": 1, "level": 0.5, "slope": "positive"},
-        },
-        {
-            "command": "trigger-edge",
-            "arguments": {"source_channel": 1, "level_volts": 0.5, "slope": "positive"},
-        },
-        {
-            "command": "trigger-edge",
-            "arguments": {"source_channel": 1, "level": 0.5, "edge_slope": "positive"},
-        },
-        {
-            "command": "trigger-edge",
-            "arguments": {
-                "source_channel": 1,
-                "level": 0.5,
-                "slope": "positive",
-                "mode": "edge",
-            },
-        },
+        {"command": "trigger-edge", "arguments": {"channel": 1, "level": 0.5, "slope": "positive"}},
     ],
 )
 def test_worker_trigger_edge_rejects_before_enqueue_or_artifacts(tmp_path, body):

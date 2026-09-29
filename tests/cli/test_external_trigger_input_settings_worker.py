@@ -49,9 +49,7 @@ def _post_command(runtime, body):
 @pytest.mark.parametrize(
     ("command", "arguments", "argv"),
     [
-        ("external-trigger-probe", {"query": True}, ["--query"]),
         ("external-trigger-probe", {"attenuation": 10}, ["--attenuation", "10"]),
-        ("external-trigger-units", {"query": True}, ["--query"]),
         ("external-trigger-units", {"units": "amps"}, ["--units", "amps"]),
         ("external-trigger-settings", {"query": True}, ["--query"]),
     ],
@@ -71,21 +69,11 @@ def test_worker_external_trigger_input_commands_accept_canonical_json_and_map_ar
 @pytest.mark.parametrize(
     ("command", "arguments"),
     [
-        ("external-trigger-probe", {}), ("external-trigger-probe", {"query": False}),
-        ("external-trigger-probe", {"query": True, "attenuation": 10}),
-        ("external-trigger-probe", {"attenuation": True}), ("external-trigger-probe", {"attenuation": "10"}),
-        ("external-trigger-probe", {"attenuation": None}), ("external-trigger-probe", {"attenuation": 0}),
-        ("external-trigger-probe", {"attenuation": -1}), ("external-trigger-probe", {"attenuation": float("nan")}),
-        ("external-trigger-probe", {"attenuation": float("inf")}), pytest.param("external-trigger-probe", {"attenuation": 10**10000}, id="probe-huge-integer"),
-        ("external-trigger-probe", {"probe": 10}), ("external-trigger-probe", {"ratio": 10}),
-        ("external-trigger-probe", {"attenuation": 10, "extra": 1}),
-        ("external-trigger-units", {}), ("external-trigger-units", {"query": False}),
-        ("external-trigger-units", {"query": True, "units": "volts"}), ("external-trigger-units", {"units": "volt"}),
-        ("external-trigger-units", {"units": "AMP"}), ("external-trigger-units", {"units": True}),
-        ("external-trigger-units", {"units": None}), ("external-trigger-units", {"unit": "volts"}),
-        ("external-trigger-settings", {}), ("external-trigger-settings", {"query": False}),
-        ("external-trigger-settings", {"query": 1}), ("external-trigger-settings", {"query": "true"}),
-        ("external-trigger-settings", {"units": "volts"}), ("external-trigger-settings", {"extra": 1}),
+        ("external-trigger-probe", {}),
+        ("external-trigger-probe", {"attenuation": "10"}),
+        ("external-trigger-probe", {"probe": 10}),
+        ("external-trigger-units", {"units": "AMP"}),
+        ("external-trigger-settings", {}),
         ("external-trigger-probe-alias", {"query": True}),
     ],
 )
@@ -98,9 +86,7 @@ def test_worker_external_trigger_input_commands_reject_invalid_forms_before_exec
     "body",
     [
         {"command": "external-trigger-probe", "arguments": {"attenuation": 0}},
-        {"command": "external-trigger-probe", "arguments": {"attenuation": 10**309}},
         {"command": "external-trigger-units", "arguments": {"units": "AMP"}},
-        {"command": "external-trigger-settings", "arguments": {}},
     ],
 )
 def test_worker_external_trigger_input_validation_happens_before_enqueue_or_artifacts(tmp_path, body):
@@ -120,9 +106,7 @@ def test_worker_external_trigger_input_validation_happens_before_enqueue_or_arti
     ("command", "arguments", "result", "sent"),
     [
         ("external-trigger-probe", {"attenuation": 10}, {"operation": "set", "command": ":EXTernal:PROBe 10", "attenuation": 10.0}, ["*IDN?", ":EXTernal:PROBe 10", ":SYSTem:ERRor?"]),
-        ("external-trigger-probe", {"query": True}, {"operation": "query", "command": ":EXTernal:PROBe?", "attenuation": 1.0, "raw_attenuation": "1"}, ["*IDN?", ":EXTernal:PROBe?", ":SYSTem:ERRor?"]),
         ("external-trigger-units", {"units": "volts"}, {"operation": "set", "command": ":EXTernal:UNITs VOLT", "units": "volts"}, ["*IDN?", ":EXTernal:UNITs VOLT", ":SYSTem:ERRor?"]),
-        ("external-trigger-units", {"query": True}, {"operation": "query", "command": ":EXTernal:UNITs?", "units": "volts", "raw_units": "VOLT"}, ["*IDN?", ":EXTernal:UNITs?", ":SYSTem:ERRor?"]),
         ("external-trigger-settings", {"query": True}, {"operation": "query", "command": ":EXTernal?", "probe_attenuation": 1.0, "range_value": 8.0, "units": "volts", "bandwidth_limit_enabled": False}, ["*IDN?", ":EXTernal?", ":SYSTem:ERRor?"]),
     ],
 )

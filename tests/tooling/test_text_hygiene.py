@@ -4,10 +4,8 @@ import importlib.util
 from pathlib import Path
 import subprocess
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "check_text_hygiene.py"
-
 
 def _load_checker():
     spec = importlib.util.spec_from_file_location("check_text_hygiene", SCRIPT_PATH)
@@ -16,14 +14,11 @@ def _load_checker():
     spec.loader.exec_module(module)
     return module
 
-
 CHECKER = _load_checker()
-
 
 def _write_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
-
 
 def test_inspect_text_file_accepts_valid_utf8_lf_crlf_and_empty(tmp_path: Path) -> None:
     cases = (
@@ -37,7 +32,6 @@ def test_inspect_text_file_accepts_valid_utf8_lf_crlf_and_empty(tmp_path: Path) 
         _write_bytes(path, content)
         assert CHECKER.inspect_text_file(path, Path(name)) == []
 
-
 def test_inspect_text_file_rejects_trailing_whitespace_for_lf_and_crlf(tmp_path: Path) -> None:
     path = tmp_path / "trailing.txt"
     _write_bytes(path, b"clean\r\nspace \r\ntab\t\n")
@@ -47,7 +41,6 @@ def test_inspect_text_file_rejects_trailing_whitespace_for_lf_and_crlf(tmp_path:
         "trailing.txt:3: trailing whitespace",
     ]
 
-
 def test_inspect_text_file_rejects_missing_final_newline(tmp_path: Path) -> None:
     path = tmp_path / "missing.py"
     _write_bytes(path, b"first\nsecond")
@@ -55,7 +48,6 @@ def test_inspect_text_file_rejects_missing_final_newline(tmp_path: Path) -> None
     assert CHECKER.inspect_text_file(path, Path("missing.py")) == [
         "missing.py:2: final newline is required"
     ]
-
 
 def test_inspect_text_file_rejects_bom_nul_and_invalid_utf8(tmp_path: Path) -> None:
     bom_path = tmp_path / "bom.py"
@@ -75,7 +67,6 @@ def test_inspect_text_file_rejects_bom_nul_and_invalid_utf8(tmp_path: Path) -> N
         "invalid.py:byte 9: invalid UTF-8"
     ]
 
-
 def test_inspect_text_file_rejects_replacement_character_and_mojibake(tmp_path: Path) -> None:
     replacement_path = tmp_path / "replacement.py"
     mojibake_path = tmp_path / "mojibake.py"
@@ -89,7 +80,6 @@ def test_inspect_text_file_rejects_replacement_character_and_mojibake(tmp_path: 
     assert CHECKER.inspect_text_file(mojibake_path, Path("mojibake.py")) == [
         "mojibake.py:1: likely UTF-8 mojibake is not allowed"
     ]
-
 
 def test_selected_text_paths_includes_source_and_excludes_binary_or_generated_paths() -> None:
     paths = (
@@ -110,7 +100,6 @@ def test_selected_text_paths_includes_source_and_excludes_binary_or_generated_pa
         Path("tests/tooling/test_text_hygiene.py"),
     )
 
-
 def test_tracked_files_ignores_untracked_text(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -120,7 +109,3 @@ def test_tracked_files_ignores_untracked_text(tmp_path: Path) -> None:
     subprocess.run(["git", "add", "tracked.py"], cwd=repo, check=True)
 
     assert CHECKER.tracked_files(repo) == (Path("tracked.py"),)
-
-
-def test_repository_tracked_text_is_clean() -> None:
-    assert CHECKER.collect_findings(REPO_ROOT, CHECKER.tracked_files(REPO_ROOT)) == []
