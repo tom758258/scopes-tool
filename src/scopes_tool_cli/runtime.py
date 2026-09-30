@@ -39,6 +39,7 @@ def _validate_cursor_args(args: argparse.Namespace) -> None:
         return
     querying = getattr(args, "cursor_query", False)
     turning_off = getattr(args, "cursor_off", False)
+    function = getattr(args, "cursor_function", None)
     if querying or turning_off:
         for name in (
             "source_channel",
@@ -51,6 +52,10 @@ def _validate_cursor_args(args: argparse.Namespace) -> None:
                 raise OscilloscopeError(
                     f"--{'query' if querying else 'off'} cannot be combined with --{name.replace('_', '-')}"
                 )
+        if function is not None:
+            raise OscilloscopeError(
+                f"--{'query' if querying else 'off'} cannot be combined with --function"
+            )
         for name in (
             "auto_timebase",
             "auto_vertical",
@@ -60,7 +65,16 @@ def _validate_cursor_args(args: argparse.Namespace) -> None:
                     f"--{'query' if querying else 'off'} cannot be combined with --{name.replace('_', '-')}"
                 )
         return
-    if getattr(args, "source_channel", None) is None or all(
+    if function is not None:
+        # A selected cursor function may switch modes on its own; Core still
+        # rejects unsupported functions and impossible position combinations.
+        if function in ("off", "waveform") and any(
+            getattr(args, name, None) is not None for name in ("x1", "x2", "y1", "y2")
+        ):
+            raise OscilloscopeError(
+                f"--function {function} cannot be combined with cursor positions"
+            )
+    elif getattr(args, "source_channel", None) is None or all(
         getattr(args, name, None) is None for name in ("x1", "x2", "y1", "y2")
     ):
         raise OscilloscopeError(

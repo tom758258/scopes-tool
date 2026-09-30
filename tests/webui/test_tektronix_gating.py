@@ -12,74 +12,74 @@ from scopes_tool_webui.command_validation import WebUIRequestError, _validate_pa
 
 def test_catalog_admits_only_registered_tek_operations():
     catalog = {entry["id"]: entry for entry in command_catalog()}
-    tbs2074b = "tektronix-tbs2074b"
+    tbs2074 = "tektronix-tbs2074"
     tds2024b = "tektronix-tds2024b"
     keysight = "keysight-dsox4024a"
 
     def supported(command, model):
         return catalog[command]["presentation"]["models"][model]["supported"]
 
-    assert supported("run", tbs2074b)
-    assert supported("channel-offset", tbs2074b)
+    assert supported("run", tbs2074)
+    assert supported("channel-offset", tbs2074)
     assert supported("channel-offset", tds2024b)
     assert supported("timebase-position", tds2024b)
-    assert supported("timebase-position", tbs2074b)
+    assert supported("timebase-position", tbs2074)
     assert supported("display-vectors", tds2024b)
     assert not supported("trigger-edge-level", tds2024b)
-    assert supported("trigger-edge-level", tbs2074b)
+    assert supported("trigger-edge-level", tbs2074)
     for command in ("measure", "capture", "single-wait", "trigger-pulse-width", "reference-query"):
-        assert supported(command, tbs2074b)
+        assert supported(command, tbs2074)
         assert supported(command, tds2024b)
-    assert supported("screenshot", tbs2074b)
+    assert supported("screenshot", tbs2074)
     assert supported("screenshot", tds2024b)
-    assert not supported("check-error", tbs2074b)
+    assert not supported("check-error", tbs2074)
     assert not supported("check-error", tds2024b)
-    for model in (tbs2074b, tds2024b):
+    for model in (tbs2074, tds2024b):
         assert catalog["trigger-pulse-width"]["presentation"]["models"][model]["fields"]["qualifier"]["options"] == ["less-than", "greater-than"]
     assert supported("capture", keysight)
     capture = catalog["capture"]["presentation"]["models"]
-    for model in (tbs2074b, tds2024b, "tektronix-tbs1052b"):
+    for model in (tbs2074, tds2024b, "tektronix-tbs1052b"):
         assert capture[model]["fields"]["points"]["options"] == [1000]
         assert capture[model]["fields"]["format"]["options"] == ["byte"]
     assert capture[keysight]["fields"]["points"]["options"] == [1000, 5000, 10000]
     assert capture[keysight]["fields"].get("format", {}).get("options", catalog["capture"]["fields"][-1]["options"]) == ["byte", "word"]
     acquisition = catalog["acquisition"]["presentation"]["models"]
-    assert acquisition[tbs2074b]["fields"]["type"]["options"] == ["normal", "peak", "average", "high_resolution"]
+    assert acquisition[tbs2074]["fields"]["type"]["options"] == ["normal", "peak", "average"]
     assert acquisition[tds2024b]["fields"]["type"]["options"] == ["normal", "peak", "average"]
     assert acquisition[tds2024b]["fields"]["count"]["options"] == [4, 16, 64, 128]
 
     with pytest.raises(WebUIRequestError, match="background is unsupported"):
-        _validate_parameters("screenshot", {"background": "white"}, "simulate", tbs2074b)
+        _validate_parameters("screenshot", {"background": "white"}, "simulate", tbs2074)
 
     autoscale = catalog["autoscale"]["presentation"]["models"]
-    for model in (tbs2074b, tds2024b):
+    for model in (tbs2074, tds2024b):
         for field in ("channels", "acquire_mode", "channels_mode"):
             assert autoscale[model]["fields"][field]["hidden"] is True
 
     setup = catalog["setup-save"]["presentation"]["models"]
-    assert setup[tbs2074b]["fields"]["target"]["options"] == ["slot"]
-    assert setup[tbs2074b]["fields"]["slot"]["options"] == list(range(1, 10))
-    assert setup[tbs2074b]["fields"]["file"]["hidden"] is True
+    assert setup[tbs2074]["fields"]["target"]["options"] == ["slot"]
+    assert setup[tbs2074]["fields"]["slot"]["options"] == list(range(1, 10))
+    assert setup[tbs2074]["fields"]["file"]["hidden"] is True
 
     trigger_mode = catalog["trigger-mode"]["presentation"]["models"]
-    assert trigger_mode[tbs2074b]["fields"]["mode"]["options"] == ["edge", "glitch", "runt"]
+    assert trigger_mode[tbs2074]["fields"]["mode"]["options"] == ["edge", "glitch", "runt"]
     assert trigger_mode[tds2024b]["fields"]["mode"]["options"] == ["edge", "glitch", "tv"]
 
     trigger_source = catalog["trigger-edge-source"]["presentation"]["models"]
-    assert trigger_source[tbs2074b]["fields"]["source"]["options"] == ["analog-channel", "line"]
+    assert trigger_source[tbs2074]["fields"]["source"]["options"] == ["analog-channel", "line"]
     assert trigger_source[tds2024b]["fields"]["source"]["options"] == ["analog-channel", "line", "external"]
 
     trigger_slope = catalog["trigger-edge-slope"]["presentation"]["models"]
-    assert trigger_slope[tbs2074b]["fields"]["slope"]["options"] == ["positive", "negative"]
+    assert trigger_slope[tbs2074]["fields"]["slope"]["options"] == ["positive", "negative"]
     assert trigger_slope[tds2024b]["fields"]["slope"]["options"] == ["positive", "negative"]
 
     trigger_coupling = catalog["trigger-edge-coupling"]["presentation"]["models"]
-    assert trigger_coupling[tbs2074b]["fields"]["coupling"]["options"] == ["dc", "lf-reject"]
+    assert trigger_coupling[tbs2074]["fields"]["coupling"]["options"] == ["dc", "lf-reject"]
     assert trigger_coupling[tds2024b]["fields"]["coupling"]["options"] == ["ac", "dc", "lf-reject"]
 
     holdoff = catalog["trigger-holdoff"]["presentation"]["models"]
-    assert holdoff[tbs2074b]["fields"]["seconds"]["minimum"] == pytest.approx(40e-9)
-    assert holdoff[tbs2074b]["fields"]["seconds"]["maximum"] == pytest.approx(8.0)
+    assert holdoff[tbs2074]["fields"]["seconds"]["minimum"] == pytest.approx(40e-9)
+    assert holdoff[tbs2074]["fields"]["seconds"]["maximum"] == pytest.approx(8.0)
     assert holdoff[tds2024b]["fields"]["seconds"]["minimum"] == pytest.approx(500e-9)
     assert holdoff[tds2024b]["fields"]["seconds"]["maximum"] == pytest.approx(10.0)
 
@@ -131,7 +131,7 @@ def test_webui_tds2024b_display_vectors_uses_style_command(monkeypatch, tmp_path
 def test_webui_tek_option_constraints_reject_before_business_scpi(
     monkeypatch, tmp_path, command, parameters, message
 ):
-    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0"})
+    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074,SN1,1.0"})
     scope = TektronixOscilloscope(backend)
     scope.query_idn()
     monkeypatch.setattr(command_execution, "open_scope_for_run", lambda *args, **kwargs: scope)
@@ -146,7 +146,7 @@ def test_webui_tek_option_constraints_reject_before_business_scpi(
 
 def test_webui_live_tek_run_checks_esr_after_business_command(monkeypatch, tmp_path):
     backend = FakeBackend(responses={
-        "*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0",
+        "*IDN?": "TEKTRONIX,TBS2074,SN1,1.0",
         "*ESR?": "0",
     })
     scope = TektronixOscilloscope(backend)
@@ -194,7 +194,7 @@ def test_webui_invalid_acquisition_values_do_not_change_mode(monkeypatch, tmp_pa
     assert backend.history == ["*IDN?"]
 
 
-@pytest.mark.parametrize("model_id", ["tektronix-tbs2074b", "tektronix-tds2024b", "tektronix-tbs1052b"])
+@pytest.mark.parametrize("model_id", ["tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b"])
 def test_webui_install_does_not_enable_native_results(model_id, tmp_path):
     catalog = {entry["id"]: entry for entry in command_catalog()}
     for command in ("measure-install", "measure-clear"):
@@ -229,7 +229,7 @@ def test_tds2024b_screenshot_writes_bmp_and_restores_hardcopy(monkeypatch, tmp_p
 
 
 def test_webui_tek_range_rejected_before_writes(monkeypatch, tmp_path):
-    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0"})
+    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074,SN1,1.0"})
     scope = TektronixOscilloscope(backend)
     scope.query_idn()
     monkeypatch.setattr(command_execution, "open_scope_for_run", lambda *args, **kwargs: scope)
@@ -270,7 +270,7 @@ def test_webui_existing_png_models_keep_capture_behavior(model_id, tmp_path):
 def test_waveform_source_projection_and_execution(tmp_path):
     catalog = {entry["id"]: entry for entry in command_catalog()}
     models = catalog["save-waveform"]["presentation"]["models"]
-    for model, count in (("tektronix-tbs2074b", 4), ("tektronix-tds2024b", 4), ("tektronix-tbs1052b", 2)):
+    for model, count in (("tektronix-tbs2074", 4), ("tektronix-tds2024b", 4), ("tektronix-tbs1052b", 2)):
         field = models[model]["fields"]["source_channel"]
         assert field["options"] == list(range(1, count + 1))
         assert field["required"] and not field["hidden"]
@@ -280,6 +280,6 @@ def test_waveform_source_projection_and_execution(tmp_path):
     assert result["exit_code"] == 0
     assert result["result"]["save"]["command"] == 'SAVe:WAVEform CH2,"wave.csv"'
     png = command_execution.execute_command("screenshot", mode="simulate", resource=None,
-        model_id="tektronix-tbs2074b", parameters={"background": "black"}, artifact_dir=tmp_path)
+        model_id="tektronix-tbs2074", parameters={"background": "black"}, artifact_dir=tmp_path)
     assert png["exit_code"] == 0
     assert png["result"]["format"] == "PNG"

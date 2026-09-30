@@ -87,7 +87,23 @@ function Invoke-FakeTransport {
                     if ($mapping[2] -eq "x") { $hasX = $true } else { $hasY = $true }
                 }
             }
-            $state.mode = if ($hasX -and $hasY) { "SCREEN" } elseif ($hasX) { "TIME" } elseif ($hasY) { "AMPLITUDE" } else { "OFF" }
+            $requested = if ($Options -contains "--function") {
+                [string]$Options[[Array]::IndexOf($Options, "--function") + 1]
+            } else { $null }
+            if ($requested -ceq "off") {
+                $state = [ordered]@{
+                    mode = "OFF"; source_channel = $null
+                    x1_seconds = $null; x2_seconds = $null
+                    y1_volts = $null; y2_volts = $null
+                }
+            } elseif ($null -ne $requested) {
+                $state.mode = @{
+                    "screen" = "SCREEN"; "waveform" = "WAVEform"
+                    "vbars" = "VBArs"; "hbars" = "HBArs"
+                }[$requested]
+            } else {
+                $state.mode = if ($hasX -and $hasY) { "SCREEN" } elseif ($hasX) { "TIME" } elseif ($hasY) { "AMPLITUDE" } else { "OFF" }
+            }
             $script:CursorState = [pscustomobject]$state
         } elseif ($null -ne $script:CursorState) {
             $value = $script:CursorState
@@ -142,7 +158,7 @@ $RepoRoot = $script:RepoRoot
 . (Join-Path $script:RepoRoot "scripts/_live_tektronix_helpers.ps1")
 
 $script:Target = switch ([string]$fixture.idn.model.ToUpperInvariant()) {
-    "TBS2074B" { "tektronix-tbs2074b" }
+    "TBS2074" { "tektronix-tbs2074" }
     "TDS2024B" { "tektronix-tds2024b" }
     "TBS1052B" { "tektronix-tbs1052b" }
     default { throw "Unsupported fake model: $($fixture.idn.model)" }

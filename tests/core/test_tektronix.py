@@ -19,7 +19,7 @@ from scopes_tool_core.errors import ScreenshotResponseError
 
 
 MODELS = (
-    ("tektronix-tbs2074b", "TBS2074B", 4),
+    ("tektronix-tbs2074", "TBS2074", 4),
     ("tektronix-tds2024b", "TDS2024B", 4),
     ("tektronix-tbs1052b", "TBS1052B", 2),
 )
@@ -37,7 +37,7 @@ def simulated_scope(model_id):
 
 
 def test_tek_simulator_representative_roundtrips():
-    with simulated_scope("tektronix-tbs2074b") as scope:
+    with simulated_scope("tektronix-tbs2074") as scope:
         scope.set_channel_label(1, "Input")
         assert scope.query_channel_label(1) == "Input"
         scope.backend.record_length_points = 1000
@@ -67,10 +67,10 @@ def test_tek_simulator_representative_roundtrips():
         assert 3 not in scope.backend.channel_scale
 
 
-def test_tbs2074b_scenario_trigger_level_readback(tmp_path):
+def test_tbs2074_scenario_trigger_level_readback(tmp_path):
     scenario = tmp_path / "trigger.json"
     scenario.write_text(json.dumps({"trigger": {"source_channel": "CH1", "level_v": 0.5}}), encoding="utf-8")
-    model_id = "tektronix-tbs2074b"
+    model_id = "tektronix-tbs2074"
     options = RunModeOptions(simulate=True, planning_physical_model_id=model_id, simulate_scenario=str(scenario))
     with open_scope_for_run(ResolvedRunConfig(
         mode="simulate", planning_physical_model_id=model_id,
@@ -80,7 +80,7 @@ def test_tbs2074b_scenario_trigger_level_readback(tmp_path):
         assert scope.query_trigger_edge_level(source_channel=1).level_volts == pytest.approx(0.5)
 
 
-def make_scope(model_id="tektronix-tbs2074b", responses=None):
+def make_scope(model_id="tektronix-tbs2074", responses=None):
     model = physical_model_for_id(model_id)
     backend = FakeBackend(responses={"*IDN?": f"TEKTRONIX,{model.canonical_model},SN,1.0", "*ESR?": "0", "*OPC?": "1", **(responses or {})})
     scope = TektronixOscilloscope(backend)
@@ -112,7 +112,7 @@ def test_unknown_tek_model_fails_closed(series, monkeypatch):
     from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
     monkeypatch.setattr("scopes_tool_core.simulator_backend.capabilities_for_model_id", lambda _: capabilities)
     with pytest.raises(SimulatorBackendError, match="Unsupported"):
-        TektronixSimulatorBackend(physical_model_id="tektronix-tbs2074b")
+        TektronixSimulatorBackend(physical_model_id="tektronix-tbs2074")
 
 
 @pytest.mark.parametrize("model_id,_,__", MODELS)
@@ -123,19 +123,22 @@ def test_capability_subset_and_unsupported_leaks(model_id, _, __):
         assert operation_supported(capabilities, operation)
     for operation in ("measure-results", "check-error", "system-operation-status"):
         assert not operation_supported(capabilities, operation)
-    assert operation_supported(capabilities, "smoke") == (model_id == "tektronix-tbs2074b")
-    for operation in ("channel-units", "display-persistence", "cursor-query", "cursor-off", "math-display",
+    assert operation_supported(capabilities, "smoke") == (model_id == "tektronix-tbs2074")
+    for operation in ("channel-units", "cursor-query", "cursor-off", "math-display",
                       "math-operator", "measure-install", "measure-clear", "save-image", "acquisition-points",
                       "record-length", "channel-summary", "live-data-snapshot", "system-information-snapshot"):
         assert operation_supported(capabilities, operation)
-    is_tbs2000b = model_id == "tektronix-tbs2074b"
-    assert capabilities.trigger_modes == (("edge", "glitch", "runt") if is_tbs2000b else ("edge", "glitch", "tv"))
-    assert capabilities.trigger_edge_sources == (("analog-channel", "line") if is_tbs2000b else ("analog-channel", "line", "external"))
-    for operation in (("sample-rate", "trigger-runt", "save-image-format", "save-waveform-format") if is_tbs2000b
+    assert operation_supported(capabilities, "display-persistence") is (
+        model_id != "tektronix-tbs2074"
+    )
+    is_tbs2000 = model_id == "tektronix-tbs2074"
+    assert capabilities.trigger_modes == (("edge", "glitch", "runt") if is_tbs2000 else ("edge", "glitch", "tv"))
+    assert capabilities.trigger_edge_sources == (("analog-channel", "line") if is_tbs2000 else ("analog-channel", "line", "external"))
+    for operation in (("sample-rate", "trigger-runt", "save-image-format", "save-waveform-format") if is_tbs2000
                       else ("cursor-set", "trigger-tv", "save-image-ink-saver")):
         assert operation_supported(capabilities, operation)
     assert not capabilities.supports_measure_results_dump
-    assert capabilities.supports_screenshot is is_tbs2000b
+    assert capabilities.supports_screenshot is is_tbs2000
     assert operation_supported(capabilities, "screenshot") is (model_id != "tektronix-tbs1052b")
     assert operation_supported(capabilities, "display-vectors") is (
         model_id in {"tektronix-tds2024b", "tektronix-tbs1052b"}
@@ -157,7 +160,7 @@ def test_run_single_stop_and_force_use_tek_commands(model_id, _, __):
 
 
 @pytest.mark.parametrize("model_id,count,mode", [
-    ("tektronix-tbs2074b", 512, "high_resolution"),
+    ("tektronix-tbs2074", 512, "average"),
     ("tektronix-tds2024b", 64, "peak"),
     ("tektronix-tbs1052b", 16, "normal"),
 ])
@@ -165,7 +168,7 @@ def test_acquisition_values_and_count_reject_before_scpi(model_id, count, mode):
     scope, backend = make_scope(model_id)
     scope.set_acquisition_type(mode)
     scope.set_acquisition_count(count)
-    expected_mode = {"high_resolution": "HIRes", "peak": "PEAKdetect", "normal": "SAMple"}[mode]
+    expected_mode = {"average": "AVErage", "peak": "PEAKdetect", "normal": "SAMple"}[mode]
     assert backend.history[-2:] == [f"ACQuire:MODe {expected_mode}", f"ACQuire:NUMAVg {count}"]
     history = list(backend.history)
     with pytest.raises(ParameterValidationError):
@@ -175,8 +178,24 @@ def test_acquisition_values_and_count_reject_before_scpi(model_id, count, mode):
     assert backend.history == history
 
 
+def test_tbs2074_rejects_high_resolution_acquisition_before_scpi():
+    scope, backend = make_scope("tektronix-tbs2074")
+
+    with pytest.raises(ParameterValidationError):
+        scope.set_acquisition_type("high_resolution")
+    with pytest.raises(ParameterValidationError):
+        scope.set_acquisition_type("hires")
+
+    assert backend.history == ["*IDN?"]
+
+    with simulated_scope("tektronix-tbs2074") as simulated:
+        simulated.backend.acquisition_type = "HRESolution"
+        with pytest.raises(ParameterValidationError, match="high-resolution"):
+            simulated.query_acquisition_config()
+
+
 @pytest.mark.parametrize("model_id,reference", [
-    ("tektronix-tbs2074b", "REF1"),
+    ("tektronix-tbs2074", "REF1"),
     ("tektronix-tds2024b", "REFA"),
     ("tektronix-tbs1052b", "REFA"),
 ])
@@ -203,7 +222,7 @@ def test_reference_setup_and_autoscale_boundaries(model_id, reference):
     assert backend.history == history
 
 
-def test_tbs2000b_channel_and_trigger_mappings():
+def test_tbs2000_channel_and_trigger_mappings():
     scope, backend = make_scope()
     scope.set_channel_probe_ratio(1, 10)
     scope.set_channel_bandwidth_limit(1, True)
@@ -229,7 +248,7 @@ def test_tbs2000b_channel_and_trigger_mappings():
     ("OFF", "40", 0.1, 0.1, "HORizontal:POSition 40"),
     ("OFF", "40", 0.1, 0.103, "HORizontal:POSition 40"),
 ])
-def test_tbs2000b_timebase_position_preserves_mode(mode, percent, seconds, requested, written):
+def test_tbs2000_timebase_position_preserves_mode(mode, percent, seconds, requested, written):
     scope, backend = make_scope(responses={
         "HORizontal:MAIn:DELay:MODe?": mode,
         "HORizontal:MAIn:DELay:TIMe?": "0.003",
@@ -298,7 +317,7 @@ def test_tds2000b_tbs1000b_display_persistence_parses_hardware_numeric_readbacks
     assert (state.mode, state.seconds, state.raw_value) == (mode, seconds, raw)
 
 
-def test_tbs2000b_display_vectors_rejects_before_scpi():
+def test_tbs2000_display_vectors_rejects_before_scpi():
     scope, backend = make_scope()
     with pytest.raises(ParameterValidationError):
         scope.query_display_vectors()
@@ -323,7 +342,7 @@ def test_tds2000b_tbs1000b_timebase_probe_reference_and_holdoff(model_id):
     ]
 
 
-def test_tbs2000b_channel_limits_reject_before_scpi():
+def test_tbs2000_channel_limits_reject_before_scpi():
     scope, backend = make_scope()
     scope.set_channel_offset(1, 0.25)
     scope.set_channel_label(1, "x" * 30)
@@ -383,29 +402,29 @@ def test_explicit_status_does_not_read_hidden_esr():
 
 
 @pytest.mark.parametrize("model_id,command,response,method,args,expected", [
-    ("tektronix-tbs2074b", "CH1:SCAle?", ":CH1:SCALE 0.2", "query_channel_scale", (1,), 0.2),
-    ("tektronix-tbs2074b", "CH1:COUPling?", ":CH1:COUPLING DC", "query_channel_coupling", (1,), "dc"),
-    ("tektronix-tbs2074b", "CH1:PRObe:GAIN?", ":CH1:PROBE:GAIN 0.1", "query_channel_probe_ratio", (1,), 10),
-    ("tektronix-tbs2074b", "CH1:BANdwidth?", ":CH1:BANDWIDTH TWENTY", "query_channel_bandwidth_limit", (1,), True),
-    ("tektronix-tbs2074b", "CH1:INVert?", ":CH1:INVERT ON", "query_channel_invert", (1,), True),
-    ("tektronix-tbs2074b", "CH1:LABel?", ':CH1:LABEL "A"', "query_channel_label", (1,), "A"),
-    ("tektronix-tbs2074b", "CH1:DESKew?", ":CH1:DESKEW 1e-8", "query_channel_probe_skew", (1,), 1e-8),
+    ("tektronix-tbs2074", "CH1:SCAle?", ":CH1:SCALE 0.2", "query_channel_scale", (1,), 0.2),
+    ("tektronix-tbs2074", "CH1:COUPling?", ":CH1:COUPLING DC", "query_channel_coupling", (1,), "dc"),
+    ("tektronix-tbs2074", "CH1:PRObe:GAIN?", ":CH1:PROBE:GAIN 0.1", "query_channel_probe_ratio", (1,), 10),
+    ("tektronix-tbs2074", "CH1:BANdwidth?", ":CH1:BANDWIDTH TWENTY", "query_channel_bandwidth_limit", (1,), True),
+    ("tektronix-tbs2074", "CH1:INVert?", ":CH1:INVERT ON", "query_channel_invert", (1,), True),
+    ("tektronix-tbs2074", "CH1:LABel?", ':CH1:LABEL "A"', "query_channel_label", (1,), "A"),
+    ("tektronix-tbs2074", "CH1:DESKew?", ":CH1:DESKEW 1e-8", "query_channel_probe_skew", (1,), 1e-8),
     ("tektronix-tds2024b", "HORizontal:MAIn:POSition?", ":HORIZONTAL:MAIN:POSITION 0.1", "query_timebase_position", (), 0.1),
-    ("tektronix-tbs2074b", "HORizontal:MAIn:SCAle?", ":HORIZONTAL:SCALE 0.1", "query_timebase_scale", (), 0.1),
-    ("tektronix-tbs2074b", "ACQuire:MODe?", ":ACQUIRE:MODE SAMPLE", "query_acquisition_type", (), "normal"),
-    ("tektronix-tbs2074b", "ACQuire:NUMAVg?", ":ACQUIRE:NUMAVG 16", "query_acquisition_count", (), 16),
-    ("tektronix-tbs2074b", "TRIGger:A:EDGE:SOUrce?", ":TRIGGER:A:EDGE:SOURCE CH1", "query_trigger_edge_source", (), "analog-channel"),
+    ("tektronix-tbs2074", "HORizontal:MAIn:SCAle?", ":HORIZONTAL:SCALE 0.1", "query_timebase_scale", (), 0.1),
+    ("tektronix-tbs2074", "ACQuire:MODe?", ":ACQUIRE:MODE SAMPLE", "query_acquisition_type", (), "normal"),
+    ("tektronix-tbs2074", "ACQuire:NUMAVg?", ":ACQUIRE:NUMAVG 16", "query_acquisition_count", (), 16),
+    ("tektronix-tbs2074", "TRIGger:A:EDGE:SOUrce?", ":TRIGGER:A:EDGE:SOURCE CH1", "query_trigger_edge_source", (), "analog-channel"),
     ("tektronix-tds2024b", "TRIGger:MAIn:EDGE:SOUrce?", ":TRIGGER:EDGE:SOURCE CH1", "query_trigger_edge_source", (), "analog-channel"),
-    ("tektronix-tbs2074b", "TRIGger:A:EDGE:SLOpe?", ":TRIGGER:A:EDGE:SLOPE RISE", "query_trigger_edge_slope", (), "positive"),
-    ("tektronix-tbs2074b", "TRIGger:A:EDGE:COUPling?", ":TRIGGER:A:EDGE:COUPLING DC", "query_trigger_edge_coupling", (), "dc"),
-    ("tektronix-tbs2074b", "TRIGger:A:LEVel:CH1?", ":TRIGGER:A:LEVEL:CH1 0.5", "query_trigger_edge_level", (), 0.5),
-    ("tektronix-tbs2074b", "TRIGger:A:TYPe?", ":TRIGGER:A:TYPE EDGE", "query_trigger_mode", (), "edge"),
-    ("tektronix-tbs2074b", "TRIGger:A:MODe?", ":TRIGGER:A:MODE NORMAL", "query_trigger_sweep", (), "normal"),
-    ("tektronix-tbs2074b", "TRIGger:A:HOLDOff:TIMe?", ":TRIGGER:A:HOLDOFF:TIME 0.1", "query_trigger_holdoff", (), 0.1),
-    ("tektronix-tbs2074b", "SELect:REF1?", ":SELECT:REF1 1", "query_reference_display", (1,), True),
-    ("tektronix-tbs2074b", "FILESystem:CWD?", ':FILESYSTEM:CWD "C:/"', "query_save_pwd", (), "C:/"),
+    ("tektronix-tbs2074", "TRIGger:A:EDGE:SLOpe?", ":TRIGGER:A:EDGE:SLOPE RISE", "query_trigger_edge_slope", (), "positive"),
+    ("tektronix-tbs2074", "TRIGger:A:EDGE:COUPling?", ":TRIGGER:A:EDGE:COUPLING DC", "query_trigger_edge_coupling", (), "dc"),
+    ("tektronix-tbs2074", "TRIGger:A:LEVel:CH1?", ":TRIGGER:A:LEVEL:CH1 0.5", "query_trigger_edge_level", (), 0.5),
+    ("tektronix-tbs2074", "TRIGger:A:TYPe?", ":TRIGGER:A:TYPE EDGE", "query_trigger_mode", (), "edge"),
+    ("tektronix-tbs2074", "TRIGger:A:MODe?", ":TRIGGER:A:MODE NORMAL", "query_trigger_sweep", (), "normal"),
+    ("tektronix-tbs2074", "TRIGger:A:HOLDOff:TIMe?", ":TRIGGER:A:HOLDOFF:TIME 0.1", "query_trigger_holdoff", (), 0.1),
+    ("tektronix-tbs2074", "SELect:REF1?", ":SELECT:REF1 1", "query_reference_display", (1,), True),
+    ("tektronix-tbs2074", "FILESystem:CWD?", ':FILESYSTEM:CWD "C:/"', "query_save_pwd", (), "C:/"),
     ("tektronix-tds2024b", "DISPlay:STYle?", ":DISPLAY:STYLE VECTORS", "query_display_vectors", (), True),
-    ("tektronix-tbs2074b", "*STB?", "*STB 4", "query_status_byte", (), 4),
+    ("tektronix-tbs2074", "*STB?", "*STB 4", "query_status_byte", (), 4),
 ])
 def test_header_on_query_normalization(model_id, command, response, method, args, expected):
     scope, backend = make_scope(model_id, {command: response})
@@ -436,11 +455,11 @@ def test_header_on_query_normalization(model_id, command, response, method, args
 
 
 @pytest.mark.parametrize("model_id,raw_source", [
-    ("tektronix-tbs2074b", "AUX"),
+    ("tektronix-tbs2074", "AUX"),
     ("tektronix-tds2024b", "EXT5"),
 ])
 def test_edge_source_query_preserves_unsupported_readback(model_id, raw_source):
-    root = "TRIGger:A" if model_id == "tektronix-tbs2074b" else "TRIGger:MAIn"
+    root = "TRIGger:A" if model_id == "tektronix-tbs2074" else "TRIGger:MAIn"
     command = f"{root}:EDGE:SOUrce?"
     scope, backend = make_scope(model_id, {command: raw_source})
 
@@ -553,7 +572,7 @@ def test_tds2000b_tbs1000b_subsets(model_id):
 def test_measurement_results_and_png_stay_fail_closed(model_id, _, __):
     scope, backend = make_scope(model_id)
     actions = [scope.query_measurement_results, scope.query_hardcopy_state]
-    if model_id != "tektronix-tbs2074b":
+    if model_id != "tektronix-tbs2074":
         actions.extend([scope.capture_screenshot_png,
                         lambda: scope.capture_screenshot(options=ScreenshotOptions()),
                         lambda: scope.capture_screenshot(options=ScreenshotOptions(format="png"))])
@@ -664,7 +683,7 @@ def test_simulator_roundtrips_and_slot_safety(model_id, _, __):
         with pytest.raises(SimulatorBackendError):
             scope.backend.write("CH1:YUNit V")
         assert scope.query_channel_units(1) == "amp"
-        if model_id != "tektronix-tbs2074b":
+        if model_id != "tektronix-tbs2074":
             scope.set_display_persistence("minimum")
             assert scope.query_display_persistence().raw_value == "0"
             scope.set_display_persistence("infinite")
@@ -688,7 +707,7 @@ def test_simulator_roundtrips_and_slot_safety(model_id, _, __):
         assert all(command.endswith("?") for command in scope.backend.history[start:])
         scope.clear_measurements()
         scope.install_measurement(1, "vpp")
-        if model_id == "tektronix-tbs2074b":
+        if model_id == "tektronix-tbs2074":
             scope.configure_runt_trigger(channel=2, polarity="negative", qualifier="less-than", time_seconds=1e-6, low_level_volts=-0.1, high_level_volts=0.1)
             state = scope.query_runt_trigger()
             assert (state.channel, state.polarity, state.qualifier) == (2, "negative", "less-than")
@@ -719,7 +738,7 @@ def test_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
         history = [command.upper() for command in scope.backend.history]
         assert not any(":RANGE?" in command or ":IMPEDANCE?" in command or ":VERNIER?" in command for command in history)
         assert "ACQUIRE:MODE?" in history
-        if model_id == "tektronix-tbs2074b":
+        if model_id == "tektronix-tbs2074":
             assert channels[2].units is None and channels[3].units is None
             assert "CH3:YUNIT?" not in history and "CH4:YUNIT?" not in history
             assert snapshot["timebase"]["position"] == 0.0
@@ -744,20 +763,20 @@ def test_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
 @pytest.mark.parametrize("model_id,_,__", MODELS)
 def test_cursor_projection_skips_inactive_and_non_voltage_axes(model_id, _, __):
     with simulated_scope(model_id) as scope:
-        is_tbs2000b = model_id == "tektronix-tbs2074b"
-        scope.backend.tek_settings["CURSOR:FUNCTION"] = "TIME" if is_tbs2000b else "VBARS"
+        is_tbs2000 = model_id == "tektronix-tbs2074"
+        scope.backend.tek_settings["CURSOR:FUNCTION"] = "VBARS"
         scope.backend.history.clear()
         state = scope.query_cursor()
         assert state.x1_seconds is not None and state.y1_volts is None
         assert not any("HBARS" in command.upper() for command in scope.backend.history)
-        scope.backend.tek_settings["CURSOR:FUNCTION"] = "AMPLITUDE" if is_tbs2000b else "HBARS"
+        scope.backend.tek_settings["CURSOR:FUNCTION"] = "HBARS"
         scope.set_channel_units(1, "amp")
         scope.backend.history.clear()
         state = scope.query_cursor()
         assert state.x1_seconds is None and state.y1_volts is None
         assert not any("POSITION" in command.upper() or "DELTA" in command.upper() or "VBARS" in command.upper()
                        for command in scope.backend.history)
-        if not is_tbs2000b:
+        if not is_tbs2000:
             with pytest.raises(ParameterValidationError, match="volt"):
                 scope.configure_cursor(1, y1_volts=0)
             assert all(command.endswith("?") for command in scope.backend.history)
@@ -774,7 +793,7 @@ def test_measurement_item_subset_rejects_before_scpi():
 @pytest.mark.parametrize("query_failure", (False, True))
 def test_immediate_measurement_restores_type_and_source(model_id, _, __, query_failure):
     with simulated_scope(model_id) as scope:
-        source = "SOUrce1" if scope.capabilities.series == "TBS2000B" else "SOUrce"
+        source = "SOUrce1" if scope.capabilities.series == "TBS2000" else "SOUrce"
         root = "MEASUrement:IMMed"
         scope.scpi.write(f"{root}:TYPe PERIod")
         scope.scpi.write(f"{root}:{source} CH2")
@@ -794,7 +813,7 @@ def test_immediate_measurement_restores_type_and_source(model_id, _, __, query_f
 
 
 @pytest.mark.parametrize("model_id,qualifier,when", [
-    ("tektronix-tbs2074b", "less-than", "LESSthan"),
+    ("tektronix-tbs2074", "less-than", "LESSthan"),
     ("tektronix-tds2024b", "greater-than", "OUTside"),
     ("tektronix-tbs1052b", "greater-than", "OUTside"),
 ])
@@ -816,7 +835,7 @@ def test_pulse_width_subset_roundtrip_and_range_rejection(model_id, qualifier, w
 
 
 @pytest.mark.parametrize("model_id,root", [
-    ("tektronix-tbs2074b", "WFMOutpre"), ("tektronix-tds2024b", "WFMPre"),
+    ("tektronix-tbs2074", "WFMOutpre"), ("tektronix-tds2024b", "WFMPre"),
 ])
 def test_byte_capture_uses_native_preamble_and_preserves_hidden_channel(model_id, root):
     responses = {"SELect:CH1?": "1", "SELect:CH2?": "0"}
@@ -848,7 +867,7 @@ def test_single_wait_polls_busy_with_finite_force_branch(forced):
     now = [0.0]
     def sleep(seconds):
         now[0] += seconds
-    with simulated_scope("tektronix-tbs2074b") as scope:
+    with simulated_scope("tektronix-tbs2074") as scope:
         scope.backend.busy_values = (1,) if forced else (1, 0)
         config = TriggerWaitConfig(10, 5, forced, clock=lambda: now[0], sleep=sleep)
         result = scope.single_wait(config)
@@ -934,7 +953,7 @@ def test_model_offset_and_waveform_save(model_id, _, channels):
         scope.backend.history.clear()
         scope.set_channel_offset(1, 0.75)
         assert scope.query_channel_offset(1) == pytest.approx(0.75)
-        if model_id == "tektronix-tbs2074b":
+        if model_id == "tektronix-tbs2074":
             assert "CH1:OFFSet 0.75" in scope.backend.history
         else:
             assert "CH1:POSition -1.5" in scope.backend.history
@@ -955,7 +974,7 @@ def test_model_offset_and_waveform_save(model_id, _, channels):
 
 @pytest.mark.parametrize("failure", [None, "signature", "transfer", "save", "completion", "delete"])
 def test_tbs_native_png_sequence_and_restoration(failure, monkeypatch):
-    with simulated_scope("tektronix-tbs2074b") as scope:
+    with simulated_scope("tektronix-tbs2074") as scope:
         scope.backend.tek_settings["SAVE:IMAGE:FILEFORMAT"] = "JPG"
         scope.backend.timeout = 4321
         scope.backend.history.clear()

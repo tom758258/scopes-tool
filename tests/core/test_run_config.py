@@ -106,7 +106,7 @@ def test_dry_run_open_scope_is_blocked():
 
 @pytest.mark.parametrize("model_id, backend_type, scope_type", [
     ("keysight-dsox4024a", SimulatorBackend, Oscilloscope),
-    ("tektronix-tbs2074b", TektronixSimulatorBackend, TektronixOscilloscope),
+    ("tektronix-tbs2074", TektronixSimulatorBackend, TektronixOscilloscope),
     ("tektronix-tds2024b", TektronixSimulatorBackend, TektronixOscilloscope),
     ("tektronix-tbs1052b", TektronixSimulatorBackend, TektronixOscilloscope),
 ])

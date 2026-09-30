@@ -506,6 +506,10 @@ def _model_command_presentation(
         if entry["id"] == "cursor" and name == "action":
             override["options"] = tuple(action for action in field.get("options", ())
                 if operation_supported(capabilities, "cursor-" + action))
+        if entry["id"] in {"cursor", "cursor-set"} and name == "function":
+            # Only models that declare selectable cursor functions expose the choice.
+            override["options"] = capabilities.cursor_functions
+            override["hidden"] = not capabilities.cursor_functions
         if entry["id"] == "trigger-mode" and name == "mode" and capabilities.trigger_modes is not None:
             override["options"] = capabilities.trigger_modes
         if entry["id"] == "trigger-sweep" and name == "mode" and capabilities.trigger_sweep_modes is not None:

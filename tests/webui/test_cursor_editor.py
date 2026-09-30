@@ -42,7 +42,7 @@ def test_cursor_command_carries_cursor_editor_metadata() -> None:
         assert entry.get("hidden") is not True
 
     assert (
-        public["cursor-set"]["presentation"]["models"]["tektronix-tbs2074b"]
+        public["cursor-set"]["presentation"]["models"]["tektronix-tbs2074"]
         ["cursor_source_selection"]
         == "selected-waveform"
     )
@@ -57,16 +57,32 @@ def test_cursor_command_carries_cursor_editor_metadata() -> None:
     assert public["cursor-query"]["presentation"]["action"] == "read"
     setters = public["cursor-set"]["fields"]
     assert [field["name"] for field in setters] == [
+        "function",
         "source_channel",
         "x1",
         "x2",
         "y1",
         "y2",
     ]
+    assert setters[0]["options"] == [
+        "off", "screen", "waveform", "vbars", "hbars"
+    ]
+    tbs_fields = public["cursor-set"]["presentation"]["models"]["tektronix-tbs2074"][
+        "fields"
+    ]
+    assert tbs_fields["function"]["options"] == [
+        "off", "screen", "waveform", "vbars", "hbars"
+    ]
+    assert "function" not in public["cursor-set"]["presentation"]["models"][
+        "tektronix-tbs1052b"
+    ]["fields"] or public["cursor-set"]["presentation"]["models"][
+        "tektronix-tbs1052b"
+    ]["fields"]["function"].get("hidden") is True
     assert {
         field["name"] for field in setters if field.get("required") is True
-    } == {"source_channel"}
+    } == set()
     assert {field["help_key"] for field in setters} == {
+        "cursor.function",
         "cursor.source_channel",
         "cursor.x1",
         "cursor.x2",
@@ -170,6 +186,104 @@ def test_cursor_set_command_validation_requires_source_and_one_position() -> Non
         })
 
 
+TBS2074 = "tektronix-tbs2074"
+
+
+@pytest.mark.parametrize("function", ["off", "screen", "waveform", "vbars", "hbars"])
+def test_cursor_set_function_switch_needs_no_positions(function: str) -> None:
+    request = validate_job_request({
+        "command": "cursor-set",
+        "mode": "simulate",
+        "model_id": TBS2074,
+        "parameters": {"function": function},
+    })
+
+    assert request["parameters"]["function"] == function
+    assert "source_channel" not in request["parameters"]
+
+
+@pytest.mark.parametrize(
+    ("function", "message"),
+    [
+        ("off", "does not accept positions"),
+        ("waveform", "does not accept positions"),
+        ("vbars", "does not accept Y positions"),
+        ("hbars", "does not accept X positions"),
+    ],
+)
+def test_cursor_set_rejects_function_position_mismatch(function, message) -> None:
+    positions = (
+        {"x1": 0.0} if function in {"off", "waveform", "hbars"} else {"y1": 0.0}
+    )
+    with pytest.raises(WebUIRequestError, match=message):
+        validate_job_request({
+            "command": "cursor-set",
+            "mode": "simulate",
+            "model_id": TBS2074,
+            "parameters": {"function": function, **positions},
+        })
+
+
+def test_cursor_set_rejects_unknown_function() -> None:
+    with pytest.raises(WebUIRequestError, match="Unsupported cursor function"):
+        validate_job_request({
+            "command": "cursor-set",
+            "mode": "simulate",
+            "model_id": TBS2074,
+            "parameters": {"function": "time"},
+        })
+
+
+def test_cursor_set_rejects_function_on_keysight() -> None:
+    with pytest.raises(WebUIRequestError, match="unsupported for this model"):
+        validate_job_request({
+            "command": "cursor-set",
+            "mode": "simulate",
+            "model_id": MODEL_ID,
+            "parameters": {"function": "vbars", "source_channel": 1, "x1": 0.0},
+        })
+
+
+def test_cursor_query_rejects_function() -> None:
+    with pytest.raises(WebUIRequestError, match="cursor query cannot include function"):
+        validate_job_request({
+            "command": "cursor",
+            "mode": "simulate",
+            "model_id": TBS2074,
+            "parameters": {"action": "query", "function": "off"},
+        })
+
+
+def test_cursor_execution_passes_function_to_core(tmp_path: Path) -> None:
+    calls: list[tuple] = []
+
+    class FakeScope:
+        capabilities = object()
+
+        def configure_cursor(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append(("configure", args, kwargs))
+
+        def query_cursor(self):  # type: ignore[no-untyped-def]
+            calls.append(("query", (), {}))
+            return {"mode": "WAVEform"}
+
+    command_execution_module._execute_scope_command(
+        FakeScope(), "cursor-set", "SIM::INSTR", {"function": "waveform"}, tmp_path,
+    )
+
+    assert calls[0] == (
+        "configure",
+        (None,),
+        {
+            "x1_seconds": None,
+            "x2_seconds": None,
+            "y1_volts": None,
+            "y2_volts": None,
+            "function": "waveform",
+        },
+    )
+
+
 def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> None:
     calls: list[tuple] = []
 
@@ -218,6 +332,7 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
             "x2_seconds": 0.001,
             "y1_volts": 0.0,
             "y2_volts": 0.5,
+            "function": None,
         },
     )
     assert "auto_timebase" not in calls[0][2]
@@ -241,6 +356,7 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
             "x2_seconds": None,
             "y1_volts": None,
             "y2_volts": None,
+            "function": None,
         },
     )
 
@@ -368,7 +484,7 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
         const hooks = {
           calls,
           contextKey: () => "simulate||keysight-dsox4024a",
-          modelId: () => "tektronix-tbs2074b",
+          modelId: () => "tektronix-tbs2074",
           selectedCommand: () => catalog.commands.find((command) => command.id === selectedId),
           isAvailable: () => true,
           isExecutionBusy: () => false,

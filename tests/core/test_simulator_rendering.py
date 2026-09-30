@@ -55,11 +55,11 @@ def test_simulator_backend_reexports_shared_rendering_helpers():
 
 
 def test_tektronix_simulator_reuses_the_shared_rendering_helpers():
-    backend = TektronixSimulatorBackend(physical_model_id="tektronix-tbs2074b")
+    backend = TektronixSimulatorBackend(physical_model_id="tektronix-tbs2074")
     backend.write('SAVE:IMAGE "shot.png"')
     backend.write('FILESystem:READFile "shot.png"')
     assert backend.read_raw() == _simulated_screenshot_png(
-        "TBS2074B", white_background=False
+        "TBS2074", white_background=False
     )
 
     backend = TektronixSimulatorBackend(physical_model_id="tektronix-tds2024b")

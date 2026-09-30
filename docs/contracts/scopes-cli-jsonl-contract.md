@@ -495,18 +495,25 @@ Control and setup:
   by `:TRIGger:HOLDoff <seconds>`. On 2000X/3000X profiles `commands` contain
   only `:TRIGger:HOLDoff <seconds>`.
 - `cursor`: `operation`, `commands`, `source_channel`, `x1_seconds`,
-  `x2_seconds`, `y1_volts`, `y2_volts`, `auto_timebase`,
-  `auto_vertical`, and `diagnostic`. `x1_seconds`, `x2_seconds`, `y1_volts`,
-  and `y2_volts` are nullable. Keysight configure results report requested
+  `x2_seconds`, `y1_volts`, `y2_volts`, `function`, `auto_timebase`,
+  `auto_vertical`, and `diagnostic`. `source_channel`, `x1_seconds`, `x2_seconds`,
+  `y1_volts`, `y2_volts`, and `function` are nullable. `function` is present on
+  Tektronix configure results and absent on Keysight ones. Keysight configure
+  results report requested
   positions, with omitted positions `null`; Tek configure results report actual
   active-axis readbacks and inactive/unestablished axes as `null`.
   Core `cursor_source_selection` describes source behavior. With `independent`
   selection, existing source isolation and supported axis subsets apply. With
-  `selected-waveform` selection (TBS2074B), setting cursors leaves the requested
+  `selected-waveform` selection (TBS2074), setting cursors leaves the requested
   source selected and displayed. Selecting/enabling it resets acquisition and
   may replace waveform data; no selection write is sent when already selected
-  and displayed. X-only uses TIME, Y-only AMPLitude, and combined X/Y SCREEN;
-  single-axis sets disable tracking. Requested axes use seconds/physical volts,
+  and displayed. Without an explicit `--function`, X-only uses VBArs, Y-only
+  HBArs, and combined X/Y SCREEN; single-axis sets disable tracking. An
+  explicit `function` of `off`, `screen`, `waveform`, `vbars`, or `hbars`
+  overrides that derivation, and the reported `function` field carries the
+  effective value. `off` and `waveform` switch the function only, take no
+  positions, and require no source channel; `vbars` accepts only X positions
+  and `hbars` only Y positions. Requested axes use seconds/physical volts,
   and only supplied position registers are written. Changing source, mode or
   units can alter the presentation of omitted positions. Auto-timebase follows
   the model's horizontal span; auto-vertical remains unsupported on Tek.

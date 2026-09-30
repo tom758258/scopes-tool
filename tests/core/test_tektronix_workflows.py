@@ -8,7 +8,7 @@ from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
 from scopes_tool_core.trigger import TriggerWaitConfig
 
 
-MODELS = ("tektronix-tbs2074b", "tektronix-tds2024b", "tektronix-tbs1052b")
+MODELS = ("tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b")
 
 
 def scope_for(model):
@@ -64,7 +64,9 @@ def test_workflow_matrix(model, workflow, tmp_path):
         elif workflow == "acquisition":
             result = op.run_acquisition_check(scope, "SIM::INSTR", op.AcquisitionCheckRequest(output_dir=tmp_path))
             skipped = [step for step in result.result["steps"] if step["status"] == "skipped"]
-            assert bool(skipped) == (model != MODELS[0])
+            assert bool(skipped)
+            # No registered Tektronix profile declares high-resolution acquisition.
+            assert any(step["type"] == "high_resolution" for step in skipped)
         elif workflow == "sequence":
             doc = sequence.normalize_sequence_document({"version": 1, "steps": [
                 {"action": "single", "parameters": {}}, {"action": "wait-trigger", "parameters": {"timeout_seconds": 1}},

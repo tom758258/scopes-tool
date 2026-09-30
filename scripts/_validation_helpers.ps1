@@ -9,7 +9,7 @@ $script:ValidationTargetProfiles = @(
 
 # Only the CLI and workflow runners opt into these acceptance profiles.
 $script:TektronixValidationTargetProfiles = @(
-    [pscustomobject]@{ model_id = "tektronix-tbs2074b"; model = "TBS2074B"; series = "TBS2000B"; channels = 4 },
+    [pscustomobject]@{ model_id = "tektronix-tbs2074"; model = "TBS2074"; series = "TBS2000"; channels = 4 },
     [pscustomobject]@{ model_id = "tektronix-tds2024b"; model = "TDS2024B"; series = "TDS2000B"; channels = 4 },
     [pscustomobject]@{ model_id = "tektronix-tbs1052b"; model = "TBS1052B"; series = "TBS1000B"; channels = 2 }
 )

@@ -20,7 +20,7 @@ WORKFLOW_HARNESS = Path(__file__).with_name("tektronix_workflow_harness.ps1")
 TEXT = (ROOT / "scripts" / "_live_tektronix_helpers.ps1").read_text(encoding="utf-8")
 VALIDATION_HELPERS_TEXT = (ROOT / "scripts" / "_validation_helpers.ps1").read_text(encoding="utf-8")
 TARGETS = (
-    "tektronix-tbs2074b",
+    "tektronix-tbs2074",
     "tektronix-tds2024b",
     "tektronix-tbs1052b",
 )
@@ -165,12 +165,12 @@ def fake_run(
     confirmation: str = "enter",
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
-        TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
+        TARGETS[0]: ("TBS2074", 4, "TBS2000"),
         TARGETS[1]: ("TDS2024B", 4, "TDS2000B"),
         TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
     }[target]
     live_detected_model, live_channels, live_series = {
-        TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
+        TARGETS[0]: ("TBS2074", 4, "TBS2000"),
         TARGETS[1]: ("TDS2024B", 4, "TDS2000B"),
         TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
     }[live_model or target]
@@ -185,10 +185,11 @@ def fake_run(
         ),
         TARGETS[1]: (
             "cursor-set", "trigger-tv", "save-image-ink-saver",
-            "display-vectors", "screenshot",
+            "display-vectors", "screenshot", "display-persistence",
         ),
         TARGETS[2]: (
             "cursor-set", "trigger-tv", "save-image-ink-saver", "display-vectors",
+            "display-persistence",
         ),
     }[target]
     supported_operations = (
@@ -196,11 +197,7 @@ def fake_run(
         if core_supported_operations is not None
         else default_supported_operations
     )
-    acquisition_modes = (
-        ("normal", "average", "peak", "high_resolution")
-        if target == TARGETS[0]
-        else ("normal", "average", "peak")
-    )
+    acquisition_modes = ("normal", "average", "peak")
     average_counts = (
         (2, 4, 8, 16, 32, 64, 128, 256, 512)
         if target == TARGETS[0]
@@ -309,7 +306,13 @@ def fake_run(
         "   if option in sys.argv:\n"
         "    state[field] = float(sys.argv[sys.argv.index(option) + 1])\n"
         "    has_x = has_x or axis == 'x'; has_y = has_y or axis == 'y'\n"
-        "  state['mode'] = 'SCREEN' if has_x and has_y else 'TIME' if has_x else 'AMPLITUDE' if has_y else 'OFF'\n"
+        "  requested = sys.argv[sys.argv.index('--function') + 1] if '--function' in sys.argv else None\n"
+        "  if requested == 'off':\n"
+        "   state = {'mode': 'OFF', 'source_channel': None, 'x1_seconds': None, 'x2_seconds': None, 'y1_volts': None, 'y2_volts': None}\n"
+        "  elif requested is not None:\n"
+        "   state['mode'] = {'screen': 'SCREEN', 'waveform': 'WAVEform', 'vbars': 'VBArs', 'hbars': 'HBArs'}[requested]\n"
+        "  else:\n"
+        "   state['mode'] = 'SCREEN' if has_x and has_y else 'TIME' if has_x else 'AMPLITUDE' if has_y else 'OFF'\n"
         "  cursor_state.write_text(json.dumps(state))\n"
         " elif cursor_state.exists(): values[command] = json.loads(cursor_state.read_text())\n"
         f"vectors_path = Path({str(tmp_path / 'vectors_set.txt')!r})\n"
@@ -465,7 +468,7 @@ def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
 
 
 @requires_windows
-def test_tbs2074b_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Path) -> None:
+def test_tbs2074_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Path) -> None:
     result, report = fake_run(tmp_path, TARGETS[0], "-IncludeConfigurationActions")
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
@@ -484,7 +487,7 @@ def test_tbs2074b_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Pa
 
 
 @requires_windows
-def test_tbs2074b_cursor_failure_stops_later_cursor_mutations(tmp_path: Path) -> None:
+def test_tbs2074_cursor_failure_stops_later_cursor_mutations(tmp_path: Path) -> None:
     result, report = fake_run(
         tmp_path,
         TARGETS[0],
@@ -595,10 +598,13 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
         assert cases["display-vectors-on"]["status"] == "N/A"
     assert cases["timebase-position"]["status"] == "PASS"
     assert cases["trigger-mode"]["status"] == "PASS"
-    for name in ("channel-units", "math-display", "math-operator", "display-persistence",
-                 "cursor-query", "trigger-edge", "trigger-edge-source", "trigger-edge-slope",
-                 "trigger-edge-coupling", "acquisition-points", "record-length"):
+    for name in ("channel-units", "math-display", "math-operator",
+                     "cursor-query", "trigger-edge", "trigger-edge-source", "trigger-edge-slope",
+                     "trigger-edge-coupling", "acquisition-points", "record-length"):
         assert cases[name]["status"] == "PASS", cases[name]
+    assert cases["display-persistence"]["status"] == (
+        "N/A" if target == TARGETS[0] else "PASS"
+    ), cases["display-persistence"]
     assert cases["autoscale"]["status"] == "N/A"
     assert cases["setup-save"]["status"] == "N/A"
     assert cases["final-standard-event"]["status"] == "PASS"
@@ -1071,12 +1077,12 @@ def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -
         "Configuration: Runs measurement, BYTE waveform capture, and cursor actions. "
         "Cursor mode may end OFF, measurement configuration may end cleared, "
         "and waveform transfer settings are not restored. "
-        "TBS2074B cursor source selection may display CH1 or restart acquisition through Core.",
+        "TBS2074 cursor source selection may display CH1 or restart acquisition through Core.",
         # Storage slots and filenames come from the arguments, not from constants.
         "Storage Writes: Setup slot 1 and reference slot 2 may be overwritten.",
         "Requested instrument image file 'acceptance.png' may be overwritten.",
         "Requested instrument waveform file 'wave.csv' may be overwritten.",
-        # TBS2074B PNG capture is the supported screenshot path.
+        # TBS2074 PNG capture is the supported screenshot path.
         "Screenshot: PNG screenshot; Core writes a temporary instrument file and attempts to delete it during cleanup.",
     ):
         assert expected in result.stdout, expected
@@ -1085,7 +1091,7 @@ def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -
 
 @requires_windows
 @pytest.mark.parametrize(("target", "expected"), [
-    # TBS2074B supports a PNG screenshot written through a temporary instrument
+    # TBS2074 supports a PNG screenshot written through a temporary instrument
     # file; TDS2024B only over USBTMC; TBS1052B supports no screenshot format at
     # all, so -IncludeScreenshot must not promise a screenshot file.
     (TARGETS[0], "Screenshot: PNG screenshot; Core writes a temporary instrument file and attempts to delete it during cleanup."),

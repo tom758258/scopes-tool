@@ -3,18 +3,18 @@
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model_id, operation_supported
-from scopes_tool_core.errors import ParameterValidationError
+from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 from scopes_tool_core.operations import query_instrument_summary
 from scopes_tool_core.tektronix import TektronixOscilloscope
 from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
 
 
-TBS2074B = "tektronix-tbs2074b"
+TBS2074 = "tektronix-tbs2074"
 LEGACY_TEK_MODELS = ("tektronix-tds2024b", "tektronix-tbs1052b")
-TEK_MODELS = (TBS2074B, *LEGACY_TEK_MODELS)
+TEK_MODELS = (TBS2074, *LEGACY_TEK_MODELS)
 
 
-def simulated_scope(model_id=TBS2074B):
+def simulated_scope(model_id=TBS2074):
     backend = TektronixSimulatorBackend(physical_model_id=model_id)
     scope = TektronixOscilloscope(backend)
     scope.query_idn()
@@ -23,7 +23,7 @@ def simulated_scope(model_id=TBS2074B):
 
 
 def test_tek_profiles_declare_cursor_source_and_fixed_realtime_memory():
-    tbs = capabilities_for_model_id(TBS2074B)
+    tbs = capabilities_for_model_id(TBS2074)
     assert tbs.cursor_source_selection == "selected-waveform"
     assert tbs.fixed_acquisition_memory_mode == "realtime"
     assert tbs.vertical_display_divisions == 10
@@ -51,13 +51,13 @@ def test_tek_instrument_summary_reports_realtime_memory_and_sampling_type(model_
     [
         (
             {"x1_seconds": 0.0005},
-            "TIME",
+            "VBArs",
             ["CURSor:VBArs:UNIts SECOnds"],
             ["CURSor:VBArs:POSITION1 0.0005"],
         ),
         (
             {"y1_volts": 0.5},
-            "AMPLitude",
+            "HBArs",
             ["CURSor:HBArs:UNIts BASe"],
             ["CURSor:HBArs:POSITION1 0.5"],
         ),
@@ -69,7 +69,7 @@ def test_tek_instrument_summary_reports_realtime_memory_and_sampling_type(model_
         ),
     ],
 )
-def test_tbs2074b_cursor_set_uses_only_requested_axes(
+def test_tbs2074_cursor_set_uses_only_requested_axes(
     positions, mode, unit_commands, position_commands
 ):
     scope, backend = simulated_scope()
@@ -84,19 +84,136 @@ def test_tbs2074b_cursor_set_uses_only_requested_axes(
         for command in backend.history
         if ":POSITION" in command and not command.endswith("?")
     ] == position_commands
-    if mode in {"TIME", "AMPLitude"}:
+    if mode in {"VBArs", "HBArs"}:
         assert "CURSor:MODe INDependent" in backend.history
     else:
         assert "CURSor:MODe INDependent" not in backend.history
-    if mode == "TIME":
+    if mode == "VBArs":
         assert backend.tek_settings["CURSOR:VBARS:POSITION2"] == "0.001"
         assert not any("HBArs" in command for command in backend.history)
-    elif mode == "AMPLitude":
+    elif mode == "HBArs":
         assert backend.tek_settings["CURSOR:HBARS:POSITION2"] == "1"
         assert not any("VBArs" in command for command in backend.history)
 
 
-def test_tbs2074b_skips_select_control_when_source_is_already_displayed():
+@pytest.mark.parametrize(
+    ("function", "expected"),
+    [
+        ("off", ["CURSor:FUNCtion OFF"]),
+        ("screen", ["CURSor:FUNCtion SCREEN"]),
+        ("waveform", ["CURSor:FUNCtion WAVEform"]),
+        ("vbars", ["CURSor:FUNCtion VBArs", "CURSor:MODe INDependent"]),
+        ("hbars", ["CURSor:FUNCtion HBArs", "CURSor:MODe INDependent"]),
+    ],
+)
+def test_tbs2074_cursor_function_switches_without_positions(function, expected):
+    scope, backend = simulated_scope()
+
+    scope.configure_cursor(function=function)
+
+    assert backend.history == expected
+    assert backend.acquisition_reset_count == 0
+
+
+@pytest.mark.parametrize(
+    ("function", "positions"),
+    [
+        ("off", {"x1_seconds": 0.0}),
+        ("off", {"y1_volts": 0.0}),
+        ("waveform", {"x1_seconds": 0.0}),
+        ("waveform", {"y1_volts": 0.0}),
+        ("vbars", {"y1_volts": 0.0}),
+        ("hbars", {"x1_seconds": 0.0}),
+    ],
+)
+def test_tbs2074_cursor_rejects_positions_before_instrument_writes(function, positions):
+    scope, backend = simulated_scope()
+
+    with pytest.raises(ParameterValidationError):
+        scope.configure_cursor(1, function=function, **positions)
+
+    assert backend.history == []
+    assert backend.acquisition_reset_count == 0
+
+
+def test_tbs2074_rejects_unknown_cursor_function_before_instrument_writes():
+    scope, backend = simulated_scope()
+
+    with pytest.raises(ParameterValidationError, match="Unsupported cursor function"):
+        scope.configure_cursor(1, function="time")
+
+    assert backend.history == []
+
+
+def test_tbs2074_cursor_function_requires_source_channel_for_positions():
+    scope, backend = simulated_scope()
+
+    with pytest.raises(ParameterValidationError, match="source-channel"):
+        scope.configure_cursor(x1_seconds=0.0)
+
+    assert backend.history == []
+
+
+@pytest.mark.parametrize("model_id", LEGACY_TEK_MODELS)
+def test_legacy_tek_models_reject_explicit_cursor_function(model_id):
+    scope, backend = simulated_scope(model_id)
+
+    with pytest.raises(ParameterValidationError, match="unsupported for this model"):
+        scope.configure_cursor(1, function="vbars")
+
+    assert backend.history == []
+
+
+@pytest.mark.parametrize(
+    ("function", "x1", "x2", "y1", "y2"),
+    [
+        ("SCREEN", 0.0, 0.001, 0.0, 1.0),
+        ("WAVEform", 0.0, 0.001, 0.0, 1.0),
+        ("VBArs", 0.0, 0.001, None, None),
+        ("HBArs", None, None, 0.0, 1.0),
+    ],
+)
+def test_tbs2074_cursor_query_recognizes_first_generation_functions(
+    function, x1, x2, y1, y2
+):
+    scope, backend = simulated_scope()
+    backend.tek_settings["CURSOR:FUNCTION"] = function
+
+    state = scope.query_cursor()
+
+    assert state.mode == function
+    assert state.x1_seconds == x1
+    assert state.x2_seconds == x2
+    assert state.y1_volts == y1
+    assert state.y2_volts == y2
+
+
+@pytest.mark.parametrize("function", ["TIME", "AMPLitude"])
+def test_tbs2074_cursor_query_rejects_b_series_functions(function):
+    scope, backend = simulated_scope()
+    backend.tek_settings["CURSOR:FUNCTION"] = function
+
+    with pytest.raises(OscilloscopeError, match="cursor function"):
+        scope.query_cursor()
+
+
+def test_tbs2074_cursor_off_state_projects_no_positions():
+    scope, backend = simulated_scope()
+    backend.tek_settings["CURSOR:FUNCTION"] = "OFF"
+    backend.history.clear()
+
+    state = scope.query_cursor()
+
+    assert state.mode == "OFF"
+    assert all(
+        getattr(state, name) is None
+        for name in ("x1_seconds", "x2_seconds", "y1_volts", "y2_volts",
+                     "x_delta_seconds", "y_delta_volts", "dydx")
+    )
+    assert backend.history == ["CURSor:FUNCtion?"]
+
+
+def test_tbs2074_skips_select_control_when_source_is_already_displayed():
     scope, backend = simulated_scope()
     backend.tek_settings["SELECT:CONTROL"] = "CH2"
     backend.channel_display[2] = True
@@ -107,7 +224,7 @@ def test_tbs2074b_skips_select_control_when_source_is_already_displayed():
 
 
 @pytest.mark.parametrize(("action", "expected_state"), [("run", "running"), ("stop", "stopped")])
-def test_tbs2074b_source_selection_preserves_acquisition_run_state(action, expected_state):
+def test_tbs2074_source_selection_preserves_acquisition_run_state(action, expected_state):
     scope, backend = simulated_scope()
     getattr(scope, action)()
     reset_count = backend.acquisition_reset_count
@@ -123,7 +240,7 @@ def test_tbs2074b_source_selection_preserves_acquisition_run_state(action, expec
 
 
 @pytest.mark.parametrize("x_position", [-0.0075, 0.0075])
-def test_tbs2074b_accepts_visible_x_cursor_edges(x_position):
+def test_tbs2074_accepts_visible_x_cursor_edges(x_position):
     scope, backend = simulated_scope()
     backend.timebase_scale = 0.001
 
@@ -132,7 +249,7 @@ def test_tbs2074b_accepts_visible_x_cursor_edges(x_position):
     assert float(backend.tek_settings["CURSOR:VBARS:POSITION1"]) == pytest.approx(x_position)
 
 
-def test_tbs2074b_rejects_x_outside_visible_graticule_before_source_selection():
+def test_tbs2074_rejects_x_outside_visible_graticule_before_source_selection():
     scope, backend = simulated_scope()
     backend.timebase_scale = 0.001
 
@@ -143,7 +260,7 @@ def test_tbs2074b_rejects_x_outside_visible_graticule_before_source_selection():
     assert backend.acquisition_reset_count == 0
 
 
-def test_tbs2074b_checks_y_using_offset_scale_and_channel_position():
+def test_tbs2074_checks_y_using_offset_scale_and_channel_position():
     scope, backend = simulated_scope()
     backend.channel_scale[2] = 2.0
     backend.channel_offset[2] = 0.5
@@ -159,7 +276,7 @@ def test_tbs2074b_checks_y_using_offset_scale_and_channel_position():
     assert "CURSor:FUNCtion AMPLitude" not in backend.history
 
 
-def test_tbs2074b_rejects_current_units_before_source_selection():
+def test_tbs2074_rejects_current_units_before_source_selection():
     scope, backend = simulated_scope()
     backend.channel_units[2] = "amp"
 
@@ -170,7 +287,7 @@ def test_tbs2074b_rejects_current_units_before_source_selection():
 
 
 @pytest.mark.parametrize("units", ["volt", "amp"])
-def test_tbs2074b_ch3_waveform_unit_check_restores_transfer_source(units):
+def test_tbs2074_ch3_waveform_unit_check_restores_transfer_source(units):
     scope, backend = simulated_scope()
     backend.channel_units[3] = units
 
@@ -189,7 +306,7 @@ def test_tbs2074b_ch3_waveform_unit_check_restores_transfer_source(units):
     assert backend.waveform_source == 1
 
 
-def test_tbs2074b_ch3_waveform_unit_query_failure_restores_transfer_source():
+def test_tbs2074_ch3_waveform_unit_query_failure_restores_transfer_source():
     scope, backend = simulated_scope()
     backend.query_failures["WFMOutpre:YUNit?"] = RuntimeError("preamble read failed")
 
@@ -205,7 +322,7 @@ def test_tbs2074b_ch3_waveform_unit_query_failure_restores_transfer_source():
     assert backend.waveform_source == 1
 
 
-def test_tbs2074b_cursor_auto_timebase_uses_fifteen_divisions():
+def test_tbs2074_cursor_auto_timebase_uses_fifteen_divisions():
     scope, _ = simulated_scope()
 
     plan = scope.plan_cursor_auto_timebase(x1_seconds=0.01)

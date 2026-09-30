@@ -312,6 +312,7 @@ FEATURES_COMMANDS = (
         "hidden": True,
         "fields": (
             {"name": "action", "type": "enum", "options": ("query", "set", "off"), "default": "query"},
+            {"name": "function", "type": "enum", "options": ("off", "screen", "waveform", "vbars", "hbars"), "option_label": "cursor-function", "visible_if": [{"field": "action", "equals": "set"}], "help_key": "cursor.function"},
             {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "cursor.source_channel"},
             {"name": "x1", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "cursor.x1"},
             {"name": "x2", "type": "number", "required_if": [{"field": "action", "equals": "set"}], "visible_if": [{"field": "action", "equals": "set"}], "help_key": "cursor.x2"},
@@ -335,7 +336,8 @@ FEATURES_COMMANDS = (
         "label": "Set cursors",
         "modes": ("live", "simulate"),
         "fields": (
-            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "required": True, "help_key": "cursor.source_channel"},
+            {"name": "function", "type": "enum", "options": ("off", "screen", "waveform", "vbars", "hbars"), "option_label": "cursor-function", "help_key": "cursor.function"},
+            {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "help_key": "cursor.source_channel"},
             {"name": "x1", "type": "number", "help_key": "cursor.x1"},
             {"name": "x2", "type": "number", "help_key": "cursor.x2"},
             {"name": "y1", "type": "number", "help_key": "cursor.y1"},

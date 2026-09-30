@@ -1247,7 +1247,7 @@ def test_live_data_snapshot_is_hidden_and_runs_through_simulated_jobs() -> None:
 
 def test_tek_presentation_only_support_inherits_underlying_operations() -> None:
     commands = {entry["id"]: entry for entry in TestClient(app).get("/api/commands").json()}
-    model = "tektronix-tbs2074b"
+    model = "tektronix-tbs2074"
     for command in ("acquisition-control", "channel-scale-range", "reference-waveform",
                     "front-panel-measurements", "system-information"):
         assert commands[command]["presentation"]["models"][model]["supported"] is True

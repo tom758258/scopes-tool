@@ -1526,7 +1526,7 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
         // A partial capability projection keeps numeric Scale usable without Units or Range.
         hooks.isCommandAvailable = (id) => id === "channel-scale";
         hooks.executeCommand = successfulExecuteCommand;
-        currentContext = "simulate||tektronix-tbs2074b";
+        currentContext = "simulate||tektronix-tbs2074";
         editor.present();
         assert.equal(editor.modeButtons.range.disabled, true);
         assert.equal(editor.readButton.disabled, false);

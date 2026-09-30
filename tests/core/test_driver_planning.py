@@ -28,7 +28,7 @@ def test_new_series_uses_registered_driver_for_capture_and_measure(monkeypatch, 
         def plan_workflow_step(cls, action, capabilities, **parameters):
             return [f"MODEL:{action}?"]
 
-    original = identity.physical_model_for_id("tektronix-tbs2074b")
+    original = identity.physical_model_for_id("tektronix-tbs2074")
     added = replace(original, model_id="tektronix-test-model", series="TEST-SERIES", driver_id="test-driver")
     monkeypatch.setitem(identity._PHYSICAL_MODEL_BY_ID, added.model_id, added)
     monkeypatch.setitem(drivers.DRIVER_REGISTRY, added.driver_id, NewSeriesDriver)
@@ -43,7 +43,7 @@ def test_new_series_uses_registered_driver_for_capture_and_measure(monkeypatch, 
     (plan_measure, MeasurePlanRequest("vpp", 1)),
 ])
 def test_unregistered_planning_identity_cannot_fall_back(planner, plan_request):
-    caps = replace(capabilities_for_model_id("tektronix-tbs2074b"), series="TEST-SERIES", physical_model_id="unregistered")
+    caps = replace(capabilities_for_model_id("tektronix-tbs2074"), series="TEST-SERIES", physical_model_id="unregistered")
     with pytest.raises(UnsupportedModelError):
         planner(plan_request, caps)
 

@@ -54,12 +54,12 @@ VENDOR_REGISTRY = (
 
 PHYSICAL_MODEL_REGISTRY = (
     PhysicalModelInfo(
-        model_id="tektronix-tbs2074b",
+        model_id="tektronix-tbs2074",
         vendor_id="tektronix",
-        canonical_model="TBS2074B",
-        display_name="Tektronix TBS2074B",
-        series="TBS2000B",
-        capability_profile_id="tektronix-tbs2074b",
+        canonical_model="TBS2074",
+        display_name="Tektronix TBS2074",
+        series="TBS2000",
+        capability_profile_id="tektronix-tbs2074",
         driver_id="tektronix",
     ),
     PhysicalModelInfo(

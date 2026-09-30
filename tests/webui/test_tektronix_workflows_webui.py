@@ -7,7 +7,7 @@ from scopes_tool_webui.command_catalog import command_catalog
 from scopes_tool_webui.command_execution import execute_command
 from scopes_tool_webui.command_validation import _validate_parameters
 
-MODELS = ("tektronix-tbs2074b", "tektronix-tds2024b", "tektronix-tbs1052b")
+MODELS = ("tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b")
 
 
 @pytest.mark.parametrize("model", (MODELS[0],))
@@ -56,7 +56,7 @@ def test_catalog_projects_core_subsets(model):
     assert catalog["smoke"]["presentation"]["models"][model]["supported"] is (model == MODELS[0])
 
 
-def test_tbs2074b_smoke_keeps_png(tmp_path):
+def test_tbs2074_smoke_keeps_png(tmp_path):
     result = execute_command("smoke", mode="simulate", resource=None, model_id=MODELS[0],
                              parameters={"save_artifacts": True}, artifact_dir=tmp_path)
     assert result["exit_code"] == 0, result

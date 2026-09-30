@@ -33,14 +33,14 @@ class TektronixSimulatorBackend(SimulatorBackend):
         super().__post_init__()
         if self.physical_model.vendor_id != "tektronix":
             raise SimulatorBackendError("Tektronix simulator requires a Tektronix model")
-        if self._capabilities.series not in {"TBS2000B", "TDS2000B", "TBS1000B"}:
+        if self._capabilities.series not in {"TBS2000", "TDS2000B", "TBS1000B"}:
             raise SimulatorBackendError(f"Unsupported Tektronix series: {self._capabilities.series}")
         if self.acquisition_count not in (self._capabilities.average_counts or ()):
             self.acquisition_count = self._capabilities.average_counts[0]
         self.tek_settings = {
             "CURSOR:FUNCTION": "OFF", "CURSOR:MODE": "INDEPENDENT",
             "CURSOR:SELECT:SOURCE": "CH1", "SELECT:CONTROL": "CH1",
-            "CURSOR:VBARS:UNITS": "SECONDS", "CURSOR:HBARS:UNITS": "BASE" if self._capabilities.series == "TBS2000B" else "VOLTS",
+            "CURSOR:VBARS:UNITS": "SECONDS", "CURSOR:HBARS:UNITS": "BASE" if self._capabilities.series == "TBS2000" else "VOLTS",
             "CURSOR:VBARS:POSITION1": "0", "CURSOR:VBARS:POSITION2": "0.001",
             "CURSOR:HBARS:POSITION1": "0", "CURSOR:HBARS:POSITION2": "1",
             "SELECT:MATH": "OFF", "MATH:DEFINE": '"CH1+CH2"',
@@ -55,22 +55,22 @@ class TektronixSimulatorBackend(SimulatorBackend):
             "TRIGGER:MAIN:VIDEO:LINE": "1",
             **self.tek_settings,
         }
-        root = "TRIGGER:A" if self._capabilities.series == "TBS2000B" else "TRIGGER:MAIN"
+        root = "TRIGGER:A" if self._capabilities.series == "TBS2000" else "TRIGGER:MAIN"
         self.tek_settings.update({
             "MEASUREMENT:IMMED:TYPE": "FREQuency",
-            "MEASUREMENT:IMMED:SOURCE1" if self._capabilities.series == "TBS2000B" else "MEASUREMENT:IMMED:SOURCE": "CH1",
+            "MEASUREMENT:IMMED:SOURCE1" if self._capabilities.series == "TBS2000" else "MEASUREMENT:IMMED:SOURCE": "CH1",
             f"{root}:PULSE:SOURCE": "CH1", f"{root}:PULSE:WIDTH:POLARITY": "POSITIVE",
             f"{root}:PULSE:WIDTH:WIDTH": "1e-6",
-            f"{root}:PULSE:WIDTH:WHEN": "LESSTHAN" if self._capabilities.series == "TBS2000B" else "INSIDE",
+            f"{root}:PULSE:WIDTH:WHEN": "LESSTHAN" if self._capabilities.series == "TBS2000" else "INSIDE",
         })
         slots = 5 if self._capabilities.series == "TDS2000B" else 6
         self.tek_measurements = {i: {"TYPE": "NONE", "SOURCE": "CH1", "SOURCE1": "CH1", "STATE": "OFF"} for i in range(1, slots + 1)}
-        if self._capabilities.series != "TBS2000B":
+        if self._capabilities.series != "TBS2000":
             self.record_length_points = self.acquisition_points = 2500
             self.hardcopy_format = "BMP"
         self.trigger_holdoff = self._capabilities.trigger_holdoff_min_seconds or 0.0
         self.trigger_slope = "FALL" if self.trigger_slope.upper().startswith("NEG") else "RISE"
-        if self._capabilities.series == "TBS2000B":
+        if self._capabilities.series == "TBS2000":
             self.trigger_levels.setdefault(self.trigger_source, self.trigger_level)
 
     def inject_event(self, code: int, message: str) -> None:
@@ -104,7 +104,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
 
     def _reference_slot(self, token: str) -> int:
         name = token.upper()
-        if self._capabilities.series == "TBS2000B":
+        if self._capabilities.series == "TBS2000":
             slots = {"REF1": 1, "REF2": 2}
         else:
             slots = {"REFA": 1, "REFB": 2}
@@ -113,16 +113,16 @@ class TektronixSimulatorBackend(SimulatorBackend):
         return slots[name]
 
     def _trigger_path(self, command: str) -> str | None:
-        root = "TRIGGER:A:" if self._capabilities.series == "TBS2000B" else "TRIGGER:MAIN:"
+        root = "TRIGGER:A:" if self._capabilities.series == "TBS2000" else "TRIGGER:MAIN:"
         upper = command.upper().replace("HORIZONTAL:MAIN:DELAY:", "HORIZONTAL:DELAY:")
         return upper[len(root):] if upper.startswith(root) else None
 
     def _write_supported_settings(self, command: str) -> bool:
         header, _, value = command.partition(" ")
         header, token = header.upper(), value.upper()
-        is_tbs2000b = self._capabilities.series == "TBS2000B"
-        root = "TRIGGER:A" if is_tbs2000b else "TRIGGER:MAIN"
-        source = "MEASUREMENT:IMMED:SOURCE1" if is_tbs2000b else "MEASUREMENT:IMMED:SOURCE"
+        is_tbs2000 = self._capabilities.series == "TBS2000"
+        root = "TRIGGER:A" if is_tbs2000 else "TRIGGER:MAIN"
+        source = "MEASUREMENT:IMMED:SOURCE1" if is_tbs2000 else "MEASUREMENT:IMMED:SOURCE"
         if header == source or header == f"{root}:PULSE:SOURCE":
             if re.fullmatch(r"CH\d+", token):
                 self._channel_number(token[2:])
@@ -137,7 +137,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
                 return True
         choices = {
             f"{root}:PULSE:WIDTH:POLARITY": {"POSITIVE", "NEGATIVE"},
-            f"{root}:PULSE:WIDTH:WHEN": {"LESSTHAN", "MORETHAN"} if is_tbs2000b else {"INSIDE", "OUTSIDE"},
+            f"{root}:PULSE:WIDTH:WHEN": {"LESSTHAN", "MORETHAN"} if is_tbs2000 else {"INSIDE", "OUTSIDE"},
         }
         if header in choices and token in choices[header]:
             self.tek_settings[header] = value
@@ -151,10 +151,10 @@ class TektronixSimulatorBackend(SimulatorBackend):
                 self.waveform_source = self._channel_number(token[2:])
                 self.tek_settings.pop(header, None)
                 return True
-            if is_tbs2000b and token in {"MATH", "REF1", "REF2"}:
+            if is_tbs2000 and token in {"MATH", "REF1", "REF2"}:
                 self.tek_settings[header] = token
                 return True
-        if header == "SELECT:CONTROL" and is_tbs2000b and re.fullmatch(r"CH\d+", token):
+        if header == "SELECT:CONTROL" and is_tbs2000 and re.fullmatch(r"CH\d+", token):
             self._select_control(self._channel_number(token[2:]))
             return True
         if (header, token) in {("DATA:ENCDG", "RPBINARY"), ("DATA:WIDTH", "1"), ("DATA:START", "1")}:
@@ -167,30 +167,30 @@ class TektronixSimulatorBackend(SimulatorBackend):
         if match:
             channel = self._channel_number(match[1])
             # CH<x>:YUNit is a <QString> command; an unquoted unit is a command error.
-            if (not is_tbs2000b or channel in self._capabilities.channel_units_channels) and token in {'"V"', '"A"'}:
+            if (not is_tbs2000 or channel in self._capabilities.channel_units_channels) and token in {'"V"', '"A"'}:
                 self.channel_units[channel] = "volt" if token == '"V"' else "amp"
                 return True
-        if header == "DISPLAY:PERSISTENCE" and not is_tbs2000b:
+        if header == "DISPLAY:PERSISTENCE" and not is_tbs2000:
             if token in {"OFF", "INFINITE"} or value in {"1", "2", "5"}:
                 self.tek_settings[header] = {"OFF": "0", "INFINITE": "99"}.get(token, value)
                 return True
-        if header == "DISPLAY:PERSISTENCE:VALUE" and is_tbs2000b:
+        if header == "DISPLAY:PERSISTENCE:VALUE" and is_tbs2000:
             if token == "INFINITE" or 0.1 <= _parse_scpi_number(value) <= 60:
                 self.tek_settings[header] = value
                 return True
-        if header == "CURSOR:FUNCTION" and token in ({"OFF", "TIME", "AMPLITUDE", "SCREEN"} if is_tbs2000b else {"OFF", "VBARS", "HBARS"}):
+        if header == "CURSOR:FUNCTION" and token in ({"OFF", "SCREEN", "WAVEFORM", "VBARS", "HBARS"} if is_tbs2000 else {"OFF", "VBARS", "HBARS"}):
             self.tek_settings[header] = value
             return True
-        if header == "CURSOR:SELECT:SOURCE" and not is_tbs2000b and re.fullmatch(r"CH\d+", token):
+        if header == "CURSOR:SELECT:SOURCE" and not is_tbs2000 and re.fullmatch(r"CH\d+", token):
             self._channel_number(token[2:])
             self.tek_settings[header] = value
             return True
         if re.fullmatch(r"CURSOR:(VBARS|HBARS):POSITION[12]", header):
             number = _parse_scpi_number(value)
-            if is_tbs2000b:
+            if is_tbs2000:
                 number = self._clip_cursor_position(header, number)
                 if (header.endswith("1") and self.tek_settings["CURSOR:MODE"].upper() == "TRACK"
-                        and self.tek_settings["CURSOR:FUNCTION"].upper() in {"TIME", "AMPLITUDE"}):
+                        and self.tek_settings["CURSOR:FUNCTION"].upper() in {"WAVEFORM", "SCREEN"}):
                     other = header[:-1] + "2"
                     shifted = float(self.tek_settings[other]) + number - float(self.tek_settings[header])
                     self.tek_settings[other] = str(self._clip_cursor_position(other, shifted))
@@ -201,7 +201,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
             self.tek_settings[header] = value
             return True
         choices = {"SELECT:MATH": {"ON", "OFF"}}
-        if is_tbs2000b:
+        if is_tbs2000:
             choices.update({
                 "CURSOR:MODE": {"TRACK", "INDEPENDENT"},
                 "CURSOR:VBARS:UNITS": {"SECONDS", "HERTZ", "PERCENT", "DEGREES"},
@@ -227,9 +227,9 @@ class TektronixSimulatorBackend(SimulatorBackend):
         match = re.fullmatch(r"MEASUREMENT:MEAS(\d+):(TYPE|SOURCE1?|STATE)", header)
         if match and int(match[1]) in self.tek_measurements:
             setting = match[2]
-            if setting == ("SOURCE1" if is_tbs2000b else "SOURCE") and re.fullmatch(r"CH\d+", token):
+            if setting == ("SOURCE1" if is_tbs2000 else "SOURCE") and re.fullmatch(r"CH\d+", token):
                 self._channel_number(token[2:])
-            elif setting == "STATE" and is_tbs2000b and token in {"ON", "OFF"}:
+            elif setting == "STATE" and is_tbs2000 and token in {"ON", "OFF"}:
                 pass
             elif setting == "TYPE":
                 from .tektronix import TektronixOscilloscope
@@ -237,7 +237,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
                 scope.capabilities = self._capabilities
                 types = scope._measurement_types()
                 allowed = {types[item].upper() for item in self._capabilities.measurement_install_items}
-                if token not in allowed | ({"NONE"} if not is_tbs2000b else set()):
+                if token not in allowed | ({"NONE"} if not is_tbs2000 else set()):
                     return False
             else:
                 return False
@@ -245,10 +245,10 @@ class TektronixSimulatorBackend(SimulatorBackend):
             return True
         if header == "SAVE:IMAGE" and re.fullmatch(r'"[^"\r\n]+"', value):
             self.tek_settings[header] = value
-            if is_tbs2000b:
+            if is_tbs2000:
                 self.image_files[value.strip('"')] = _simulated_screenshot_png(self.model, white_background=False)
             return True
-        if header == "HARDCOPY:INKSAVER" and not is_tbs2000b and token in {"ON", "OFF"}:
+        if header == "HARDCOPY:INKSAVER" and not is_tbs2000 and token in {"ON", "OFF"}:
             self.hardcopy_inksaver = token == "ON"
             return True
         if self._capabilities.screenshot_formats:
@@ -291,20 +291,20 @@ class TektronixSimulatorBackend(SimulatorBackend):
 
     def _query_supported_settings(self, command: str) -> str | None:
         header = command.upper().removesuffix("?")
-        is_tbs2000b = self._capabilities.series == "TBS2000B"
+        is_tbs2000 = self._capabilities.series == "TBS2000"
         if header == "DATA:SOURCE": return self.tek_settings.get(header, f"CH{self.waveform_source}")
         if header == "HORIZONTAL:RECORDLENGTH": return str(self.record_length_points)
-        if is_tbs2000b and header == "HORIZONTAL:SAMPLERATE": return str(self.sample_rate_hz)
-        if is_tbs2000b and header == "ACQUIRE:MAXSAMPLERATE": return str(self.maximum_sample_rate_hz)
+        if is_tbs2000 and header == "HORIZONTAL:SAMPLERATE": return str(self.sample_rate_hz)
+        if is_tbs2000 and header == "ACQUIRE:MAXSAMPLERATE": return str(self.maximum_sample_rate_hz)
         match = re.fullmatch(r"CH(\d+):(YUNIT|POSITION)", header)
         if match:
             channel = self._channel_number(match[1])
-            if match[2] == "YUNIT" and (not is_tbs2000b or channel in self._capabilities.channel_units_channels):
+            if match[2] == "YUNIT" and (not is_tbs2000 or channel in self._capabilities.channel_units_channels):
                 return "A" if self.channel_units.get(channel) == "amp" else "V"
             if match[2] == "POSITION": return self.tek_settings.get(header, "0")
         match = re.fullmatch(r"MEASUREMENT:MEAS(\d+):(TYPE|SOURCE1?|STATE)", header)
         if match and int(match[1]) in self.tek_measurements:
-            if match[2] in ({"TYPE", "SOURCE1", "STATE"} if is_tbs2000b else {"TYPE", "SOURCE"}):
+            if match[2] in ({"TYPE", "SOURCE1", "STATE"} if is_tbs2000 else {"TYPE", "SOURCE"}):
                 return self.tek_measurements[int(match[1])][match[2]]
         match = re.fullmatch(r"CURSOR:(VBARS|HBARS):DELTA", header)
         if match:
@@ -317,15 +317,15 @@ class TektronixSimulatorBackend(SimulatorBackend):
             "SELECT:CONTROL", "CURSOR:MODE", "DISPLAY:PERSISTENCE:STATE", "DISPLAY:PERSISTENCE:VALUE", "SAVE:IMAGE:FILEFORMAT",
             "SAVE:WAVEFORM:FILEFORMAT", "HORIZONTAL:DELAY:MODE", "HORIZONTAL:DELAY:TIME", "TRIGGER:A:PULSE:CLASS",
             "TRIGGER:A:RUNT:SOURCE", "TRIGGER:A:RUNT:POLARITY", "TRIGGER:A:RUNT:WHEN", "TRIGGER:A:RUNT:WIDTH",
-        } if is_tbs2000b else {
+        } if is_tbs2000 else {
             "CURSOR:SELECT:SOURCE", "DISPLAY:PERSISTENCE", "TRIGGER:MAIN:VIDEO:SOURCE",
             "TRIGGER:MAIN:VIDEO:STANDARD", "TRIGGER:MAIN:VIDEO:POLARITY", "TRIGGER:MAIN:VIDEO:SYNC",
             "TRIGGER:MAIN:VIDEO:LINE",
         })
         if header in supported: return self.tek_settings[header]
-        if is_tbs2000b and re.fullmatch(r"TRIGGER:A:(LOWERTHRESHOLD|UPPERTHRESHOLD):CH[12]", header):
+        if is_tbs2000 and re.fullmatch(r"TRIGGER:A:(LOWERTHRESHOLD|UPPERTHRESHOLD):CH[12]", header):
             return self.tek_settings.get(header, "0")
-        if header == "HARDCOPY:INKSAVER" and not is_tbs2000b: return "ON" if self.hardcopy_inksaver else "OFF"
+        if header == "HARDCOPY:INKSAVER" and not is_tbs2000: return "ON" if self.hardcopy_inksaver else "OFF"
         if self._capabilities.screenshot_formats:
             if header == "HARDCOPY:FORMAT": return self.hardcopy_format
             if header == "HARDCOPY:PORT": return self.hardcopy_port
@@ -369,7 +369,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
             super().write(command)
             return
         self._record(command, query=False)
-        if self._capabilities.series == "TBS2000B":
+        if self._capabilities.series == "TBS2000":
             header, _, value = upper.partition(" ")
             if header == "HORIZONTAL:DELAY:MODE" and value in {"ON", "OFF", "1", "0"}:
                 self.tek_settings[header] = "ON" if value in {"ON", "1"} else "OFF"
@@ -394,7 +394,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
             self.last_save_waveform_filename = match[2]
             return
         match = re.fullmatch(r'FILESYSTEM:(READFILE|DELETE) "([^\"]*)"', command, re.IGNORECASE)
-        if match and self._capabilities.series == "TBS2000B":
+        if match and self._capabilities.series == "TBS2000":
             if match[1].upper() == "DELETE":
                 self.image_files.pop(match[2], None)
             elif match[2] in self.image_files:
@@ -435,12 +435,12 @@ class TektronixSimulatorBackend(SimulatorBackend):
             return
         if upper == "AUTOSET EXECUTE":
             return
-        if upper == "DISPLAY:STYLE VECTORS" and self._capabilities.series != "TBS2000B":
+        if upper == "DISPLAY:STYLE VECTORS" and self._capabilities.series != "TBS2000":
             self.display_vectors = True
             return
         match = re.fullmatch(r"HORIZONTAL:MAIN:(SCALE|POSITION) (.+)", upper)
         if match:
-            if match.group(1) == "POSITION" and self._capabilities.series == "TBS2000B":
+            if match.group(1) == "POSITION" and self._capabilities.series == "TBS2000":
                 raise SimulatorBackendError(f"Unsupported Tek write: {command}")
             setattr(self, "timebase_scale" if match.group(1) == "SCALE" else "timebase_position", _parse_scpi_number(match.group(2)))
             return
@@ -449,17 +449,17 @@ class TektronixSimulatorBackend(SimulatorBackend):
             channel = self._channel_number(match.group(1))
             enabled = match.group(2) == "ON"
             self.channel_display[channel] = enabled
-            if enabled and self._capabilities.series == "TBS2000B":
+            if enabled and self._capabilities.series == "TBS2000":
                 self._select_control(channel)
             return
         match = re.fullmatch(r"CH(\d+):(SCALE|OFFSET|COUPLING|PROBE(?::GAIN)?|BANDWIDTH|INVERT|LABEL|DESKEW) (.+)", command, re.IGNORECASE)
         if match:
             channel = self._channel_number(match.group(1))
             setting, value = match.group(2).upper(), match.group(3)
-            is_tbs2000b = self._capabilities.series == "TBS2000B"
-            if setting in {"OFFSET", "LABEL", "DESKEW"} and not is_tbs2000b:
+            is_tbs2000 = self._capabilities.series == "TBS2000"
+            if setting in {"OFFSET", "LABEL", "DESKEW"} and not is_tbs2000:
                 raise SimulatorBackendError(f"Unsupported Tek write: {command}")
-            if setting == "PROBE:GAIN" and not is_tbs2000b or setting == "PROBE" and is_tbs2000b:
+            if setting == "PROBE:GAIN" and not is_tbs2000 or setting == "PROBE" and is_tbs2000:
                 raise SimulatorBackendError(f"Unsupported Tek write: {command}")
             if setting == "SCALE": self.channel_scale[channel] = _parse_scpi_number(value)
             elif setting == "OFFSET": self.channel_offset[channel] = _parse_scpi_number(value)
@@ -467,8 +467,8 @@ class TektronixSimulatorBackend(SimulatorBackend):
             elif setting.startswith("PROBE"):
                 number = _parse_scpi_number(value)
                 if number <= 0: raise SimulatorBackendError("Tek probe value must be positive")
-                self.channel_probe[channel] = 1 / number if is_tbs2000b else number
-            elif setting == "BANDWIDTH" and value.upper() in ({"TWENTY", "FULL"} if is_tbs2000b else {"ON", "OFF"}):
+                self.channel_probe[channel] = 1 / number if is_tbs2000 else number
+            elif setting == "BANDWIDTH" and value.upper() in ({"TWENTY", "FULL"} if is_tbs2000 else {"ON", "OFF"}):
                 self.channel_bandwidth_limit[channel] = value.upper() in {"TWENTY", "ON"}
             elif setting == "INVERT" and value.upper() in {"ON", "OFF"}: self.channel_invert[channel] = value.upper() == "ON"
             elif setting == "LABEL" and re.fullmatch(r'"[^\"]*"', value): self.channel_label[channel] = value[1:-1]
@@ -507,22 +507,22 @@ class TektronixSimulatorBackend(SimulatorBackend):
             header, separator, value = path.partition(" ")
             if separator:
                 allowed = {
-                    "TYPE": {"EDGE", "PULSE"} | ({"VIDEO"} if self._capabilities.series != "TBS2000B" else set()), "MODE": {"AUTO", "NORMAL"},
+                    "TYPE": {"EDGE", "PULSE"} | ({"VIDEO"} if self._capabilities.series != "TBS2000" else set()), "MODE": {"AUTO", "NORMAL"},
                     "EDGE:SLOPE": {"RISE", "FALL"},
-                    "EDGE:COUPLING": {"DC", "LFREJ"} | ({"AC"} if self._capabilities.series != "TBS2000B" else set()),
+                    "EDGE:COUPLING": {"DC", "LFREJ"} | ({"AC"} if self._capabilities.series != "TBS2000" else set()),
                 }
                 if header in allowed and value.upper() in allowed[header]:
                     setattr(self, {"TYPE": "trigger_mode", "MODE": "trigger_sweep", "EDGE:SLOPE": "trigger_slope", "EDGE:COUPLING": "trigger_edge_coupling"}[header], value.upper())
                     return
-                if header == "EDGE:SOURCE" and value in ({"LINE"} if self._capabilities.series == "TBS2000B" else {"ACLINE", "EXT"}):
+                if header == "EDGE:SOURCE" and value in ({"LINE"} if self._capabilities.series == "TBS2000" else {"ACLINE", "EXT"}):
                     self.trigger_source = value
                     return
                 if header == "EDGE:SOURCE" and re.fullmatch(r"CH\d+", value, re.IGNORECASE):
                     self.trigger_source = self._channel_number(value[2:])
                     return
                 if header in {"LEVEL", "HOLDOFF:TIME", "HOLDOFF:VALUE"} or re.fullmatch(r"LEVEL:CH\d+", header):
-                    is_tbs2000b = self._capabilities.series == "TBS2000B"
-                    if header == "LEVEL" and is_tbs2000b or header.startswith("LEVEL:CH") and not is_tbs2000b or header == "HOLDOFF:TIME" and not is_tbs2000b or header == "HOLDOFF:VALUE" and is_tbs2000b:
+                    is_tbs2000 = self._capabilities.series == "TBS2000"
+                    if header == "LEVEL" and is_tbs2000 or header.startswith("LEVEL:CH") and not is_tbs2000 or header == "HOLDOFF:TIME" and not is_tbs2000 or header == "HOLDOFF:VALUE" and is_tbs2000:
                         raise SimulatorBackendError(f"Unsupported Tek write: {command}")
                     number = _parse_scpi_number(value)
                     if header.startswith("LEVEL"):
@@ -552,7 +552,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
             output = io.StringIO()
             csv.writer(output).writerow([value for event in (events or [(0, "No events")]) for value in event])
             return output.getvalue().strip()
-        if self._capabilities.series == "TBS2000B" and upper in {
+        if self._capabilities.series == "TBS2000" and upper in {
             "HORIZONTAL:DELAY:MODE?", "HORIZONTAL:DELAY:TIME?", "HORIZONTAL:POSITION?",
         }:
             return self.tek_settings[upper[:-1]]
@@ -562,8 +562,8 @@ class TektronixSimulatorBackend(SimulatorBackend):
             if value == 0 and self.run_state == "single":
                 self.run_state = "stopped"
             return str(value)
-        is_tbs2000b = self._capabilities.series == "TBS2000B"
-        source = "MEASUREMENT:IMMED:SOURCE1" if is_tbs2000b else "MEASUREMENT:IMMED:SOURCE"
+        is_tbs2000 = self._capabilities.series == "TBS2000"
+        source = "MEASUREMENT:IMMED:SOURCE1" if is_tbs2000 else "MEASUREMENT:IMMED:SOURCE"
         if upper in {"MEASUREMENT:IMMED:TYPE?", source + "?"}:
             return self.tek_settings[upper[:-1]]
         if upper in {"MEASUREMENT:IMMED:VALUE?", "MEASUREMENT:IMMED:UNITS?"}:
@@ -580,10 +580,10 @@ class TektronixSimulatorBackend(SimulatorBackend):
             if channel in self.invalid_measurement_channels or not self.channel_display.get(channel, True):
                 return "9.9e37"
             return str(self._measurement_numeric_value(item, channel, None, {}))
-        root = "TRIGGER:A" if is_tbs2000b else "TRIGGER:MAIN"
+        root = "TRIGGER:A" if is_tbs2000 else "TRIGGER:MAIN"
         if upper[:-1] in {f"{root}:PULSE:SOURCE", f"{root}:PULSE:WIDTH:POLARITY", f"{root}:PULSE:WIDTH:WHEN", f"{root}:PULSE:WIDTH:WIDTH"}:
             return self.tek_settings[upper[:-1]]
-        preamble = "WFMOUTPRE" if is_tbs2000b else "WFMPRE"
+        preamble = "WFMOUTPRE" if is_tbs2000 else "WFMPRE"
         if upper.startswith(preamble + ":"):
             fields = {
                 "NR_PT": str(self.waveform_points), "XINCR": str(self._waveform_x_increment()),
@@ -599,24 +599,24 @@ class TektronixSimulatorBackend(SimulatorBackend):
         if upper == "ACQUIRE:MODE?":
             return {"NORMal": "SAMple", "PEAK": "PEAKdetect", "AVERage": "AVErage", "HRESolution": "HIRes"}[self.acquisition_type]
         if upper == "ACQUIRE:NUMAVG?": return str(self.acquisition_count)
-        if upper == "DISPLAY:STYLE?" and self._capabilities.series != "TBS2000B": return "VECtors" if self.display_vectors else "DOTs"
+        if upper == "DISPLAY:STYLE?" and self._capabilities.series != "TBS2000": return "VECtors" if self.display_vectors else "DOTs"
         if upper == "HORIZONTAL:MAIN:SCALE?": return str(self.timebase_scale)
-        if upper == "HORIZONTAL:MAIN:POSITION?" and self._capabilities.series != "TBS2000B": return str(self.timebase_position)
+        if upper == "HORIZONTAL:MAIN:POSITION?" and self._capabilities.series != "TBS2000": return str(self.timebase_position)
         match = re.fullmatch(r"SELECT:CH(\d+)\?", upper)
         if match: return "ON" if self.channel_display.get(self._channel_number(match.group(1)), True) else "OFF"
         match = re.fullmatch(r"CH(\d+):(SCALE|OFFSET|COUPLING|PROBE(?::GAIN)?|BANDWIDTH|INVERT|LABEL|DESKEW)\?", upper)
         if match:
             channel = self._channel_number(match.group(1))
             setting = match.group(2)
-            is_tbs2000b = self._capabilities.series == "TBS2000B"
-            if setting in {"OFFSET", "LABEL", "DESKEW"} and not is_tbs2000b or setting == "PROBE:GAIN" and not is_tbs2000b or setting == "PROBE" and is_tbs2000b:
+            is_tbs2000 = self._capabilities.series == "TBS2000"
+            if setting in {"OFFSET", "LABEL", "DESKEW"} and not is_tbs2000 or setting == "PROBE:GAIN" and not is_tbs2000 or setting == "PROBE" and is_tbs2000:
                 raise SimulatorBackendError(f"Unsupported Tek query: {command}")
             values = {
                 "SCALE": str(self.channel_scale.get(channel, 1.0)), "OFFSET": str(self.channel_offset.get(channel, 0.0)),
                 "COUPLING": self.channel_coupling.get(channel, "DC"),
                 "PROBE": str(self.channel_probe.get(channel, 1.0)),
                 "PROBE:GAIN": str(1 / self.channel_probe.get(channel, 1.0)),
-                "BANDWIDTH": ("TWEnty" if self.channel_bandwidth_limit.get(channel, False) else "FULl") if is_tbs2000b else ("ON" if self.channel_bandwidth_limit.get(channel, False) else "OFF"),
+                "BANDWIDTH": ("TWEnty" if self.channel_bandwidth_limit.get(channel, False) else "FULl") if is_tbs2000 else ("ON" if self.channel_bandwidth_limit.get(channel, False) else "OFF"),
                 "INVERT": "ON" if self.channel_invert.get(channel, False) else "OFF",
                 "LABEL": f'"{self.channel_label.get(channel, "")}"', "DESKEW": str(self.channel_probe_skew.get(channel, 0.0)),
             }
@@ -632,11 +632,11 @@ class TektronixSimulatorBackend(SimulatorBackend):
             if header == "EDGE:SOURCE": return f"CH{self.trigger_source}" if isinstance(self.trigger_source, int) else self.trigger_source
             if header == "EDGE:SLOPE": return self.trigger_slope
             if header == "EDGE:COUPLING": return self.trigger_edge_coupling
-            if header == "LEVEL" and self._capabilities.series != "TBS2000B": return str(self.trigger_level)
+            if header == "LEVEL" and self._capabilities.series != "TBS2000": return str(self.trigger_level)
             match = re.fullmatch(r"LEVEL:CH(\d+)", header)
-            if match and self._capabilities.series == "TBS2000B":
+            if match and self._capabilities.series == "TBS2000":
                 channel = self._channel_number(match.group(1))
                 return str(self.trigger_levels.get(channel, 0.0))
-            if header == ("HOLDOFF:TIME" if self._capabilities.series == "TBS2000B" else "HOLDOFF:VALUE"):
+            if header == ("HOLDOFF:TIME" if self._capabilities.series == "TBS2000" else "HOLDOFF:VALUE"):
                 return str(self.trigger_holdoff)
         raise SimulatorBackendError(f"Unsupported Tek query: {command}")

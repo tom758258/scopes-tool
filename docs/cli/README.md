@@ -2009,9 +2009,9 @@ temporary 15-second completion timeout and restores it in finally.
 `save-waveform --filename ... [--source-channel N]` keeps filename-only
 behavior on Keysight. Tek requires `--source-channel` in the model's analog
 channel range (1..4 or 1..2). TDS2000B and TBS1000B models save CSV without a format query/set;
-TBS2074B retains its existing `csv` format control. Use available instrument
-storage and a filename valid for the model (TBS2000B uses 8.3 names).
-TBS2074B `screenshot` retrieves native PNG with black background and no
+TBS2074 retains its existing `csv` format control. Use available instrument
+storage and a filename valid for the model (TBS2000 uses 8.3 names).
+TBS2074 `screenshot` retrieves native PNG with black background and no
 appearance controls. TDS2024B retains `--format bmp` over USBTMC;
 TBS1052B screenshot remains unsupported.
 
@@ -2717,14 +2717,23 @@ validation run.
 
 ### Tektronix Live Acceptance
 
+`cursor` accepts an optional `--function` on the TBS2074 profile. The five
+values map to the first-generation Tektronix TBS2000 cursor functions:
+`off`, `screen`, `waveform`, `vbars`, and `hbars`. An explicit function always
+wins; without it the requested axes keep the previous mapping, where X only
+uses `vbars`, Y only uses `hbars`, and X plus Y uses `screen`. `off` and
+`waveform` switch the function only and require no source channel and no
+positions. `vbars` accepts only X positions, `hbars` only Y positions, and any
+other combination is rejected before the instrument is written.
+
 Use `live-cli-check.ps1` with one exact registered Tektronix target and an
-operator-selected VISA resource. It accepts `tektronix-tbs2074b`,
+operator-selected VISA resource. It accepts `tektronix-tbs2074`,
 `tektronix-tds2024b`, or `tektronix-tbs1052b` and `usb` or `tcpip` as the
 connection type. The resource must match that type. System VISA is the default;
 select pyvisa-py explicitly when needed:
 
 ```powershell
-.\scripts\live-cli-check.ps1 -Target tektronix-tbs2074b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+.\scripts\live-cli-check.ps1 -Target tektronix-tbs2074 -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
 .\scripts\live-cli-check.ps1 -Target tektronix-tds2024b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -Backend "@py"
 ```
 
@@ -2748,16 +2757,19 @@ with `-IncludeStorageWrites`; the channel must exist on the selected model.
 `-IncludeConfigurationActions` tests supported cursor setting, cursor off,
 measurement installation, and measurement clear. It does not restore previous
 cursor or measurement configurations; successful actions leave cursors off and
-measurements cleared. For TBS2074B, the runner checks X, physical-voltage Y,
-and combined SCREEN cursor settings when their prerequisites hold. Selecting
+measurements cleared. For TBS2074, the runner checks X, physical-voltage Y,
+and combined SCREEN cursor settings when their prerequisites hold, and it
+switches each of the five cursor functions `off`, `screen`, `waveform`,
+`vbars`, and `hbars`, verifying the function readback each time. Selecting
 the cursor source may change the selected waveform, display that channel, or
 restart acquisition through Core. Those effects are not restored. Horizontal
 position validation uses only public `timebase-position` query/set/readback;
 the runner does not actively switch Delay Mode ON/OFF.
-`-IncludeScreenshot` enables native PNG capture for TBS2074B and explicit BMP
+`-IncludeScreenshot` enables native PNG capture for TBS2074 and explicit BMP
 capture for TDS2024B over USBTMC. Core handles temporary instrument files,
 hardcopy settings, and timeout restoration as applicable. TBS1052B screenshot
-capture is not supported. These opt-in parameters apply only to Tektronix
+capture is not supported. Display persistence is not supported on TBS2074 and
+that runner case reports N/A. These opt-in parameters apply only to Tektronix
 targets; the Keysight baseline retains its existing operator gate and cases.
 
 Results use the common CLI report and artifact privacy handling under

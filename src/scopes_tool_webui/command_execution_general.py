@@ -596,11 +596,12 @@ def _execute_general_scope_command(
         action = parameters["action"]
         if action == "set":
             scope.configure_cursor(
-                parameters["source_channel"],
+                parameters.get("source_channel"),
                 x1_seconds=parameters.get("x1"),
                 x2_seconds=parameters.get("x2"),
                 y1_volts=parameters.get("y1"),
                 y2_volts=parameters.get("y2"),
+                function=parameters.get("function"),
             )
         elif action == "off":
             scope.cursor_off()
@@ -611,11 +612,12 @@ def _execute_general_scope_command(
 
     if command == "cursor-set":
         scope.configure_cursor(
-            parameters["source_channel"],
+            parameters.get("source_channel"),
             x1_seconds=parameters.get("x1"),
             x2_seconds=parameters.get("x2"),
             y1_volts=parameters.get("y1"),
             y2_volts=parameters.get("y2"),
+            function=parameters.get("function"),
         )
         return _state_scope_result("cursor", scope.query_cursor())
 

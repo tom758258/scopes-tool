@@ -140,7 +140,7 @@ def test_tek_b2_cursor_simulation_uses_native_scpi(capsys):
             "--simulate",
             "--json",
             "--model",
-            "tektronix-tbs2074b",
+            "tektronix-tbs2074",
             "--source-channel",
             "2",
             "--x1",
@@ -151,9 +151,71 @@ def test_tek_b2_cursor_simulation_uses_native_scpi(capsys):
     payload = json.loads(capsys.readouterr().out)
     commands = payload["scpi"]["sent"]
     assert "SELect:CONTROl CH2" in commands
-    assert "CURSor:FUNCtion TIME" in commands
+    assert "CURSor:FUNCtion VBArs" in commands
     assert "CURSor:VBArs:UNIts SECOnds" in commands
     assert not any(":MARKer:" in command for command in commands)
+    assert payload["result"]["function"] == "vbars"
+
+
+@pytest.mark.parametrize(
+    ("function", "expected"),
+    [
+        ("off", "CURSor:FUNCtion OFF"),
+        ("screen", "CURSor:FUNCtion SCREEN"),
+        ("waveform", "CURSor:FUNCtion WAVEform"),
+        ("vbars", "CURSor:FUNCtion VBArs"),
+        ("hbars", "CURSor:FUNCtion HBArs"),
+    ],
+)
+def test_tbs2074_cursor_function_switches_without_positions(capsys, function, expected):
+    assert cli.main(
+        ["cursor", "--simulate", "--json", "--model", "tektronix-tbs2074",
+         "--function", function]
+    ) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    commands = payload["scpi"]["sent"]
+    assert expected in commands
+    assert payload["result"]["function"] == function
+    assert not any(":MARKer:" in command for command in commands)
+    if function == "off":
+        assert not any(command.endswith("?") and "CURSor" in command for command in commands)
+
+
+def test_tbs2074_cursor_off_function_does_not_require_source_channel(capsys):
+    assert cli.main(
+        ["cursor", "--simulate", "--json", "--model", "tektronix-tbs2074", "--function", "off"]
+    ) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["result"]["source_channel"] is None
+    assert payload["result"]["x1_seconds"] is None
+
+
+@pytest.mark.parametrize(
+    ("model", "arguments"),
+    [
+        ("tektronix-tbs2074", ["--function", "vbars", "--y1", "0"]),
+        ("tektronix-tbs2074", ["--function", "hbars", "--x1", "0"]),
+        ("tektronix-tbs2074", ["--function", "off", "--x1", "0"]),
+        ("tektronix-tbs2074", ["--function", "waveform", "--y1", "0"]),
+        ("tektronix-tds2024b", ["--function", "vbars", "--x1", "0"]),
+    ],
+)
+def test_tbs_cursor_function_rejects_invalid_combination(capsys, model, arguments):
+    assert cli.main(
+        ["cursor", "--simulate", "--json", "--model", model,
+         "--source-channel", "1", *arguments]
+    ) == 1
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["error"]["type"] in {"ParameterValidationError", "OscilloscopeError"}
+    assert not any("CURSor:FUNCtion" in command for command in payload["scpi"]["sent"])
+
+
+def test_cursor_query_rejects_function(capsys):
+    message = _cursor_dry_run_error(capsys, ["--query", "--function", "off"])
+    assert message == "--query cannot be combined with --function"
 
 
 def test_tbs1052b_rejects_dual_axis_cursor_set_without_cursor_scpi(capsys):

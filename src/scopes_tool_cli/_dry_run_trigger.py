@@ -14,7 +14,7 @@ from scopes_tool_core.cursor import (
     cursor_configure_commands,
     cursor_query_commands,
 )
-from scopes_tool_core.errors import OscilloscopeError
+from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 from scopes_tool_core.timebase import (
     timebase_position_command,
     timebase_position_query,
@@ -575,6 +575,11 @@ def _plan_trigger(
             return commands + [":SYSTem:ERRor?"], [], {"operation": "query", "commands": commands}
         if args.cursor_off:
             return [":MARKer:MODE OFF", ":SYSTem:ERRor?"], [], {"operation": "off", "command": ":MARKer:MODE OFF"}
+        function = getattr(args, "cursor_function", None)
+        if function is not None:
+            raise ParameterValidationError(
+                "cursor function selection is unsupported for this model"
+            )
         channel = validate_analog_channel(args.source_channel, capabilities)
         commands = cursor_configure_commands(
             channel,

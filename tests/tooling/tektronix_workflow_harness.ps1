@@ -1,6 +1,6 @@
 param(
     [string]$ScriptPath,
-    [string]$Target = 'tektronix-tbs2074b',
+    [string]$Target = 'tektronix-tbs2074',
     [string]$Scenario,
     [string]$PythonPath,
     [string]$OutputRoot

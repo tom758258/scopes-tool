@@ -14,7 +14,7 @@ from scopes_tool_webui.jobs import JobManager
 
 MODEL_4024 = "keysight-dsox4024a"
 MODEL_4034 = "keysight-dsox4034a"
-MODEL_TEK = "tektronix-tbs2074b"
+MODEL_TEK = "tektronix-tbs2074"
 MODEL_TEK_OTHER = "tektronix-tds2024b"
 
 

@@ -86,6 +86,7 @@ class ScopeCapabilities:
     tv_modes: tuple[str, ...] | None = None
     cursor_single_axis_only: bool = False
     cursor_auto_vertical: bool = True
+    cursor_functions: tuple[str, ...] = ()
     physical_model_id: str | None = None
     supported_sequence_actions: tuple[str, ...] | None = None
     horizontal_display_divisions: int = 10
@@ -192,14 +193,15 @@ _TEK_INSTALL_ITEMS = _TEK_TDS2000B_INSTALL_ITEMS + (
 
 
 _CAPABILITY_PROFILES = {
-    "tektronix-tbs2074b": ScopeCapabilities(
+    "tektronix-tbs2074": ScopeCapabilities(
         supported_sequence_actions=("wait", "single", "wait-trigger", "measure", "capture", "cleanup", "screenshot"),
         timebase_reference_mode="fixed-center",
         fixed_acquisition_memory_mode="realtime",
         save_waveform_requires_source=True,
         horizontal_display_divisions=15, vertical_display_divisions=10,
         cursor_source_selection="selected-waveform",
-        series="TBS2000B", analog_channels=4,
+        cursor_functions=("off", "screen", "waveform", "vbars", "hbars"),
+        series="TBS2000", analog_channels=4,
         default_waveform_points=1000, safe_max_waveform_points=1000,
         supports_word_format=False, supports_raw_points_mode=False,
         supports_measurements=True, supports_delay_measurement=False,
@@ -214,7 +216,7 @@ _CAPABILITY_PROFILES = {
         save_image_formats=("png", "bmp"), save_waveform_formats=("csv",),
         runt_channels=(1, 2), runt_polarities=("positive", "negative"),
         runt_qualifiers=("none", "less-than", "greater-than"),
-        acquisition_modes=("normal", "peak", "average", "high_resolution"),
+        acquisition_modes=("normal", "peak", "average"),
         average_counts=(2, 4, 8, 16, 32, 64, 128, 256, 512),
         trigger_modes=("edge", "glitch", "runt"),
         trigger_sweep_modes=("auto", "normal"),
@@ -227,7 +229,7 @@ _CAPABILITY_PROFILES = {
         setup_slots=tuple(range(1, 10)),
         supports_setup_file_target=False,
         supports_channel_label=True, channel_label_max_length=30,
-        supported_operations=_TEK_COMMON_OPERATIONS | {
+        supported_operations=_TEK_COMMON_OPERATIONS - {"display-persistence"} | {
             "cursor-set", "channel-label", "channel-probe-skew", "timebase-position",
             "trigger-edge-level", "trigger-runt", "sample-rate",
             "save-image-format", "save-waveform-format", "screenshot", "smoke",

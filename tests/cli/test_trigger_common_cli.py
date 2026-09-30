@@ -213,7 +213,7 @@ def test_trigger_common_invalid_values_fail_argparse(capsys, args):
 @pytest.mark.parametrize(
     "model_id, command",
     [
-        ("tektronix-tbs2074b", "TRIGger:A:TYPe?"),
+        ("tektronix-tbs2074", "TRIGger:A:TYPe?"),
         ("tektronix-tds2024b", "TRIGger:MAIn:TYPe?"),
         ("tektronix-tbs1052b", "TRIGger:MAIn:TYPe?"),
     ],
@@ -247,9 +247,9 @@ def test_trigger_mode_tektronix_query_uses_core(monkeypatch, capsys, model_id, c
 
 
 _TEK_TRIGGER_MODE_CASES = [
-    ("tektronix-tbs2074b", "edge", ["TRIGger:A:TYPe EDGE"]),
-    ("tektronix-tbs2074b", "glitch", ["TRIGger:A:TYPe PULSE", "TRIGger:A:PULSe:CLAss WIDth"]),
-    ("tektronix-tbs2074b", "runt", ["TRIGger:A:TYPe PULSE", "TRIGger:A:PULSe:CLAss RUNT"]),
+    ("tektronix-tbs2074", "edge", ["TRIGger:A:TYPe EDGE"]),
+    ("tektronix-tbs2074", "glitch", ["TRIGger:A:TYPe PULSE", "TRIGger:A:PULSe:CLAss WIDth"]),
+    ("tektronix-tbs2074", "runt", ["TRIGger:A:TYPe PULSE", "TRIGger:A:PULSe:CLAss RUNT"]),
     ("tektronix-tds2024b", "edge", ["TRIGger:MAIn:TYPe EDGE"]),
     ("tektronix-tds2024b", "glitch", ["TRIGger:MAIn:TYPe PULSE"]),
     ("tektronix-tds2024b", "tv", ["TRIGger:MAIn:TYPe VIDeo"]),
@@ -293,7 +293,7 @@ def test_trigger_mode_tektronix_configure_uses_core(
 @pytest.mark.parametrize(
     "model_id, supported",
     [
-        ("tektronix-tbs2074b", ("edge", "glitch", "runt")),
+        ("tektronix-tbs2074", ("edge", "glitch", "runt")),
         ("tektronix-tds2024b", ("edge", "glitch", "tv")),
         ("tektronix-tbs1052b", ("edge", "glitch", "tv")),
     ],

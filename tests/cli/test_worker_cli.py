@@ -2310,7 +2310,7 @@ def test_worker_executes_trigger_and_acquisition_queries_in_simulator(
 
 
 def test_worker_tek_simulate_uses_core_dialect():
-    runtime = _runtime(model="tektronix-tbs2074b")
+    runtime = _runtime(model="tektronix-tbs2074")
     job, result = _execute_worker_job(runtime, "run", {})
     assert result["state"] == "succeeded"
     assert job.result["backend"] == "Tektronix simulator"
@@ -3118,7 +3118,7 @@ def test_stop_cooperatively_cancels_running_triggered_measure_loop(tmp_path):
 
 
 def test_worker_tek_periodic_install_uses_core_capability():
-    runtime = _runtime(model="tektronix-tbs2074b")
+    runtime = _runtime(model="tektronix-tbs2074")
     job, result = _execute_worker_job(runtime, "measure-install", {"source_channel": 1, "item": "vpp"})
     assert result["state"] == "succeeded"
     assert "MEASUrement:MEAS1:TYPe PK2Pk" in job.result["scpi"]["sent"]

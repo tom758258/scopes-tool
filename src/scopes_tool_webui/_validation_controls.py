@@ -23,7 +23,7 @@ from scopes_tool_core.channel import (
     validate_probe_ratio,
     validate_probe_skew,
 )
-from scopes_tool_core.cursor import validate_cursor_request
+from scopes_tool_core.cursor import resolve_cursor_function, validate_cursor_request
 from scopes_tool_core.display import (
     normalize_annotation_background,
     normalize_annotation_color,
@@ -124,6 +124,61 @@ def _normalize_acquisition_type(value: Any) -> str:
         "HRESolution": "high_resolution",
         "PEAK": "peak",
     }[normalized]
+
+
+def _cursor_function(parameters: dict[str, Any], capabilities: Any) -> str | None:
+    """Normalize the optional explicit cursor function before position checks."""
+
+    if "function" not in parameters:
+        return None
+    try:
+        resolved = resolve_cursor_function(
+            capabilities,
+            parameters.get("function"),
+            x_axis=any(parameters.get(name) is not None for name in ("x1", "x2")),
+            y_axis=any(parameters.get(name) is not None for name in ("y1", "y2")),
+        )
+    except Exception as exc:
+        raise WebUIRequestError(str(exc)) from exc
+    parameters["function"] = resolved
+    return resolved
+
+
+def _validate_cursor_set_parameters(
+    parameters: dict[str, Any], command: str, capabilities: Any, function: str | None
+) -> None:
+    positions = ("x1", "x2", "y1", "y2")
+    if function in ("off", "waveform"):
+        for name in positions:
+            parameters.pop(name, None)
+        parameters.pop("source_channel", None)
+        return
+    has_position = any(parameters.get(name) is not None for name in positions)
+    if not has_position and function is None:
+        raise WebUIRequestError(
+            "cursor set requires at least one of x1, x2, y1, or y2"
+        )
+    if has_position:
+        _require_parameter(parameters, "source_channel", command)
+    try:
+        if parameters.get("source_channel") is not None:
+            parameters["source_channel"] = validate_analog_channel(
+                _integer(parameters["source_channel"], "source_channel"),
+                capabilities,
+            )
+        for name in positions:
+            if parameters.get(name) is not None:
+                parameters[name] = _finite_number(parameters[name], name)
+        validate_cursor_request(
+            capabilities,
+            x1_seconds=parameters.get("x1"),
+            x2_seconds=parameters.get("x2"),
+            y1_volts=parameters.get("y1"),
+            y2_volts=parameters.get("y2"),
+            function=function,
+        )
+    except Exception as exc:
+        raise WebUIRequestError(str(exc)) from exc
 
 
 def _validate_control_parameters(
@@ -382,31 +437,11 @@ def _validate_control_parameters(
         if action not in {"query", "set", "off"}:
             raise WebUIRequestError("cursor action must be query, set, or off")
         if action == "set":
-            _require_parameter(parameters, "source_channel", command)
-            if all(
-                parameters.get(name) is None for name in ("x1", "x2", "y1", "y2")
-            ):
-                raise WebUIRequestError(
-                    "cursor set requires at least one of x1, x2, y1, or y2"
-                )
-            try:
-                parameters["source_channel"] = validate_analog_channel(
-                    _integer(parameters["source_channel"], "source_channel"),
-                    capabilities,
-                )
-                if parameters.get("x1") is not None:
-                    parameters["x1"] = _finite_number(parameters["x1"], "x1")
-                if parameters.get("x2") is not None:
-                    parameters["x2"] = _finite_number(parameters["x2"], "x2")
-                if parameters.get("y1") is not None:
-                    parameters["y1"] = _finite_number(parameters["y1"], "y1")
-                if parameters.get("y2") is not None:
-                    parameters["y2"] = _finite_number(parameters["y2"], "y2")
-                validate_cursor_request(capabilities, x1_seconds=parameters.get("x1"), x2_seconds=parameters.get("x2"),
-                    y1_volts=parameters.get("y1"), y2_volts=parameters.get("y2"))
-            except Exception as exc:
-                raise WebUIRequestError(str(exc)) from exc
+            function = _cursor_function(parameters, capabilities)
+            _validate_cursor_set_parameters(parameters, command, capabilities, function)
         else:
+            if "function" in parameters:
+                raise WebUIRequestError(f"cursor {action} cannot include function")
             unexpected = next(
                 (
                     name
@@ -418,30 +453,8 @@ def _validate_control_parameters(
             if unexpected is not None:
                 raise WebUIRequestError(f"cursor {action} cannot include {unexpected}")
     elif command == "cursor-set":
-        _require_parameter(parameters, "source_channel", command)
-        if all(
-            parameters.get(name) is None for name in ("x1", "x2", "y1", "y2")
-        ):
-            raise WebUIRequestError(
-                "cursor set requires at least one of x1, x2, y1, or y2"
-            )
-        try:
-            parameters["source_channel"] = validate_analog_channel(
-                _integer(parameters["source_channel"], "source_channel"),
-                capabilities,
-            )
-            if parameters.get("x1") is not None:
-                parameters["x1"] = _finite_number(parameters["x1"], "x1")
-            if parameters.get("x2") is not None:
-                parameters["x2"] = _finite_number(parameters["x2"], "x2")
-            if parameters.get("y1") is not None:
-                parameters["y1"] = _finite_number(parameters["y1"], "y1")
-            if parameters.get("y2") is not None:
-                parameters["y2"] = _finite_number(parameters["y2"], "y2")
-            validate_cursor_request(capabilities, x1_seconds=parameters.get("x1"), x2_seconds=parameters.get("x2"),
-                y1_volts=parameters.get("y1"), y2_volts=parameters.get("y2"))
-        except Exception as exc:
-            raise WebUIRequestError(str(exc)) from exc
+        function = _cursor_function(parameters, capabilities)
+        _validate_cursor_set_parameters(parameters, command, capabilities, function)
     elif command == "annotation":
         action = parameters.setdefault("action", "query")
         if action not in {"query", "set", "on", "off", "clear"}:

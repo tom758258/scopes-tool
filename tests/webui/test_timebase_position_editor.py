@@ -289,14 +289,14 @@ def test_timebase_position_div_quick_fill_behavior(tmp_path: Path) -> None:
 
         // Metadata, rather than series names, determines reference reads and span.
         const definition = catalog.commands.find((entry) => entry.id === "timebase-position");
-        for (const [model, span] of [["tektronix-tbs2074b", 0.003], ["tektronix-tds2024b", 0.002], ["tektronix-tbs1052b", 0.002]]) {
+        for (const [model, span] of [["tektronix-tbs2074", 0.003], ["tektronix-tds2024b", 0.002], ["tektronix-tbs1052b", 0.002]]) {
           currentContext = `simulate||${model}`;
           calls.length = 0;
           await editor.read();
           assert.deepEqual(calls.map((call) => call[0]), ["timebase-position", "timebase-scale"]);
           assert.ok(editor.info.textContent.endsWith(`SPAN=F:${span}:s`));
         }
-        definition.presentation.models["new-model"] = definition.presentation.models["tektronix-tbs2074b"];
+        definition.presentation.models["new-model"] = definition.presentation.models["tektronix-tbs2074"];
         currentContext = "simulate||new-model";
         calls.length = 0;
         await editor.read();

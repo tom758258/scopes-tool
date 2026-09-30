@@ -417,7 +417,11 @@ source channel plus model-supported X1/X2/Y1/Y2 positions; only supplied positio
 and Turn off cursors (`cursor-off`),
 plus current state readback (mode, positions, deltas, and DYDX where the
 instrument reports it). Core chooses the active cursor mode from the model
-and requested axes. TBS2074B supports combined X/Y and shows a notice that
+and requested axes. TBS2074 additionally exposes an optional function selector
+for the five first-generation Tektronix TBS2000 values `off`, `screen`,
+`waveform`, `vbars`, and `hbars`; an explicit selection wins, and `off` and
+`waveform` switch the mode without requiring positions or a source channel.
+TBS2074 supports combined X/Y and shows a notice that
 applying retains the selected/displayed source and can reset acquisition when
 selection is needed. Existing Keysight Manual behavior and the older Tek
 single-axis subset are retained. Annotation offers explicit Read annotation settings
@@ -457,7 +461,7 @@ the source field is hidden on Keysight. Each submits only its existing
 instrument-side Save command. They do not inherit
 or update `save-filename`; the editor makes this filename separation explicit.
 They do not add filename extensions, refresh unrelated settings, or create
-local output files on the host computer. Screenshot uses native PNG with black background on TBS2074B and BMP on TDS2024B;
+local output files on the host computer. Screenshot uses native PNG with black background on TBS2074 and BMP on TDS2024B;
 TBS1052B screenshot remains unavailable. Screenshot and Capture remain separate host-side
 retrieval paths that register downloadable artifacts. The Basic Controls PC
 output folder does not change `save-pwd`, `save-filename`, or any other

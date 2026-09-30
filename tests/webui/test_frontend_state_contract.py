@@ -20,7 +20,7 @@ def read_static(name: str) -> str:
 
 def test_hidden_commands_use_model_projection_before_refresh() -> None:
     catalog = {entry["id"]: entry for entry in command_catalog(include_hidden=True)}
-    model = "tektronix-tbs2074b"
+    model = "tektronix-tbs2074"
     assert catalog["live-data-snapshot"]["presentation"]["models"][model]["supported"] is True
     assert catalog["system-information-snapshot"]["presentation"]["models"][model]["supported"] is True
     for command in ("doctor", "smoke"):

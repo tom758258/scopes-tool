@@ -264,11 +264,11 @@ print(json.dumps({
                 $status = "N/A"
                 $detail = "current label is outside the public setter's accepted characters"
             } elseif ($Name -eq "trigger-holdoff" -and
-                      ([double]$original -lt $(if ($script:Target -eq "tektronix-tbs2074b") { 4e-8 } else { 5e-7 }) -or
-                       [double]$original -gt $(if ($script:Target -eq "tektronix-tbs2074b") { 8 } else { 10 }))) {
+                      ([double]$original -lt $(if ($script:Target -eq "tektronix-tbs2074") { 4e-8 } else { 5e-7 }) -or
+                       [double]$original -gt $(if ($script:Target -eq "tektronix-tbs2074") { 8 } else { 10 }))) {
                 $status = "N/A"
                 $detail = "current holdoff is outside the model's supported setter range"
-            } elseif ($Name -eq "channel-probe" -and $script:Target -ne "tektronix-tbs2074b" -and
+            } elseif ($Name -eq "channel-probe" -and $script:Target -ne "tektronix-tbs2074" -and
                       [double]$original -notin @(1, 10, 20, 50, 100, 500, 1000)) {
                 $status = "N/A"
                 $detail = "current probe ratio is outside the TDS2000B/TBS1000B supported subset"
@@ -407,8 +407,8 @@ print(json.dumps({
         } else { "Not requested." }
         $configurationNote = if ($IncludeConfigurationActions) {
             $text = "Runs measurement, BYTE waveform capture, and cursor actions. Cursor mode may end OFF, measurement configuration may end cleared, and waveform transfer settings are not restored."
-            if ($script:Target -eq "tektronix-tbs2074b") {
-                $text += " TBS2074B cursor source selection may display CH1 or restart acquisition through Core."
+            if ($script:Target -eq "tektronix-tbs2074") {
+                $text += " TBS2074 cursor source selection may display CH1 or restart acquisition through Core."
             }
             $text
         } else { "Not requested." }
@@ -424,7 +424,7 @@ print(json.dumps({
         } else { "Not requested." }
         $screenshotNote = if (-not $IncludeScreenshot) {
             "Not requested."
-        } elseif ($script:Target -eq "tektronix-tbs2074b") {
+        } elseif ($script:Target -eq "tektronix-tbs2074") {
             "PNG screenshot; Core writes a temporary instrument file and attempts to delete it during cleanup."
         } elseif ($script:Target -eq "tektronix-tds2024b") {
             "BMP screenshot is attempted only with a USBTMC instrument resource; otherwise this case is N/A."
@@ -540,7 +540,7 @@ print(json.dumps({
                 Invoke-SimpleCase $name $name @("--query")
             }
             Invoke-SimpleCase "channel-summary" "channel-summary"
-            if ($script:Target -eq "tektronix-tbs2074b") {
+            if ($script:Target -eq "tektronix-tbs2074") {
                 Invoke-SimpleCase "sample-rate" "sample-rate" @("--query")
                 Invoke-SimpleCase "sample-rate-maximum" "sample-rate" @("--query", "--maximum")
                 Invoke-RoundTrip "channel-label" "channel-label" $ch "text" "--text"
@@ -623,7 +623,7 @@ print(json.dumps({
                 } catch { Add-Case $name "FAIL" $_.Exception.Message }
             }
             Invoke-RoundTrip "trigger-holdoff" "trigger-holdoff" @() "seconds" "--seconds"
-            if ($script:Target -eq "tektronix-tbs2074b") {
+            if ($script:Target -eq "tektronix-tbs2074") {
                 Invoke-SimpleCase "trigger-edge-level-query" "trigger-edge-level" @("--source-channel", "1", "--query")
                 if ($triggerMode -eq "edge") {
                     Invoke-RoundTrip "trigger-edge-level" "trigger-edge-level" @("--source-channel", "1") "level_volts" "--level-volts"
@@ -649,7 +649,7 @@ print(json.dumps({
                 }
             } catch { Add-Case "trigger-edge" "FAIL" $_.Exception.Message }
 
-            $specialTrigger = if ($script:Target -eq "tektronix-tbs2074b") { "trigger-runt" } else { "trigger-tv" }
+            $specialTrigger = if ($script:Target -eq "tektronix-tbs2074") { "trigger-runt" } else { "trigger-tv" }
             $specialMode = if ($specialTrigger -eq "trigger-runt") { "runt" } else { "tv" }
             $unsupportedSpecialTrigger = if ($specialTrigger -eq "trigger-runt") { "trigger-tv" } else { "trigger-runt" }
             Add-UnsupportedOperationCase $unsupportedSpecialTrigger
@@ -703,14 +703,18 @@ print(json.dumps({
                     ) @("math_operation", "source1", "source2") @("--function", "1")
                 }
             } catch { Add-Case "math-operator" "FAIL" $_.Exception.Message }
-            try {
-                $before = Invoke-Cli -Stage "display-persistence-before" -Command "display-persistence" -Options @("--query")
-                if ($before.result.mode -in @("minimum", "infinite")) {
-                    Invoke-SameValueCase "display-persistence" "display-persistence" $before @("--mode", $before.result.mode) @("mode")
-                } elseif ($null -ne $before.result.seconds) {
-                    Invoke-SameValueCase "display-persistence" "display-persistence" $before @("--seconds", (Format-Setting $before.result.seconds)) @("seconds")
-                } else { throw "Missing persistence mode or seconds readback." }
-            } catch { Add-Case "display-persistence" "FAIL" $_.Exception.Message }
+            if (@($script:CoreProfile.supported_operations) -contains "display-persistence") {
+                try {
+                    $before = Invoke-Cli -Stage "display-persistence-before" -Command "display-persistence" -Options @("--query")
+                    if ($before.result.mode -in @("minimum", "infinite")) {
+                        Invoke-SameValueCase "display-persistence" "display-persistence" $before @("--mode", $before.result.mode) @("mode")
+                    } elseif ($null -ne $before.result.seconds) {
+                        Invoke-SameValueCase "display-persistence" "display-persistence" $before @("--seconds", (Format-Setting $before.result.seconds)) @("seconds")
+                    } else { throw "Missing persistence mode or seconds readback." }
+                } catch { Add-Case "display-persistence" "FAIL" $_.Exception.Message }
+            } else {
+                Add-UnsupportedOperationCase "display-persistence"
+            }
             try {
                 $reference = Invoke-Cli -Stage "reference-query" -Command "reference-query" -Options @("--slot", "1")
                 if ($reference.result.displayed -isnot [bool] -or
@@ -816,23 +820,49 @@ print(json.dumps({
             }
             Invoke-SimpleCase "cursor-query" "cursor" @("--query")
             if ($IncludeConfigurationActions) {
-                Write-Warning "Cursor and measurement configuration actions are not restored; cursors end off and measurements end cleared. TBS2074B cursor setting selects CH1 and may display it or restart acquisition through Core."
+                Write-Warning "Cursor and measurement configuration actions are not restored; cursors end off and measurements end cleared. TBS2074 cursor setting selects CH1 and may display it or restart acquisition through Core."
                 if ([string]$script:CoreProfile.cursor_source_selection -ceq "selected-waveform") {
                     $cursorXPassed = $false
                     try {
                         $position = Invoke-Cli -Stage "cursor-timebase-position" -Command "timebase-position" -Options @("--query")
                         $x = Get-Readback $position "position_seconds"
                         $null = Invoke-Cli -Stage "cursor-set" -Command "cursor" -Options @(
-                            "--source-channel", "1", "--x1", (Format-Setting $x), "--x2", (Format-Setting $x))
+                            "--function", "vbars", "--source-channel", "1",
+                            "--x1", (Format-Setting $x), "--x2", (Format-Setting $x))
                         $after = Invoke-Cli -Stage "cursor-set-after" -Command "cursor" -Options @("--query")
                         foreach ($field in @("x1_seconds", "x2_seconds")) {
                             if (-not (Test-ReadbackEqual $x (Get-Readback $after $field))) { throw "Cursor X position readback differs." }
                         }
+                        if ([string](Get-Readback $after "mode") -ine "VBArs") { throw "Cursor function readback is not VBArs." }
                         $display = Invoke-Cli -Stage "cursor-set-source-display" -Command "channel-display" -Options @("--channel", "1", "--query")
                         if ((Get-Readback $display "display") -ne $true) { throw "Cursor source channel is not displayed." }
-                        Add-Case "cursor-set" "PASS" "CH1 X cursors at current timebase position; Core verifies selected-waveform source"
+                        Add-Case "cursor-set" "PASS" "CH1 X cursors at current timebase position using the VBArs function; Core verifies selected-waveform source"
                         $cursorXPassed = $true
                     } catch { Add-Case "cursor-set" "FAIL" $_.Exception.Message }
+
+                    foreach ($function in @("screen", "waveform", "vbars", "hbars")) {
+                        $caseName = "cursor-function-$function"
+                        try {
+                            $null = Invoke-Cli -Stage $caseName -Command "cursor" -Options @("--function", $function)
+                            $after = Invoke-Cli -Stage "$caseName-after" -Command "cursor" -Options @("--query")
+                            $expectedMode = switch ($function) {
+                                "screen" { "SCREEN" }
+                                "waveform" { "WAVEform" }
+                                "vbars" { "VBArs" }
+                                "hbars" { "HBArs" }
+                            }
+                            if ([string](Get-Readback $after "mode") -ine $expectedMode) {
+                                throw "Cursor function readback is $((Get-Readback $after 'mode')) instead of $expectedMode."
+                            }
+                            Add-Case $caseName "PASS" "Function-only cursor switch to $function and query readback"
+                        } catch { Add-Case $caseName "FAIL" $_.Exception.Message }
+                    }
+                    try {
+                        $null = Invoke-Cli -Stage "cursor-function-off" -Command "cursor" -Options @("--function", "off")
+                        $after = Invoke-Cli -Stage "cursor-function-off-after" -Command "cursor" -Options @("--query")
+                        if ([string](Get-Readback $after "mode") -ine "off") { throw "Cursors are not off." }
+                        Add-Case "cursor-function-off" "PASS" "Function-only cursor switch to OFF without a source channel"
+                    } catch { Add-Case "cursor-function-off" "FAIL" $_.Exception.Message }
 
                     $voltageChannel = $null
                     if (-not $cursorXPassed) {
@@ -861,11 +891,13 @@ print(json.dumps({
                             $offset = Invoke-Cli -Stage "cursor-y-offset" -Command "channel-offset" -Options @("--channel", "$voltageChannel", "--query")
                             $y = Get-Readback $offset "volts"
                             $null = Invoke-Cli -Stage "cursor-set-y" -Command "cursor" -Options @(
-                                "--source-channel", "$voltageChannel", "--y1", (Format-Setting $y), "--y2", (Format-Setting $y))
+                                "--function", "hbars", "--source-channel", "$voltageChannel",
+                                "--y1", (Format-Setting $y), "--y2", (Format-Setting $y))
                             $after = Invoke-Cli -Stage "cursor-set-y-after" -Command "cursor" -Options @("--query")
                             foreach ($field in @("y1_volts", "y2_volts")) {
                                 if (-not (Test-ReadbackEqual $y (Get-Readback $after $field))) { throw "Cursor Y position readback differs." }
                             }
+                            if ([string](Get-Readback $after "mode") -ine "HBArs") { throw "Cursor function readback is not HBArs." }
                             $display = Invoke-Cli -Stage "cursor-set-y-source-display" -Command "channel-display" -Options @("--channel", "$voltageChannel", "--query")
                             if ((Get-Readback $display "display") -ne $true) { throw "Cursor source channel is not displayed." }
                             Add-Case "cursor-set-y" "PASS" "Physical-volts Y cursor round-trip on CH$voltageChannel"
@@ -877,7 +909,7 @@ print(json.dumps({
                                 $position = Invoke-Cli -Stage "cursor-screen-position" -Command "timebase-position" -Options @("--query")
                                 $x = Get-Readback $position "position_seconds"
                                 $null = Invoke-Cli -Stage "cursor-set-screen" -Command "cursor" -Options @(
-                                    "--source-channel", "$voltageChannel",
+                                    "--function", "screen", "--source-channel", "$voltageChannel",
                                     "--x1", (Format-Setting $x), "--x2", (Format-Setting $x),
                                     "--y1", (Format-Setting $y), "--y2", (Format-Setting $y))
                                 $after = Invoke-Cli -Stage "cursor-set-screen-after" -Command "cursor" -Options @("--query")
@@ -887,6 +919,7 @@ print(json.dumps({
                                 foreach ($field in @("y1_volts", "y2_volts")) {
                                     if (-not (Test-ReadbackEqual $y (Get-Readback $after $field))) { throw "Cursor SCREEN Y readback differs." }
                                 }
+                                if ([string](Get-Readback $after "mode") -ine "SCREEN") { throw "Cursor function readback is not SCREEN." }
                                 $display = Invoke-Cli -Stage "cursor-set-screen-source-display" -Command "channel-display" -Options @("--channel", "$voltageChannel", "--query")
                                 if ((Get-Readback $display "display") -ne $true) { throw "Cursor source channel is not displayed." }
                                 Add-Case "cursor-set-screen" "PASS" "Combined X/Y cursor round-trip on CH$voltageChannel"
@@ -926,13 +959,16 @@ print(json.dumps({
                 if ([string]$script:CoreProfile.cursor_source_selection -ceq "selected-waveform") {
                     Add-Case "cursor-set-y" "N/A" "Requires -IncludeConfigurationActions; cursor source/mode changes are not restored"
                     Add-Case "cursor-set-screen" "N/A" "Requires -IncludeConfigurationActions; cursor source/mode changes are not restored"
+                    foreach ($function in @("screen", "waveform", "vbars", "hbars", "off")) {
+                        Add-Case "cursor-function-$function" "N/A" "Requires -IncludeConfigurationActions; cursor function changes are not restored"
+                    }
                 }
                 foreach ($name in @("cursor-off", "measure-install", "measure-clear")) {
                     Add-Case $name "N/A" "Requires -IncludeConfigurationActions; no public configuration restore path"
                 }
             }
 
-            if ($script:Target -eq "tektronix-tbs2074b") {
+            if ($script:Target -eq "tektronix-tbs2074") {
                 Invoke-RoundTrip "save-image-format" "save-image-format" @() "format" "--format" @("png", "bmp")
                 Invoke-RoundTrip "save-waveform-format" "save-waveform-format" @() "format" "--format" @("csv")
                 Add-UnsupportedOperationCase "save-image-ink-saver"
@@ -946,7 +982,7 @@ print(json.dumps({
                 } catch { Add-Case "save-image-ink-saver" "FAIL" $_.Exception.Message }
             }
 
-            if ($script:Target -eq "tektronix-tbs2074b") {
+            if ($script:Target -eq "tektronix-tbs2074") {
                 Add-UnsupportedOperationCase "display-vectors"
             } else {
                 try {
@@ -964,7 +1000,7 @@ print(json.dumps({
             }
             Invoke-RoundTrip "save-pwd" "save-pwd" @() "path" "--path"
 
-            if ($script:Target -eq "tektronix-tbs2074b") {
+            if ($script:Target -eq "tektronix-tbs2074") {
                 if (-not $IncludeScreenshot) {
                     Add-Case "screenshot-png" "N/A" "Requires -IncludeScreenshot; writes a temporary instrument file"
                 } else {
@@ -1102,7 +1138,7 @@ print(json.dumps({
             Add-Diagnostic -Name "storage" -Message "Requested setup/reference slots and instrument files may have been overwritten."
         }
         if ($IncludeConfigurationActions) {
-            Add-Diagnostic -Name "configuration" -Message "Cursor and measurement configuration actions are not restored. TBS2074B cursor source selection may change channel display or restart acquisition."
+            Add-Diagnostic -Name "configuration" -Message "Cursor and measurement configuration actions are not restored. TBS2074 cursor source selection may change channel display or restart acquisition."
         }
         $result = if ($script:Failure) { "FAIL" } else { "PASS" }
         Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result $result

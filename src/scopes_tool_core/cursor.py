@@ -67,6 +67,66 @@ def cursor_query_commands(capabilities: ScopeCapabilities) -> list[str]:
     return commands
 
 
+# Explicit cursor functions are a TBS2000 first-generation surface. Models that
+# do not declare selectable functions keep the axis-derived behavior only.
+CURSOR_FUNCTIONS = ("off", "screen", "waveform", "vbars", "hbars")
+_CURSOR_FUNCTION_AXES = {
+    "off": (),
+    "screen": ("x", "y"),
+    "waveform": (),
+    "vbars": ("x",),
+    "hbars": ("y",),
+}
+
+
+def resolve_cursor_function(
+    capabilities: ScopeCapabilities,
+    function: str | None = None,
+    *,
+    x_axis: bool = False,
+    y_axis: bool = False,
+) -> str:
+    """Resolve the effective cursor function for a request.
+
+    An explicit function always wins. Without one, the requested axes keep the
+    existing mapping: X only selects VBArs, Y only HBArs, and X plus Y SCREEN.
+    """
+
+    if function is None:
+        if x_axis and y_axis:
+            return "screen"
+        if x_axis:
+            return "vbars"
+        if y_axis:
+            return "hbars"
+        raise ParameterValidationError("cursor set requires at least one position")
+    if not capabilities.cursor_functions:
+        raise ParameterValidationError(
+            "cursor function selection is unsupported for this model"
+        )
+    normalized = str(function).strip().lower()
+    if normalized not in capabilities.cursor_functions:
+        raise ParameterValidationError(
+            f"Unsupported cursor function: {function!r}"
+        )
+    if normalized in ("off", "waveform"):
+        if x_axis or y_axis:
+            raise ParameterValidationError(
+                f"cursor function {normalized} does not accept positions"
+            )
+        return normalized
+    allowed = _CURSOR_FUNCTION_AXES[normalized]
+    if "x" not in allowed and x_axis:
+        raise ParameterValidationError(
+            f"cursor function {normalized} does not accept X positions"
+        )
+    if "y" not in allowed and y_axis:
+        raise ParameterValidationError(
+            f"cursor function {normalized} does not accept Y positions"
+        )
+    return normalized
+
+
 class CursorController:
     """Manual marker/cursor controls."""
 
@@ -175,13 +235,15 @@ class CursorController:
 
 def validate_cursor_request(capabilities: ScopeCapabilities, *, x1_seconds=None,
                             x2_seconds=None, y1_volts=None, y2_volts=None,
-                            auto_timebase=False, auto_vertical=False) -> None:
+                            auto_timebase=False, auto_vertical=False,
+                            function=None) -> str:
     if not operation_supported(capabilities, "cursor-set"):
         raise ParameterValidationError("cursor-set is unsupported for this model")
     x_axis = x1_seconds is not None or x2_seconds is not None
     y_axis = y1_volts is not None or y2_volts is not None
-    if not x_axis and not y_axis:
-        raise ParameterValidationError("cursor set requires at least one position")
+    resolved = resolve_cursor_function(
+        capabilities, function, x_axis=x_axis, y_axis=y_axis
+    )
     for name, value in (("--x1", x1_seconds), ("--x2", x2_seconds), ("--y1", y1_volts), ("--y2", y2_volts)):
         if value is not None:
             validate_finite_number(value, name)
@@ -191,6 +253,7 @@ def validate_cursor_request(capabilities: ScopeCapabilities, *, x1_seconds=None,
         raise ParameterValidationError("cursor auto-vertical is unsupported for this model")
     if auto_timebase and not x_axis:
         raise ParameterValidationError("cursor auto-timebase requires X positions")
+    return resolved
 
 
 def cursor_configure_commands(

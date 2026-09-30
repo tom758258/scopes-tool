@@ -853,6 +853,7 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             print("Capabilities: unavailable for this model")
             return 1
         history_start = len(scope.backend.history)
+        function = getattr(args, "cursor_function", None)
         if args.cursor_query:
             state = scope.query_cursor()
             runtime._json_update_result(operation="query", **state.__dict__)
@@ -867,18 +868,30 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             command = scope.backend.history[-1]
             runtime._json_update_result(operation="off", command=command)
             print(f"Command: {command}")
+        elif function == "off":
+            scope.configure_cursor(function="off")
+            commands = scope.backend.history[history_start:]
+            runtime._json_update_result(operation="set", commands=commands,
+                                        function="off", source_channel=None,
+                                        x1_seconds=None, x2_seconds=None,
+                                        y1_volts=None, y2_volts=None)
+            for command in commands:
+                print(f"Command: {command}")
         elif (scope.capabilities.cursor_single_axis_only
               or scope.capabilities.cursor_source_selection == "selected-waveform"):
-            validate_cursor_request(scope.capabilities, x1_seconds=args.x1, x2_seconds=args.x2,
-                y1_volts=args.y1, y2_volts=args.y2, auto_timebase=args.auto_timebase, auto_vertical=args.auto_vertical)
+            resolved_function = validate_cursor_request(scope.capabilities, x1_seconds=args.x1, x2_seconds=args.x2,
+                y1_volts=args.y1, y2_volts=args.y2, auto_timebase=args.auto_timebase,
+                auto_vertical=args.auto_vertical, function=function)
             auto_timebase = None
             if args.auto_timebase:
                 auto_timebase = scope.plan_cursor_auto_timebase(x1_seconds=args.x1, x2_seconds=args.x2)
             scope.configure_cursor(args.source_channel, x1_seconds=args.x1, x2_seconds=args.x2,
-                y1_volts=args.y1, y2_volts=args.y2, auto_timebase=args.auto_timebase, auto_vertical=args.auto_vertical)
+                y1_volts=args.y1, y2_volts=args.y2, auto_timebase=args.auto_timebase,
+                auto_vertical=args.auto_vertical, function=function)
             state = scope.query_cursor()
             commands = scope.backend.history[history_start:]
-            result = dict(operation="set", commands=commands, source_channel=args.source_channel,
+            result = dict(operation="set", commands=commands, function=resolved_function,
+                          source_channel=args.source_channel,
                           x1_seconds=state.x1_seconds, x2_seconds=state.x2_seconds,
                           y1_volts=state.y1_volts, y2_volts=state.y2_volts)
             if auto_timebase is not None:
@@ -887,6 +900,9 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         else:
+            validate_cursor_request(scope.capabilities, x1_seconds=args.x1, x2_seconds=args.x2,
+                y1_volts=args.y1, y2_volts=args.y2, auto_timebase=getattr(args, "auto_timebase", False),
+                auto_vertical=getattr(args, "auto_vertical", False), function=function)
             channel = validate_analog_channel(args.source_channel, scope.capabilities)
             cursor_configure_commands(
                 channel,
@@ -896,9 +912,6 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
                 y2_volts=args.y2,
                 capabilities=scope.capabilities,
             )
-            validate_cursor_request(scope.capabilities, x1_seconds=args.x1, x2_seconds=args.x2,
-                y1_volts=args.y1, y2_volts=args.y2, auto_timebase=getattr(args, "auto_timebase", False),
-                auto_vertical=getattr(args, "auto_vertical", False))
             auto_timebase = None
             if getattr(args, "auto_timebase", False):
                 scale = scope.query_timebase_scale()

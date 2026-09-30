@@ -5,7 +5,7 @@ import pytest
 from scopes_tool_cli import cli
 from tests.cli.test_worker_cli import _runtime, _execute_worker_job
 
-MODELS = ("tektronix-tbs2074b", "tektronix-tds2024b", "tektronix-tbs1052b")
+MODELS = ("tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b")
 
 
 @pytest.mark.parametrize("model", MODELS)
@@ -51,14 +51,14 @@ def test_worker_native_workflows(model, command, arguments):
     assert "ALLEv?" in job.result["scpi"]["sent"]
 
 
-def test_cli_tbs2074b_cursor_set_uses_core_tektronix_commands(capsys):
+def test_cli_tbs2074_cursor_set_uses_core_tektronix_commands(capsys):
     assert cli.main(
         [
             "cursor",
             "--simulate",
             "--json",
             "--model",
-            "tektronix-tbs2074b",
+            "tektronix-tbs2074",
             "--source-channel",
             "2",
             "--x1",
@@ -69,13 +69,13 @@ def test_cli_tbs2074b_cursor_set_uses_core_tektronix_commands(capsys):
     payload = json.loads(capsys.readouterr().out)
     commands = payload["scpi"]["sent"]
     assert "SELect:CONTROl CH2" in commands
-    assert "CURSor:FUNCtion TIME" in commands
+    assert "CURSor:FUNCtion VBArs" in commands
     assert not any(":MARKer:" in command for command in commands)
 
 
-def test_worker_tbs2074b_cursor_set_uses_core_tektronix_commands():
+def test_worker_tbs2074_cursor_set_uses_core_tektronix_commands():
     job, result = _execute_worker_job(
-        _runtime(model="tektronix-tbs2074b"),
+        _runtime(model="tektronix-tbs2074"),
         "cursor",
         {"source_channel": 2, "x1": 0.0},
     )
@@ -83,5 +83,35 @@ def test_worker_tbs2074b_cursor_set_uses_core_tektronix_commands():
     assert result["state"] == "succeeded"
     commands = job.result["scpi"]["sent"]
     assert "SELect:CONTROl CH2" in commands
-    assert "CURSor:FUNCtion TIME" in commands
+    assert "CURSor:FUNCtion VBArs" in commands
     assert not any(":MARKer:" in command for command in commands)
+
+
+@pytest.mark.parametrize("function,expected", [
+    ("off", "CURSor:FUNCtion OFF"),
+    ("screen", "CURSor:FUNCtion SCREEN"),
+    ("waveform", "CURSor:FUNCtion WAVEform"),
+    ("vbars", "CURSor:FUNCtion VBArs"),
+    ("hbars", "CURSor:FUNCtion HBArs"),
+])
+def test_worker_tbs2074_cursor_function_passes_through(function, expected):
+    job, result = _execute_worker_job(
+        _runtime(model="tektronix-tbs2074"),
+        "cursor",
+        {"function": function},
+    )
+
+    assert result["state"] == "succeeded"
+    assert expected in job.result["scpi"]["sent"]
+    assert job.result["result"]["function"] == function
+
+
+def test_worker_tbs2074_rejects_invalid_cursor_function():
+    _job, result = _execute_worker_job(
+        _runtime(model="tektronix-tbs2074"),
+        "cursor",
+        {"source_channel": 1, "function": "vbars", "y1": 0.0},
+    )
+
+    assert result["state"] == "failed"
+    assert "does not accept Y positions" in result["error"]["message"]

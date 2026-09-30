@@ -19,7 +19,7 @@ InfiniiVision and Tektronix models. The canonical physical model registry contai
 | `keysight-dsox3024a` | Keysight Technologies | DSOX3024A | 3000X | `keysight-infiniivision-3000x` | `keysight-infiniivision` |
 | `keysight-dsox4024a` | Keysight Technologies | DSOX4024A | 4000X | `keysight-infiniivision-4000x` | `keysight-infiniivision` |
 | `keysight-dsox4034a` | Keysight Technologies | DSOX4034A | 4000X | `keysight-infiniivision-4000x` | `keysight-infiniivision` |
-| `tektronix-tbs2074b` | Tektronix | TBS2074B | TBS2000B | `tektronix-tbs2074b` | `tektronix` |
+| `tektronix-tbs2074` | Tektronix | TBS2074 | TBS2000 | `tektronix-tbs2074` | `tektronix` |
 | `tektronix-tds2024b` | Tektronix | TDS2024B | TDS2000B | `tektronix-tds2024b` | `tektronix` |
 | `tektronix-tbs1052b` | Tektronix | TBS1052B | TBS1000B | `tektronix-tbs1052b` | `tektronix` |
 
@@ -60,7 +60,7 @@ registry entry.
 | `keysight-infiniivision-2000x` | 2000X | DSOX2004A | 4 |
 | `keysight-infiniivision-3000x` | 3000X | DSOX3024A | 4 |
 | `keysight-infiniivision-4000x` | 4000X | DSOX4024A, DSOX4034A | 4 |
-| `tektronix-tbs2074b` | TBS2000B | TBS2074B | 4 |
+| `tektronix-tbs2074` | TBS2000 | TBS2074 | 4 |
 | `tektronix-tds2024b` | TDS2000B | TDS2024B | 4 |
 | `tektronix-tbs1052b` | TBS1000B | TBS1052B | 2 |
 
@@ -81,7 +81,7 @@ in the Tektronix model-support section below. All three support BYTE waveform
 capture, model-specific single-source measurements, voltage channel offsets,
 source-qualified instrument waveform saves, native-status workflows,
 capability-driven acquisition checks and cleanup, and a model-specific sequence
-subset. TBS2074B supports native PNG screenshots with black background and the
+subset. TBS2074 supports native PNG screenshots with black background and the
 Smoke workflow; TDS2024B supports explicit BMP screenshots over USBTMC;
 TBS1052B screenshots remain unsupported. Normalized `check-error` is
 unsupported on all three. Tek workflow status remains separate from the
@@ -118,8 +118,8 @@ Support terms are normative:
 Public validation and documented hardware limits both apply. Supported actions
 can still report instrument errors, unavailable waveforms, missing storage, or
 timeouts. The manual authorities are the Tektronix
-[TBS2000B Series Programmer Manual, 077-1149-04](https://download.tek.com/manual/TBS2000B-Programmer-Manual-EN-US-077114904.pdf)
-for TBS2074B and
+[TBS2000 Series Programmer Manual, 077-1149-02 Rev A](https://download.tek.com/manual/TBS2000-Series-Programmer-Manual-077-1149-02-Rev-A.pdf)
+for TBS2074 and
 [TBS1000/B/EDU, TDS2000/B/C and related Series Programmer Manual, 077-0444-03 Rev B](https://download.tek.com/manual/TBS1000-B-EDU-TDS2000-B-C-TDS1000-B-C-EDU-TDS200-TPS2000-B-Programmer-077044403_RevB.pdf)
 for TDS2024B and TBS1052B. Conditions documented only for older TDS200 models
 or TDS2MM modules do not apply to these registered models.
@@ -142,62 +142,62 @@ adapter aliases do not create additional hardware features.
 
 ### Acquisition, timebase, and channels
 
-| Existing operation | TBS2074B | TDS2024B | TBS1052B | Boundary |
+| Existing operation | TBS2074 | TDS2024B | TBS1052B | Boundary |
 | --- | --- | --- | --- | --- |
 | `identify` | SUPPORTED | SUPPORTED | SUPPORTED | `*IDN?`; detected identity and registered-model fail-closed rules remain authoritative. |
 | `run`, `stop-acquisition` | SUPPORTED | SUPPORTED | SUPPORTED | Continuous run uses `STOPAfter RUNSTOP` plus `STATE RUN`; stop uses `STATE STOP`. |
 | `single` | SUPPORTED | SUPPORTED | SUPPORTED | `STOPAfter SEQuence`, then `STATE RUN`; arms one acquisition but does not promise trigger completion. |
 | `single-wait` | SUPPORTED | SUPPORTED | SUPPORTED | One single acquisition plus finite `BUSY?` polling; optional timeout force-trigger is followed by another bounded poll. Cancellation and timeout remain bounded. |
 | `force-trigger` | SUPPORTED | SUPPORTED | SUPPORTED | `TRIGger FORCe`; requires an armed instrument and is not itself a completion wait. |
-| `acquisition` | SUPPORTED | SUPPORTED | SUPPORTED | normal/sample, peak, average; TBS2074B also high-resolution. Average counts: powers of two 2-512 on TBS2074B, and 4/16/64/128 on TDS2024B/TBS1052B. |
+| `acquisition` | SUPPORTED | SUPPORTED | SUPPORTED | normal/sample, peak, and average on all three; TBS2074 does not support high-resolution. Average counts: powers of two 2-512 on TBS2074, and 4/16/64/128 on TDS2024B/TBS1052B. |
 | `autoscale` | SUPPORTED | SUPPORTED | SUPPORTED | Bare `AUTOSet` only; optional channel-list, acquisition-mode, or channel-selection policy requests remain unsupported. |
-| `sample-rate` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074B has current/maximum sample-rate readbacks. Reciprocal waveform X increment on the B1 models is not a hardware sample-rate readback. |
+| `sample-rate` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 has current/maximum sample-rate readbacks. Reciprocal waveform X increment on the B1 models is not a hardware sample-rate readback. |
 | `acquisition-points`, `record-length` | SUPPORTED | SUPPORTED | SUPPORTED | Query-only acquisition size. TDS2024B/TBS1052B are fixed at 2500 points; no new record-length setter. |
 | `timebase-scale` | SUPPORTED | SUPPORTED | SUPPORTED | Seconds/division read/write. |
-| `timebase-position` | SUPPORTED | SUPPORTED | SUPPORTED | TDS2024B/TBS1052B use native seconds. TBS2074B Delay Mode ON reads/writes delay time directly; with Delay Mode OFF, integer horizontal percent is converted with `duration = record_length / sample_rate` and `seconds = (50 - percent) / 100 * duration`. Setters round the inverse percentage and queries return effective readback seconds. Neither path changes Delay Mode. TBS2000B pp. 113-118. |
+| `timebase-position` | SUPPORTED | SUPPORTED | SUPPORTED | TDS2024B/TBS1052B use native seconds. TBS2074 Delay Mode ON reads/writes delay time directly; with Delay Mode OFF, integer horizontal percent is converted with `duration = record_length / sample_rate` and `seconds = (50 - percent) / 100 * duration`. Setters round the inverse percentage and queries return effective readback seconds. Neither path changes Delay Mode. TBS2000 pp. 113-118. |
 | `timebase-reference` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | No independent left/center/right reference setting/readback; horizontal percentage changes position instead. |
 | `channel-display`, `channel-scale`, `channel-coupling` | SUPPORTED | SUPPORTED | SUPPORTED | Analog channels; public coupling subset remains AC/DC. Tek display changes can restart acquisition. |
-| `channel-offset` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074B uses native volts. TDS2024B/TBS1052B convert public center voltage as `-POSITION * SCALE`; setting volts writes `POSITION = -volts / SCALE`. Later scale changes need not preserve volts. B1 p. 2-55. |
-| `channel-probe` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074B derives attenuation from probe gain with probe-dependent limits. B1 ratios are 1, 10, 20, 50, 100, 500, 1000. |
+| `channel-offset` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074 uses native volts. TDS2024B/TBS1052B convert public center voltage as `-POSITION * SCALE`; setting volts writes `POSITION = -volts / SCALE`. Later scale changes need not preserve volts. B1 p. 2-55. |
+| `channel-probe` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074 derives attenuation from probe gain with probe-dependent limits. B1 ratios are 1, 10, 20, 50, 100, 500, 1000. |
 | `channel-bandwidth-limit`, `channel-invert` | SUPPORTED | SUPPORTED | SUPPORTED | Bandwidth means the documented 20 MHz limiter, not a numeric bandwidth setting; invert is native on all three. |
-| `channel-label`, `channel-probe-skew` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074B label limit is 30 characters; probe skew uses the public -100 to +100 ns subset. B1 models lack writable labels/deskew. |
-| `channel-units` | SUPPORTED | SUPPORTED | SUPPORTED | Public volts/amps map to V/A. TBS2074B units are admitted only on CH1/CH2; CH3/CH4 remain excluded. B1 units apply to all model analog channels. |
+| `channel-label`, `channel-probe-skew` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 label limit is 30 characters; probe skew uses the public -100 to +100 ns subset. B1 models lack writable labels/deskew. |
+| `channel-units` | SUPPORTED | SUPPORTED | SUPPORTED | Public volts/amps map to V/A. TBS2074 units are admitted only on CH1/CH2; CH3/CH4 remain excluded. B1 units apply to all model analog channels. |
 | `channel-range` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Volts/division and trace position do not establish the public full-scale acquisition-range semantic. |
 | `channel-impedance`, `channel-vernier` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Fixed impedance is not a selectable setting/readback, and no fine-scale enable contract is available. |
 | `channel-summary` | PARTIAL AGGREGATE | PARTIAL AGGREGATE | PARTIAL AGGREGATE | Projection is defined below; unavailable fields do not authorize unsupported atomic queries. |
 
 ### Display, cursors, Math, and measurements
 
-| Existing operation | TBS2074B | TDS2024B | TBS1052B | Boundary |
+| Existing operation | TBS2074 | TDS2024B | TBS1052B | Boundary |
 | --- | --- | --- | --- | --- |
-| `display-persistence` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074B supports minimum/off, infinite, and finite 0.1-60 s. B1 models support off, infinite, and exactly 1/2/5 s. No AUTO mode is added. |
+| `display-persistence` | UNSUPPORTED | SUPPORTED | SUPPORTED | B1 models support off, infinite, and exactly 1/2/5 s. No AUTO mode is added. |
 | `display-vectors` | UNSUPPORTED | SUPPORTED | SUPPORTED | B1 models can enable/query vectors; the existing setter does not add dots/OFF. |
 | `display-label`, `display-clear`, `display-intensity` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | No matching global-label visibility, waveform-display clear, or waveform-intensity contract. |
 | `cursor-off` (`cursor` off action) | SUPPORTED | SUPPORTED | SUPPORTED | Uses cursor function OFF; does not disable the educator-controlled cursor feature. |
 | `cursor-query` (`cursor` query action) | PARTIAL AGGREGATE | PARTIAL AGGREGATE | PARTIAL AGGREGATE | Only axes with established active mode and physical seconds/volts are projected; details below. |
-| `cursor-set` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074B uses selected-waveform TIME/AMPLitude/SCREEN semantics and may reset acquisition when selection/display changes. B1 models use independent source selection with X-only VBARS or Y-only HBARS. X auto-timebase is supported; auto-vertical is unsupported on all three. |
+| `cursor-set` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074 exposes the five first-generation cursor functions and may reset acquisition when the selected-waveform selection or display changes. B1 models use independent source selection with X-only VBARS or Y-only HBARS. X auto-timebase is supported; auto-vertical is unsupported on all three. Cursor details are below. |
 | `math-display`, `math-operator`, `query_math_operation` | SUPPORTED | SUPPORTED | SUPPORTED | Function 1 only. Exact admitted expressions are listed below; no divide or extra functions. |
 | `math-vertical` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Tek scale plus position does not supply the required scale/full-range/voltage-offset contract. |
 | `fft` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Required frequency center/full-span semantics are not established; assumed display divisions must not be used to synthesize Hz values. |
 | `math-transform`, `math-filter`, `math-visualization`, `math-composite-source`, `math-clear` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | No equivalent public transform/filter/cascade/visualization or accumulator-clear semantics. TBS1052B Trend Plot is not Math trend. |
 | `measure`, `measure-sweep` | SUPPORTED | SUPPORTED | SUPPORTED | Single-source immediate items use the model-specific subset below. Immediate TYPE/SOURCE state is restored even after query failure; pair/parameterized items remain unsupported. |
-| `measure-install` | SUPPORTED | SUPPORTED | SUPPORTED | Periodic measurement slots: 6 on TBS2074B, 5 on TDS2024B, 6 on TBS1052B. Reuse a matching or unused slot; a full bank must not silently replace another measurement. |
+| `measure-install` | SUPPORTED | SUPPORTED | SUPPORTED | Periodic measurement slots: 6 on TBS2074, 5 on TDS2024B, 6 on TBS1052B. Reuse a matching or unused slot; a full bank must not silently replace another measurement. |
 | `measure-clear` | SUPPORTED | SUPPORTED | SUPPORTED | Clears installed periodic measurements using the native per-slot mechanism; not snapshot/acquisition-data clear. |
 | `measure-results` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Existing contract requires one native results response and its raw provenance. Multiple TYPE/SOURCE/UNITS/VALUE queries must not be concatenated into a synthetic results dump. |
 | `measure-source`, `measure-menu`, `measure-show`, `measure-window`, `measurement-statistics`, `measure-stats` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Immediate/per-slot source is not a global default; Tek gating is not MAIN/ZOOM/AUTO/GATE; aggregate examples do not establish public statistics or marker-visibility controls. |
 | `annotation`, `annotation-on`, `annotation-off`, `annotation-set`, `annotation-clear`, `annotation-query` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Channel labels do not provide annotation-slot text/color/background/position/enable semantics. |
 
-For `math-operator`, TBS2074B admits exactly CH1+CH2, CH1-CH2, CH2-CH1,
+For `math-operator`, TBS2074 admits exactly CH1+CH2, CH1-CH2, CH2-CH1,
 and CH1*CH2. TDS2024B additionally admits the documented CH3/CH4 pair forms
 CH3+CH4, CH3-CH4, CH4-CH3, and CH3*CH4. TBS1052B is limited to CH1/CH2.
 Readback is parsed into existing operation/source fields while preserving source
 order. Arbitrary cross-pairs, self-pairs, cascade sources, divide, and unlisted
-reverse orders are unsupported. The TBS2000B manual mentions CH3/CH4 but does
+reverse orders are unsupported. The TBS2000 manual mentions CH3/CH4 but does
 not list their expressions, so none are inferred.
 
 The admitted single-source measurement items are:
 
-| Existing item group | TBS2074B | TDS2024B | TBS1052B | Native mapping / restriction |
+| Existing item group | TBS2074 | TDS2024B | TBS1052B | Native mapping / restriction |
 | --- | --- | --- | --- | --- |
 | vpp, frequency, period, minimum, maximum, rise_time, fall_time, positive_width, negative_width | SUPPORTED | SUPPORTED | SUPPORTED | PK2Pk, FREQuency, PERIod, MINImum, MAXimum, RISe, FALL, PWIdth, NWIdth. |
 | vavg | SUPPORTED | SUPPORTED | SUPPORTED | MEAN; whole-waveform arithmetic mean, not CMEAN. |
@@ -213,43 +213,43 @@ installation does not enable native result dumps or a global measurement source.
 
 ### Trigger operations
 
-| Existing operation | TBS2074B | TDS2024B | TBS1052B | Boundary |
+| Existing operation | TBS2074 | TDS2024B | TBS1052B | Boundary |
 | --- | --- | --- | --- | --- |
-| `trigger-mode` | SUPPORTED | SUPPORTED | SUPPORTED | This is trigger type, not sweep. TBS2074B admits edge/glitch/runt; B1 models admit edge/glitch/tv. Type selection alone does not imply a full configuration operation. |
+| `trigger-mode` | SUPPORTED | SUPPORTED | SUPPORTED | This is trigger type, not sweep. TBS2074 admits edge/glitch/runt; B1 models admit edge/glitch/tv. Type selection alone does not imply a full configuration operation. |
 | `trigger-sweep` | SUPPORTED | SUPPORTED | SUPPORTED | auto/normal only. |
-| `trigger-edge-source` | SUPPORTED | SUPPORTED | SUPPORTED | Analog channels and line on all three; B1 models also admit external. TBS2074B AUX is not assumed equivalent to public external. |
+| `trigger-edge-source` | SUPPORTED | SUPPORTED | SUPPORTED | Analog channels and line on all three; B1 models also admit external. TBS2074 AUX is not assumed equivalent to public external. |
 | `trigger-edge-slope` | SUPPORTED | SUPPORTED | SUPPORTED | positive/negative only; no either/alternate. |
-| `trigger-edge-coupling` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074B: dc/lf-reject. B1 models: ac/dc/lf-reject. HF/noise rejection does not create extra public coupling values. |
+| `trigger-edge-coupling` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074: dc/lf-reject. B1 models: ac/dc/lf-reject. HF/noise rejection does not create extra public coupling values. |
 | `trigger-edge` | SUPPORTED | SUPPORTED | SUPPORTED | Combined analog source/level/slope only, positive/negative. B1 combined configuration may select the source before MAIN:LEVEL. Line/external are excluded from this combined contract. |
-| `trigger-edge-level` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074B has channel-qualified level access. B1 MAIN:LEVEL is selected-source state and cannot satisfy the standalone named-channel operation without source mutation. |
-| `trigger-holdoff` | SUPPORTED | SUPPORTED | SUPPORTED | Public intersection is 40 ns-8 s on TBS2074B and 500 ns-10 s on B1 models. |
+| `trigger-edge-level` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 has channel-qualified level access. B1 MAIN:LEVEL is selected-source state and cannot satisfy the standalone named-channel operation without source mutation. |
+| `trigger-holdoff` | SUPPORTED | SUPPORTED | SUPPORTED | Public intersection is 40 ns-8 s on TBS2074 and 500 ns-10 s on B1 models. |
 | `trigger-pulse-width` | SUPPORTED | SUPPORTED | SUPPORTED | Analog positive/negative, less-than/greater-than only. Only the active threshold is supplied; inactive/range thresholds are null and min+max/range requests are rejected before writes. |
-| `trigger-runt` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074B CH1-CH2 only, positive/negative, occurs/less-than/greater-than. No either or undocumented CH3/CH4. |
+| `trigger-runt` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 CH1-CH2 only, positive/negative, occurs/less-than/greater-than. No either or undocumented CH3/CH4. |
 | `trigger-tv` | UNSUPPORTED | SUPPORTED | SUPPORTED | B1 models: NTSC/PAL, analog source, positive/negative polarity, field1/field2/all-fields/all-lines. Line-field variants and SECAM/other standards remain unsupported. |
 | `trigger-noise-reject`, `trigger-hf-reject`, `trigger-edge-reject` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | A single mutually exclusive Tek coupling selector cannot supply independent rejection controls/readbacks. |
 | `external-trigger-range`, `external-trigger-probe`, `external-trigger-units`, `trigger-edge-external-level`, `external-trigger-settings` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Source selection or selected-source level does not establish independent external range/probe/units/level semantics, and there is no useful aggregate projection. |
 | `trigger-transition`, `trigger-delay`, `trigger-setup-hold`, `trigger-edge-burst`, `trigger-pattern`, `trigger-or` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | No matching public thresholds/timing/count/pattern/readback contracts. Horizontal delay is not event-delay triggering. |
 
-For TBS2074B runt, the admitted spellings come from the documented
+For TBS2074 runt, the admitted spellings come from the documented
 `TRIGger:A:RUNT:*` command entries. Conflicting examples do not introduce
 `PULSE:RUNT`, new values, or a wider numeric range.
 
 ### Waveforms, screenshots, reference memory, and storage
 
-| Existing operation | TBS2074B | TDS2024B | TBS1052B | Boundary |
+| Existing operation | TBS2074 | TDS2024B | TBS1052B | Boundary |
 | --- | --- | --- | --- | --- |
 | `capture` | SUPPORTED | SUPPORTED | SUPPORTED | BYTE only, displayed analog channels, safe maximum 1000 requested points. Hidden channels fail without display mutation. Multi-channel capture uses successive transfers; `all` includes hidden channels and fails rather than filtering. No WORD, acquisition reconfiguration, or resampling. |
-| `screenshot` explicit BMP host artifact | UNSUPPORTED | SUPPORTED | UNSUPPORTED | TDS2024B uses native `HARDCopy START` over USBTMC with BMP bytes and `.bmp` host artifact semantics. TBS2074B uses a separate native PNG path. TBS1052B BMP applicability remains ambiguous and unsupported. |
-| `capture_screenshot_png`; CLI default/explicit PNG | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074B temporarily saves native PNG, waits for OPC, reads the file, validates PNG, and attempts cleanup. Requires writable instrument storage. Black is the only supported background. |
+| `screenshot` explicit BMP host artifact | UNSUPPORTED | SUPPORTED | UNSUPPORTED | TDS2024B uses native `HARDCopy START` over USBTMC with BMP bytes and `.bmp` host artifact semantics. TBS2074 uses a separate native PNG path. TBS1052B BMP applicability remains ambiguous and unsupported. |
+| `capture_screenshot_png`; CLI default/explicit PNG | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 temporarily saves native PNG, waits for OPC, reads the file, validates PNG, and attempts cleanup. Requires writable instrument storage. Black is the only supported background. |
 | `screenshot --query-hardcopy`; `query_hardcopy_state` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Required hardcopy area/ink-saver/palette/layout/format readbacks are not all available. |
 | `reference-save`, `reference-display`, `reference-query` | SUPPORTED | SUPPORTED | SUPPORTED | Two slots only. Save has OPC completion; query returns actual display state while label/raw_label remain null because Tek lacks matching label readback. |
 | `reference-label`, `reference-clear` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | No writable reference label or explicit memory-clear action; hiding is not clearing. |
 | `save-pwd` | SUPPORTED | SUPPORTED | SUPPORTED | Native filesystem current-directory set/query, subject to public and model filesystem validation. |
 | `save-image` | SUPPORTED | SUPPORTED | SUPPORTED | Instrument-side file action, no host artifact; completion requires successful OPC with the existing temporary 15-second timeout restored in `finally`. The current instrument encoding does not add a public format enum. |
-| `save-image-format` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074B PNG/BMP setter and matching readback. B1 `SAVE:IMAGE:FILEFORMAT` has no established matching query; `HARDCopy:FORMat?` reads a different setting and cannot be substituted. |
-| `save-image-ink-saver` | UNSUPPORTED | SUPPORTED | SUPPORTED | B1 `HARDCopy:INKSaver` controls saved images. TBS2074B has no equivalent background/ink-saver control. |
+| `save-image-format` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 PNG/BMP setter and matching readback. B1 `SAVE:IMAGE:FILEFORMAT` has no established matching query; `HARDCopy:FORMat?` reads a different setting and cannot be substituted. |
+| `save-image-ink-saver` | UNSUPPORTED | SUPPORTED | SUPPORTED | B1 `HARDCopy:INKSaver` controls saved images. TBS2074 has no equivalent background/ink-saver control. |
 | `save-image-palette`, `save-image-factors`, `save-filename` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | No independent matching state/readback. |
-| `save-waveform-format` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074B public subset is CSV/SPREADSheet with readback. B1 CSV export has no independent format setter/readback. |
+| `save-waveform-format` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 public subset is CSV/SPREADSheet with readback. B1 CSV export has no independent format setter/readback. |
 | `save-waveform` | SUPPORTED | SUPPORTED | SUPPORTED | Tek requires the existing optional `source_channel`, bounded to model analog channels, then OPC completion with the temporary 15-second timeout restored. |
 | `save-waveform-length`, `save-waveform-length-max` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Record length and transfer start/stop are not export point-count/max-length settings. |
 | `setup-save`, `setup-recall` | SUPPORTED | SUPPORTED | SUPPORTED | Slots 1-9 only. File targets remain unsupported; Tek setup-file formats do not satisfy the existing `.scp` contract. |
@@ -261,7 +261,7 @@ settings are
 restored even after failure. Explicit landscape/portrait and ink-saver controls
 map only to documented B1 controls; no palette is invented.
 
-TBS2074B PNG capture uses an instrument temporary filename that obeys TBS2000B
+TBS2074 PNG capture uses an instrument temporary filename that obeys TBS2000
 8.3 rules, reads the native file through VISA end-of-message, restores image
 format and the temporary 10-second timeout in `finally`, and attempts temporary
 file deletion. It does not change working directory or acquisition state.
@@ -273,7 +273,7 @@ authorize WORD capture or requested 5000/10000-point capture.
 Aggregates skip unsupported atomic queries and never mutate source/display,
 measurement slots, trigger mode, or cursor units merely to discover support.
 
-| Aggregate | TBS2074B projection | TDS2024B projection | TBS1052B projection |
+| Aggregate | TBS2074 projection | TDS2024B projection | TBS1052B projection |
 | --- | --- | --- | --- |
 | `channel-summary` | display, scale, offset, coupling, probe ratio, bandwidth limit, invert, label, probe skew; V/A units on CH1/CH2. Range, impedance, vernier and CH3/CH4 units unavailable. | display, scale, offset, coupling, probe ratio, bandwidth limit, invert, units. Label, probe skew, range, impedance and vernier unavailable. | Same as TDS2024B, CH1/CH2 only. |
 | `live-data-snapshot` / `query_instrument_summary` | Channel display/scale/offset, CH1/CH2 units, timebase scale/position using the Delay-Mode conversion above, trigger type/sweep, edge source/slope, channel-qualified level and established source units. | Channel display/scale/offset/units, timebase scale/position, trigger type/sweep/source/slope. Current analog edge-source MAIN:LEVEL is valid snapshot data even though standalone named-channel level is unsupported. | Same as TDS2024B, bounded to two channels. |
@@ -287,17 +287,28 @@ separate `ACQuire:MODe` readback. Unknown fields fall back independently; line
 or external source-channel/units/analog-level fields remain unavailable rather
 than receiving artificial values.
 
-Cursor OFF projects null positions/deltas/dydx. TBS2074B X-only, Y-only, and
-combined X/Y setters use the selected/displayed waveform semantics; source
-selection can enable display and reset acquisition and is intentionally not
-restored because that would retarget the cursors. Single-axis sets use
-independent tracking. Physical-volts Y validation on CH3/CH4 temporarily uses
-the waveform transfer source only to verify units and restores that transfer
-source in `finally`. B1 setters are X-only time or Y-only physical-volts;
-mixed-axis writes and auto-vertical remain unsupported. All returned positions
-are actual readbacks rather than echoed input. The source/unit rules retain
-manual evidence from TBS2000B pp. 64, 67-73, 77, 161, 191-201 and B1
-pp. 2-61-2-68.
+Cursor OFF projects null positions/deltas/dydx. TBS2074 selects its cursor
+function through `CURSor:FUNCtion` using the five first-generation values:
+`OFF`, `SCREEN`, `WAVEform`, `VBArs`, and `HBArs`. The operator may request a
+function explicitly; without an explicit request the requested axes keep the
+previous mapping, where X only uses VBArs, Y only uses HBArs, and X plus Y uses
+SCREEN. `OFF` and `WAVEform` only switch the function and require no source
+channel and no positions; `WAVEform` has no position setter in this surface.
+`VBArs` accepts only X positions and `HBArs` only Y positions; every other
+combination is rejected before any instrument write. `CURSor:FUNCtion?` must
+answer with one of the five values; the TBS2000B-only `TIME` and `AMPLitude`
+answers are rejected rather than normalized. `SCREEN` and `WAVEform` are distinct
+modes and neither is substituted for the other.
+
+TBS2074 setters use the selected/displayed waveform semantics; source selection
+can enable display and reset acquisition and is intentionally not restored
+because that would retarget the cursors. Physical-volts Y validation on CH3/CH4
+temporarily uses the waveform transfer source only to verify units and restores
+that transfer source in `finally`. B1 setters are X-only time or Y-only
+physical-volts; mixed-axis writes and auto-vertical remain unsupported. All
+returned positions are actual readbacks rather than echoed input. The
+source/unit rules retain manual evidence from TBS2000 pp. 64, 67-73, 77, 161,
+191-201 and B1 pp. 2-61-2-68.
 
 `measure-results` is intentionally excluded from nullable projections.
 `MEASUrement?` and per-slot aggregate queries describe settings, not the one
@@ -308,7 +319,7 @@ not become partial aggregates merely because a surrounding result allows nulls.
 
 ### System, diagnostics, workflows, and host functions
 
-| Existing operation | TBS2074B | TDS2024B | TBS1052B | Boundary |
+| Existing operation | TBS2074 | TDS2024B | TBS1052B | Boundary |
 | --- | --- | --- | --- | --- |
 | `live-data-snapshot` | PARTIAL AGGREGATE | PARTIAL AGGREGATE | PARTIAL AGGREGATE | Projection above. |
 | `system-information-snapshot` | SUPPORTED | PARTIAL AGGREGATE | PARTIAL AGGREGATE | Acquisition-readout projection above. |
@@ -322,7 +333,7 @@ not become partial aggregates merely because a surrounding result allows nulls.
 | `capture-batch`, `capture-until`, `capture-monitor` | SUPPORTED | SUPPORTED | SUPPORTED | BYTE/1000-point analog subset with native status checkpoints and bounded host workflow behavior. |
 | `measure-log`, `measure-until` | SUPPORTED | SUPPORTED | SUPPORTED | Model-specific single-source immediate subset with TYPE/SOURCE restoration and native status checkpoints. |
 | `triggered-measure-loop`, `triggered-capture-series` | SUPPORTED | SUPPORTED | SUPPORTED | Exactly one single acquisition per iteration, then wait on the current completion without rearming. |
-| `sequence` | SUPPORTED | SUPPORTED | SUPPORTED | wait, single, wait-trigger, measure, capture and cleanup on all three; screenshot only on TBS2074B and only PNG/black. All steps/options are validated before writes. |
+| `sequence` | SUPPORTED | SUPPORTED | SUPPORTED | wait, single, wait-trigger, measure, capture and cleanup on all three; screenshot only on TBS2074 and only PNG/black. All steps/options are validated before writes. |
 | `list-resources`, `capabilities`, `manifest`, `hardware-report` | SUPPORTED | SUPPORTED | SUPPORTED | Host VISA enumeration/profile/report operations; offline report rendering and simulation are not hardware proof. |
 | `worker`, `status`, `wait-ready`, `send-command`, `stop` | SUPPORTED | SUPPORTED | SUPPORTED | Existing lifecycle/admission rules apply. `send-command` is not arbitrary SCPI; worker stop and acquisition stop remain distinct. |
 
@@ -333,7 +344,7 @@ the workflow rows. Dry-run and simulator output do not establish live support.
 
 ### Other unsupported feature families
 
-These existing families are UNSUPPORTED on TBS2074B, TDS2024B, and TBS1052B.
+These existing families are UNSUPPORTED on TBS2074, TDS2024B, and TBS1052B.
 Query-shaped APIs are not partial aggregates when no feature-specific
 settings/results exist.
 
@@ -374,7 +385,7 @@ Workflow checkpoints first read `DESE?` and require error bits 2-5 to be
 enabled. They then consume one `*ESR?` followed by `ALLEv?` before any later
 SESR read. They do not modify DESE, ESE, or SRE. This ordering follows the
 documented destructive SESR/event cohort: a later SESR read can discard unread
-events from the preceding cohort. See TBS2000B pp. 206-209 and B1 chapter 3.
+events from the preceding cohort. See TBS2000 pp. 206-209 and B1 chapter 3.
 
 Workflow results keep `system_error: null` and expose `post_command_status` with
 source `tektronix-sesr`, raw SESR/event responses, decoded events/categories,
@@ -409,21 +420,21 @@ support incorrectly:
   `HARDCopy:FORMat?` is not treated as a readback of
   `SAVE:IMAGE:FILEFORMAT`; format-independent `save-image` and documented
   ink-saver control remain separate support decisions.
-- TBS2000B manual p. 64 restricts `CH<x>:YUNit` to CH1/CH2. The Math section
+- TBS2000 manual p. 64 restricts `CH<x>:YUNit` to CH1/CH2. The Math section
   mentions CH3/CH4 but lists only CH1/CH2 expressions; missing subsets are not
   inferred.
-- TBS2000B FFT documentation does not establish the full-span conversion or
+- TBS2000 FFT documentation does not establish the full-span conversion or
   frequency reference needed by the public atomic result (pp. 93-97).
-- TBS2000B cursor documentation refers to a source without a corresponding
+- TBS2000 cursor documentation refers to a source without a corresponding
   command entry. The selected-waveform adapter therefore uses documented
   `SELect:CONTROl` semantics, including selection/display/acquisition effects
   (pp. 67-73, 161).
-- Some TBS2000B trigger examples contradict the command syntax. Only
+- Some TBS2000 trigger examples contradict the command syntax. Only
   independently documented trigger controls and the explicit runt subset are
   admitted (pp. 172, 174, 177-180); pulse-width exposes only its selected
   less-than/greater-than threshold, not retained independent thresholds or
   range.
-- TBS2000B measurement aggregate examples show statistics/indicator fields
+- TBS2000 measurement aggregate examples show statistics/indicator fields
   without defined matching controls. They do not establish the public
   measurement-statistics or marker-visibility features.
 

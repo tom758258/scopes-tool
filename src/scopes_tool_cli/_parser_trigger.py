@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from scopes_tool_core.cursor import CURSOR_FUNCTIONS
 from scopes_tool_core.trigger import TRIGGER_MODES
 
 from ._parser_common import (
@@ -699,6 +700,13 @@ def _register_trigger_parsers(subparsers) -> None:
     cursor_parser.add_argument("--x2", type=_measurement_finite_float, default=None)
     cursor_parser.add_argument("--y1", type=_measurement_finite_float, default=None)
     cursor_parser.add_argument("--y2", type=_measurement_finite_float, default=None)
+    cursor_parser.add_argument(
+        "--function",
+        dest="cursor_function",
+        choices=CURSOR_FUNCTIONS,
+        default=None,
+        help="select the cursor function explicitly; the model decides the default from the requested axes",
+    )
     cursor_parser.add_argument(
         "--auto-timebase",
         action="store_true",

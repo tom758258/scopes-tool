@@ -133,7 +133,7 @@ def test_one_shot_identify_rejects_unknown_tek_model(monkeypatch, capsys):
 
 def test_tek_simulator_uses_tek_driver_and_status_path(monkeypatch, capsys):
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda *args, **kwargs: pytest.fail("opened")))
-    assert cli.main(["run", "--simulate", "--model", "tektronix-tbs2074b", "--json"]) == 0
+    assert cli.main(["run", "--simulate", "--model", "tektronix-tbs2074", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert runtime._backend_history() == ["ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON", "*ESR?"]
     assert payload["backend"] == "Tektronix simulator"
@@ -143,14 +143,14 @@ def test_tek_simulator_uses_tek_driver_and_status_path(monkeypatch, capsys):
 
 
 def test_tek_simulator_unsupported_command_fails_without_business_scpi(capsys):
-    assert cli.main(["measure-results", "--simulate", "--model", "tektronix-tbs2074b"]) == 1
+    assert cli.main(["measure-results", "--simulate", "--model", "tektronix-tbs2074"]) == 1
     assert runtime._backend_history() == ["*IDN?"]
     assert "unsupported" in capsys.readouterr().err.lower()
 
 
 def test_tek_live_run_uses_esr_without_system_error_queue(monkeypatch, capsys):
     backend = FakeBackend(responses={
-        "*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0",
+        "*IDN?": "TEKTRONIX,TBS2074,SN1,1.0",
         "*ESR?": "0", "*OPC?": "1",
     })
     monkeypatch.setattr(
@@ -168,7 +168,7 @@ def test_tek_live_run_uses_esr_without_system_error_queue(monkeypatch, capsys):
 
 def test_tek_esr_error_is_structured_without_system_error_queue(monkeypatch, capsys):
     backend = FakeBackend(responses={
-        "*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0",
+        "*IDN?": "TEKTRONIX,TBS2074,SN1,1.0",
         "*ESR?": "8",
     })
     monkeypatch.setattr(
@@ -203,7 +203,7 @@ def test_tek_explicit_standard_event_reads_esr_once(monkeypatch, capsys):
 
 
 def test_tek_invalid_average_count_does_not_change_mode(monkeypatch, capsys):
-    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0"})
+    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074,SN1,1.0"})
     monkeypatch.setattr(
         runtime.Oscilloscope,
         "open",
@@ -225,7 +225,7 @@ def test_tek_invalid_average_count_does_not_change_mode(monkeypatch, capsys):
 ])
 def test_tek_live_metadata_matches_sent_business_commands(monkeypatch, capsys, command, args, expected):
     backend = FakeBackend(responses={
-        "*IDN?": "TEKTRONIX,TBS2074B,SN1,1.0",
+        "*IDN?": "TEKTRONIX,TBS2074,SN1,1.0",
         "*ESR?": "0", "*OPC?": "1",
     })
     monkeypatch.setattr(
@@ -265,7 +265,7 @@ def test_tds2000b_display_vectors_metadata_matches_sent_command(monkeypatch, cap
 
 
 def test_live_resource_discovery_lists_unregistered_tek_model(monkeypatch, capsys):
-    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074,FAKE_SERIAL,FW1"})
+    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2072,FAKE_SERIAL,FW1"})
     monkeypatch.setattr(
         cli, "list_visa_resources",
         lambda visa_library=None: VisaResourceListing(resources=("USB0::FAKE::INSTR",), backend="test"),
@@ -283,9 +283,9 @@ def test_live_resource_discovery_lists_unregistered_tek_model(monkeypatch, capsy
         {
             "resource": "USB0::FAKE::INSTR",
             "idn": {
-                "raw": "TEKTRONIX,TBS2074,FAKE_SERIAL,FW1",
+                "raw": "TEKTRONIX,TBS2072,FAKE_SERIAL,FW1",
                 "vendor": "TEKTRONIX",
-                "model": "TBS2074",
+                "model": "TBS2072",
                 "series": None,
                 "serial": "FAKE_SERIAL",
                 "firmware": "FW1",
@@ -397,7 +397,7 @@ def test_cli_tds_bmp_rejects_other_transports_after_detected_driver(monkeypatch,
 
 @pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
 def test_cli_periodic_measurement_admission(mode, capsys):
-    common = [mode, "--model", "tektronix-tbs2074b", "--json"]
+    common = [mode, "--model", "tektronix-tbs2074", "--json"]
     assert cli.main(["measure-install", "--source-channel", "1", "--item", "vpp", *common]) == 0
     payload = json.loads(capsys.readouterr().out)
     commands = payload["scpi"]["sent" if mode == "--simulate" else "planned"]
@@ -424,13 +424,13 @@ def test_cli_tds2000b_cursor_and_timed_persistence(mode, capsys):
 
 def test_cli_metadata_uses_driver_commands(capsys):
     cases = [
-        ("tbs2074b", ["channel-units", "--channel", "1", "--units", "amp"]),
-        ("tbs2074b", ["math-display", "--function", "1", "--on"]),
-        ("tbs2074b", ["math-operator", "--function", "1", "--operation", "add", "--source1", "channel1", "--source2", "channel2"]),
-        ("tbs2074b", ["trigger-runt", "--query"]),
+        ("tbs2074", ["channel-units", "--channel", "1", "--units", "amp"]),
+        ("tbs2074", ["math-display", "--function", "1", "--on"]),
+        ("tbs2074", ["math-operator", "--function", "1", "--operation", "add", "--source1", "channel1", "--source2", "channel2"]),
+        ("tbs2074", ["trigger-runt", "--query"]),
         ("tds2024b", ["trigger-tv", "--source-channel", "1", "--standard", "pal", "--mode", "all-lines", "--polarity", "negative"]),
-        ("tbs2074b", ["save-image-format", "--format", "bmp"]),
-        ("tbs2074b", ["save-waveform-format", "--format", "csv"]),
+        ("tbs2074", ["save-image-format", "--format", "bmp"]),
+        ("tbs2074", ["save-waveform-format", "--format", "csv"]),
     ]
     for model, args in cases:
         assert cli.main([*args, "--simulate", "--model", "tektronix-" + model, "--json"]) == 0
