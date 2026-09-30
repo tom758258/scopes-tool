@@ -8,6 +8,12 @@ from urllib import request as urlrequest
 import pytest
 
 from scopes_tool_cli import cli, worker
+from scopes_tool_cli._worker_commands_trigger import (
+    _normalize_external_trigger_probe_worker_arguments,
+    _normalize_external_trigger_settings_worker_arguments,
+    _normalize_external_trigger_units_worker_arguments,
+)
+from scopes_tool_cli.worker_commands import arguments_to_argv
 from scopes_tool_core.errors import OscilloscopeError
 
 
@@ -58,12 +64,12 @@ def test_worker_external_trigger_input_commands_accept_canonical_json_and_map_ar
     parsed = worker.parse_domain_command(command, arguments, _runtime())
     assert parsed.command == command
     if command == "external-trigger-probe":
-        normalized = worker._normalize_external_trigger_probe_worker_arguments(command, arguments)
+        normalized = _normalize_external_trigger_probe_worker_arguments(command, arguments)
     elif command == "external-trigger-units":
-        normalized = worker._normalize_external_trigger_units_worker_arguments(command, arguments)
+        normalized = _normalize_external_trigger_units_worker_arguments(command, arguments)
     else:
-        normalized = worker._normalize_external_trigger_settings_worker_arguments(command, arguments)
-    assert worker.arguments_to_argv(normalized) == argv
+        normalized = _normalize_external_trigger_settings_worker_arguments(command, arguments)
+    assert arguments_to_argv(normalized) == argv
 
 
 @pytest.mark.parametrize(

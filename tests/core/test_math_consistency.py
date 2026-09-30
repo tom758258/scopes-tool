@@ -4,7 +4,11 @@ import pytest
 
 from scopes_tool_cli import cli
 from scopes_tool_cli import parser as cli_parser
-from scopes_tool_cli import worker
+from scopes_tool_cli._worker_commands_math import (
+    _MATH_DOMAIN_COMMANDS,
+    _MATH_WORKER_ARGUMENTS,
+)
+from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS, _NON_MATH_DOMAIN_COMMANDS
 from scopes_tool_core.advanced import (
     FFT_OPERATIONS,
     MATH_COMPOSITE_OPERATIONS,
@@ -220,20 +224,20 @@ def test_math_cli_worker_schema_absence_consistency_gate():
     cli_parser._add_scope_connection_args(connection_parser)
     connection_arguments = _long_option_names(connection_parser)
 
-    assert worker._MATH_DOMAIN_COMMANDS == _EXPECTED_MATH_WORKER_COMMANDS
+    assert _MATH_DOMAIN_COMMANDS == _EXPECTED_MATH_WORKER_COMMANDS
     assert (
-        worker._MATH_DOMAIN_COMMANDS
-        == frozenset(worker._MATH_WORKER_ARGUMENTS)
+        _MATH_DOMAIN_COMMANDS
+        == frozenset(_MATH_WORKER_ARGUMENTS)
     )
     assert not {
         command
-        for command in worker._NON_MATH_DOMAIN_COMMANDS
+        for command in _NON_MATH_DOMAIN_COMMANDS
         if command == "fft" or command.startswith("math-")
     }
-    assert worker.DOMAIN_COMMANDS == (
-        worker._NON_MATH_DOMAIN_COMMANDS | worker._MATH_DOMAIN_COMMANDS
+    assert DOMAIN_COMMANDS == (
+        _NON_MATH_DOMAIN_COMMANDS | _MATH_DOMAIN_COMMANDS
     )
-    for command, worker_arguments in worker._MATH_WORKER_ARGUMENTS.items():
+    for command, worker_arguments in _MATH_WORKER_ARGUMENTS.items():
         cli_arguments = (
             _long_option_names(command_parsers[command]) - connection_arguments
         )
@@ -260,7 +264,7 @@ def test_math_cli_worker_schema_absence_consistency_gate():
 
     enabled_names = {
         *command_parsers,
-        *worker.DOMAIN_COMMANDS,
+        *DOMAIN_COMMANDS,
         *FFT_OPERATIONS,
         *MATH_OPERATIONS,
         *MATH_TRANSFORMS,

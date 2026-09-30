@@ -7,11 +7,12 @@ in this package.
 ## Worker adapter ownership
 
 Worker command adaptation is owned by `scopes_tool_cli.worker_commands`. It
-contains the Worker command inventory, Worker request validation, argument
-normalization, Serial trigger namespace adaptation, and conversion into the
-existing CLI namespace. `scopes_tool_cli.worker` remains the compatibility
-entry point for existing Worker callers while owning Worker server/runtime and
-lifecycle behavior.
+contains the Worker command inventory, Worker request validation, and conversion
+into the existing CLI namespace, and delegates per-domain argument
+normalization, including the Serial trigger namespace adaptation, to the private
+`scopes_tool_cli._worker_commands_*` modules. `scopes_tool_cli.worker` remains
+the compatibility entry point for existing Worker callers while owning Worker
+server/runtime and lifecycle behavior.
 
 Worker HTTP client behavior is owned by `scopes_tool_cli.worker_client`. It
 contains the lifecycle client requests, HTTP transport, response validation,

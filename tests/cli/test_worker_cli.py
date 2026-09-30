@@ -15,6 +15,13 @@ import pytest
 
 from scopes_tool_cli import cli, runtime as cli_runtime
 from scopes_tool_cli import worker, worker_client
+from scopes_tool_cli._worker_commands_trigger import (
+    _normalize_trigger_holdoff_worker_arguments,
+)
+from scopes_tool_cli._worker_commands_workflows import (
+    _normalize_segmented_capture_worker_arguments,
+)
+from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS, arguments_to_argv
 from scopes_tool_core.advanced import trigger_holdoff_commands, trigger_holdoff_query
 from scopes_tool_core.acquisition import (
     acquisition_points_query,
@@ -1113,7 +1120,7 @@ def test_worker_parses_domain_arguments_without_opening_backend():
 
 def test_worker_segmented_capture_minimal_request_uses_cli_defaults(tmp_path):
     original = {"channel": 1, "segments": 2}
-    normalized = worker._normalize_segmented_capture_worker_arguments(
+    normalized = _normalize_segmented_capture_worker_arguments(
         "segmented-capture", original, _runtime()
     )
 
@@ -1127,7 +1134,7 @@ def test_worker_segmented_capture_minimal_request_uses_cli_defaults(tmp_path):
         "output_dir": None,
     }
     assert original == {"channel": 1, "segments": 2}
-    assert worker._normalize_segmented_capture_worker_arguments(
+    assert _normalize_segmented_capture_worker_arguments(
         "segmented-capture", normalized, _runtime()
     ) == normalized
 
@@ -1410,10 +1417,10 @@ def test_worker_parse_accepts_trigger_holdoff_arguments(arguments, expected_argv
     parsed = worker.parse_domain_command("trigger-holdoff", arguments, _runtime())
 
     assert parsed.command == "trigger-holdoff"
-    normalized = worker._normalize_trigger_holdoff_worker_arguments(
+    normalized = _normalize_trigger_holdoff_worker_arguments(
         "trigger-holdoff", arguments
     )
-    assert worker.arguments_to_argv(normalized) == expected_argv
+    assert arguments_to_argv(normalized) == expected_argv
 
 
 @pytest.mark.parametrize(
@@ -2638,7 +2645,7 @@ def test_worker_triggered_measure_loop_is_allowlisted_and_uses_caller_output_dir
         "output_dir": str(caller_output),
     }
 
-    assert "triggered-measure-loop" in worker.DOMAIN_COMMANDS
+    assert "triggered-measure-loop" in DOMAIN_COMMANDS
     parsed = worker.parse_domain_command("triggered-measure-loop", arguments, runtime)
 
     assert Path(parsed.output_dir) == caller_output
@@ -2661,7 +2668,7 @@ def test_worker_triggered_capture_series_is_strict_and_uses_caller_output_dir(
         "output_dir": str(caller_output),
     }
 
-    assert "triggered-capture-series" in worker.DOMAIN_COMMANDS
+    assert "triggered-capture-series" in DOMAIN_COMMANDS
     command, normalized, job_id = worker.validate_command_request(
         {
             "schema_version": worker.WORKER_SCHEMA_VERSION,
@@ -2768,7 +2775,7 @@ def test_worker_measure_until_is_strict_and_uses_caller_output_dir(tmp_path):
         "output_dir": str(caller_output),
     }
 
-    assert "measure-until" in worker.DOMAIN_COMMANDS
+    assert "measure-until" in DOMAIN_COMMANDS
     command, normalized, job_id = worker.validate_command_request(
         {
             "schema_version": worker.WORKER_SCHEMA_VERSION,

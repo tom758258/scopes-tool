@@ -1,6 +1,7 @@
 import pytest
 
 from scopes_tool_cli import cli, worker
+from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS
 from scopes_tool_core.errors import OscilloscopeError
 
 
@@ -31,7 +32,7 @@ def _runtime(tmp_path):
 
 @pytest.mark.parametrize("command, arguments", COMMAND_ARGUMENTS.items())
 def test_worker_accepts_canonical_system_status_payloads(tmp_path, command, arguments):
-    assert command in worker.DOMAIN_COMMANDS
+    assert command in DOMAIN_COMMANDS
     accepted = worker.validate_command_request(
         {
             "schema_version": worker.WORKER_SCHEMA_VERSION,

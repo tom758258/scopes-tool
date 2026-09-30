@@ -8,6 +8,10 @@ from urllib import request as urlrequest
 import pytest
 
 from scopes_tool_cli import cli, worker
+from scopes_tool_cli._worker_commands_trigger import (
+    _normalize_trigger_edge_source_worker_arguments,
+)
+from scopes_tool_cli.worker_commands import arguments_to_argv
 from scopes_tool_core.errors import OscilloscopeError
 
 
@@ -73,8 +77,8 @@ def test_worker_trigger_edge_source_accepts_canonical_json_and_maps_argv(tmp_pat
 
     assert job_id is None
     assert parsed.command == "trigger-edge-source"
-    assert worker.arguments_to_argv(
-        worker._normalize_trigger_edge_source_worker_arguments(command, accepted, runtime)
+    assert arguments_to_argv(
+        _normalize_trigger_edge_source_worker_arguments(command, accepted, runtime)
     ) == expected
 
 

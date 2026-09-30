@@ -1,6 +1,6 @@
 # Monorepo Layout
 
-Last updated: 2026-06-10
+Last updated: 2026-09-30
 
 ```text
 .
@@ -45,7 +45,10 @@ to be absent. Do not move a document into an ignored path to satisfy a test.
 Within `src/scopes_tool_cli/`, Worker ownership is split by responsibility:
 `worker.py` owns the Worker server, runtime, queue, job, lifecycle, and artifact
 execution path; `worker_commands.py` owns the Worker command inventory,
-request validation, argument normalization, and CLI namespace adaptation; and
-`worker_client.py` owns the Worker HTTP client requests, response handling,
-output, and client exit-code mapping. The command and client modules remain
-CLI adapters and do not introduce new Core or Worker protocol abstractions.
+request validation, and CLI namespace adaptation, and delegates per-domain
+argument normalization to the private `_worker_commands_workflows.py`,
+`_worker_commands_trigger.py`, `_worker_commands_serial_search.py`, and
+`_worker_commands_math.py` modules; and `worker_client.py` owns the Worker HTTP
+client requests, response handling, output, and client exit-code mapping. The
+command and client modules remain CLI adapters and do not introduce new Core or
+Worker protocol abstractions.

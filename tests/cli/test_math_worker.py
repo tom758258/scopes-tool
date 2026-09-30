@@ -1,6 +1,7 @@
 import pytest
 
 from scopes_tool_cli import worker
+from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS
 from scopes_tool_core.errors import OscilloscopeError
 
 
@@ -70,7 +71,7 @@ def test_worker_rejects_unsupported_fft_before_enqueue(tmp_path):
 
 
 def test_worker_accepts_math_display_request(tmp_path):
-    assert "math-display" in worker.DOMAIN_COMMANDS
+    assert "math-display" in DOMAIN_COMMANDS
 
     parsed = worker.parse_domain_command(
         "math-display",
@@ -84,7 +85,7 @@ def test_worker_accepts_math_display_request(tmp_path):
 
 
 def test_worker_accepts_math_vertical_request(tmp_path):
-    assert "math-vertical" in worker.DOMAIN_COMMANDS
+    assert "math-vertical" in DOMAIN_COMMANDS
 
     parsed = worker.parse_domain_command(
         "math-vertical",
@@ -131,7 +132,7 @@ def test_worker_rejects_oversized_math_vertical_value_before_enqueue(tmp_path):
 
 
 def test_worker_accepts_math_operator_configure_and_query(tmp_path):
-    assert "math-operator" in worker.DOMAIN_COMMANDS
+    assert "math-operator" in DOMAIN_COMMANDS
     runtime = _runtime(tmp_path)
 
     configured = worker.parse_domain_command(
@@ -202,7 +203,7 @@ def test_worker_rejects_math_operator_cascade_before_enqueue(tmp_path):
 
 
 def test_worker_accepts_math_transform_configure_and_query(tmp_path):
-    assert "math-transform" in worker.DOMAIN_COMMANDS
+    assert "math-transform" in DOMAIN_COMMANDS
     runtime = _runtime(tmp_path)
 
     configured = worker.parse_domain_command(
@@ -255,7 +256,7 @@ def test_worker_rejects_math_transform_irrelevant_parameter_before_enqueue(
 
 
 def test_worker_accepts_math_composite_source_configure_and_query(tmp_path):
-    assert "math-composite-source" in worker.DOMAIN_COMMANDS
+    assert "math-composite-source" in DOMAIN_COMMANDS
     runtime = _runtime(tmp_path, "keysight-dsox2004a")
 
     configured = worker.parse_domain_command(
@@ -301,7 +302,7 @@ def test_worker_rejects_invalid_math_composite_source_before_enqueue(tmp_path):
 
 
 def test_worker_accepts_math_filter_and_clear_requests(tmp_path):
-    assert {"math-filter", "math-clear"} <= worker.DOMAIN_COMMANDS
+    assert {"math-filter", "math-clear"} <= DOMAIN_COMMANDS
     runtime = _runtime(tmp_path)
 
     configured = worker.parse_domain_command(
@@ -358,7 +359,7 @@ def test_worker_rejects_irrelevant_math_filter_parameter_before_enqueue(
 
 
 def test_worker_accepts_math_visualization_configure_and_query(tmp_path):
-    assert "math-visualization" in worker.DOMAIN_COMMANDS
+    assert "math-visualization" in DOMAIN_COMMANDS
     runtime = _runtime(tmp_path)
 
     configured = worker.parse_domain_command(

@@ -1,6 +1,7 @@
 import pytest
 
 from scopes_tool_cli import cli, worker
+from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS
 from scopes_tool_core.errors import OscilloscopeError
 
 
@@ -25,7 +26,7 @@ def _runtime(tmp_path, model="keysight-dsox4034a"):
     ],
 )
 def test_worker_search_accepts_canonical_payloads(tmp_path, command, arguments):
-    assert command in worker.DOMAIN_COMMANDS
+    assert command in DOMAIN_COMMANDS
     parsed = worker.parse_domain_command(command, arguments, _runtime(tmp_path))
     assert parsed.command == command
 
@@ -130,7 +131,7 @@ def test_worker_search_event_acceptance_and_rejection(tmp_path):
     ],
 )
 def test_worker_serial_search_accepts_canonical_payloads(tmp_path, command, arguments):
-    assert command in worker.DOMAIN_COMMANDS
+    assert command in DOMAIN_COMMANDS
     parsed = worker.parse_domain_command(command, arguments, _runtime(tmp_path))
     assert parsed.command == command
     assert parsed.bus == 1

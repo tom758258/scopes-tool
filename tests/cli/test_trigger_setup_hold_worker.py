@@ -1,6 +1,10 @@
 import pytest
 
 from scopes_tool_cli import cli, worker
+from scopes_tool_cli._worker_commands_trigger import (
+    _normalize_trigger_setup_hold_worker_arguments,
+)
+from scopes_tool_cli.worker_commands import arguments_to_argv
 from scopes_tool_core.errors import OscilloscopeError
 
 
@@ -63,8 +67,8 @@ def test_worker_trigger_setup_hold_arguments_parse(tmp_path, arguments, expected
     parsed = worker.parse_domain_command("trigger-setup-hold", arguments, runtime)
 
     assert parsed.command == "trigger-setup-hold"
-    assert worker.arguments_to_argv(
-        worker._normalize_trigger_setup_hold_worker_arguments(
+    assert arguments_to_argv(
+        _normalize_trigger_setup_hold_worker_arguments(
             "trigger-setup-hold", arguments
         )
     ) == expected

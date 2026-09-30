@@ -1,6 +1,7 @@
 import pytest
 
 from scopes_tool_cli import cli, worker
+from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS
 from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 
 
@@ -49,7 +50,7 @@ def test_worker_serial_commands_are_allowlisted(tmp_path):
         ("serial-lister-reference", {"query": True}),
         ("serial-data", {"output": "lister.csv"}),
     ]:
-        assert command in worker.DOMAIN_COMMANDS
+        assert command in DOMAIN_COMMANDS
         assert worker.parse_domain_command(
             command, arguments, _runtime(tmp_path)
         ).command == command

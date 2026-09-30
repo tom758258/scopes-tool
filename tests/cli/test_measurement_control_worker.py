@@ -1,6 +1,7 @@
 import pytest
 
 from scopes_tool_cli import cli, worker
+from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS, arguments_to_argv
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.measurements import measurement_results_query
 
@@ -20,9 +21,9 @@ def test_measure_results_worker_accepts_empty_arguments_without_extra_flags(tmp_
         }
     )
 
-    assert "measure-results" in worker.DOMAIN_COMMANDS
+    assert "measure-results" in DOMAIN_COMMANDS
     assert accepted[:2] == ("measure-results", {})
-    assert worker.arguments_to_argv({}) == []
+    assert arguments_to_argv({}) == []
     assert worker.parse_domain_command(
         accepted[0], accepted[1], _runtime(tmp_path)
     ).command == "measure-results"
