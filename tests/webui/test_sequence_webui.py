@@ -12,6 +12,7 @@ from scopes_tool_core import SequenceRequest
 from scopes_tool_core.planning import OperationPlan
 from scopes_tool_webui.app import app
 import scopes_tool_webui.command_execution as execution
+import scopes_tool_webui.command_execution_advanced as execution_advanced
 from scopes_tool_webui.commands import WebUIRequestError, command_catalog, validate_job_request
 
 
@@ -118,8 +119,8 @@ def test_sequence_backend_delegates_dry_run_and_execution_to_core(monkeypatch, t
         calls.append((scope, resource, request, kwargs))
         return FakeResult()
 
-    monkeypatch.setattr(execution, "run_sequence", fake_run)
-    result = execution._execute_trigger_search_serial_segmented_workflow_command(
+    monkeypatch.setattr(execution_advanced, "run_sequence", fake_run)
+    result = execution_advanced._execute_trigger_search_serial_segmented_workflow_command(
         FakeScope(),
         "sequence",
         "SIM::TEST::INSTR",

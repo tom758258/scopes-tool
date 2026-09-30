@@ -34,8 +34,11 @@ from scopes_tool_core.measurements import (
 )
 from scopes_tool_core.operations import _OperationError
 from scopes_tool_core.trigger import TriggerWaitResult
+from scopes_tool_core import OperationResult
 import scopes_tool_webui.app as app_module
 import scopes_tool_webui.command_execution as command_execution_module
+import scopes_tool_webui.command_execution_advanced as command_execution_advanced
+import scopes_tool_webui.command_execution_general as command_execution_general
 import scopes_tool_webui.commands as commands_module
 from scopes_tool_webui.app import app
 from scopes_tool_webui.commands import (
@@ -356,7 +359,7 @@ def _smoke_timeout_partial() -> tuple[str, object]:
         "VISA query failed for ':MEASure:VPP? CHANnel1': "
         "VI_ERROR_TMO (-1073807339): Timeout expired before operation completed."
     )
-    partial = command_execution_module.OperationResult(
+    partial = OperationResult(
         exit_code=1,
         result={
             "status": "error",
@@ -1112,13 +1115,13 @@ def test_measure_sweep_execution_delegates_to_core_request(monkeypatch, tmp_path
 
     def fake_run_measure_sweep(scope, resource, request, **kwargs):  # type: ignore[no-untyped-def]
         received.append((scope, resource, request))
-        return command_execution_module.OperationResult(
+        return OperationResult(
             exit_code=0,
             result={"measurements": [], "summary": {"valid_count": 0}},
         )
 
     monkeypatch.setattr(
-        command_execution_module, "run_measure_sweep", fake_run_measure_sweep
+        command_execution_general, "run_measure_sweep", fake_run_measure_sweep
     )
     scope = type("FakeScope", (), {"capabilities": object()})()
     result = command_execution_module._execute_scope_command(
@@ -1150,12 +1153,14 @@ def test_measure_sweep_execution_forwards_stop_requested(monkeypatch, tmp_path: 
 
     def fake_run_measure_sweep(scope, resource, request, *, stop_requested=None):  # type: ignore[no-untyped-def]
         captured["stop_requested"] = stop_requested
-        return command_execution_module.OperationResult(
+        return OperationResult(
             exit_code=0,
             result={"measurements": [], "summary": {"valid_count": 0}},
         )
 
-    monkeypatch.setattr(command_execution_module, "run_measure_sweep", fake_run_measure_sweep)
+    monkeypatch.setattr(
+        command_execution_general, "run_measure_sweep", fake_run_measure_sweep
+    )
     scope = type("FakeScope", (), {"capabilities": object()})()
     sentinel = lambda: False
     result = command_execution_module._execute_scope_command(
@@ -1988,24 +1993,24 @@ def test_execute_advanced_math_set_and_query_paths_call_core() -> None:
             return {"function": function, "operation": "trend", "measurement_slot": 3}
 
     scope = FakeScope()
-    transform = command_execution_module._execute_math_transform(scope, {
+    transform = command_execution_general._execute_math_transform(scope, {
         "action": "set", "function": 2, "operation": "linear", "source": "math1",
         "gain": 2.0, "linear_offset": -1.0,
     })
-    command_execution_module._execute_math_transform(
+    command_execution_general._execute_math_transform(
         scope, {"action": "query", "function": 2}
     )
-    math_filter = command_execution_module._execute_math_filter(scope, {
+    math_filter = command_execution_general._execute_math_filter(scope, {
         "action": "set", "function": 2, "operation": "average", "source": "math1",
         "average_count": 64,
     })
-    command_execution_module._execute_math_filter(
+    command_execution_general._execute_math_filter(
         scope, {"action": "query", "function": 2}
     )
-    visualization = command_execution_module._execute_math_visualization(scope, {
+    visualization = command_execution_general._execute_math_visualization(scope, {
         "action": "set", "function": 2, "operation": "trend", "measurement_slot": 3,
     })
-    command_execution_module._execute_math_visualization(
+    command_execution_general._execute_math_visualization(
         scope, {"action": "query", "function": 2}
     )
 
@@ -2068,7 +2073,7 @@ def test_execute_fft_passes_advanced_parameters_and_preserves_query_state() -> N
                 "resolution_bandwidth_hz": 250.0,
             }
 
-    result = command_execution_module._execute_fft(
+    result = command_execution_general._execute_fft(
         FakeScope(),
         {
             "action": "set",
@@ -2980,13 +2985,13 @@ def test_long_workflows_receive_existing_core_stop_callback(
     ):
         received_stop.append(stop_requested)
         received_progress.append(progress_reporter)
-        return command_execution_module.OperationResult(
+        return OperationResult(
             exit_code=0, result={"status": "cancelled"}
         )
 
-    monkeypatch.setattr(command_execution_module, runner_name, fake_runner)
+    monkeypatch.setattr(command_execution_advanced, runner_name, fake_runner)
 
-    command_execution_module._execute_trigger_search_serial_segmented_workflow_command(
+    command_execution_advanced._execute_trigger_search_serial_segmented_workflow_command(
         object(),
         command,
         "USB0::TEST::INSTR",

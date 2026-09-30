@@ -4,8 +4,10 @@ import shutil
 
 import pytest
 
+from scopes_tool_core import OperationResult
 from scopes_tool_webui.command_catalog import command_catalog
 from scopes_tool_webui import command_execution as command_execution_module
+from scopes_tool_webui import command_execution_advanced as command_execution_advanced
 from scopes_tool_webui.command_execution import execute_command
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 from scopes_tool_webui.jobs import Job, JobManager
@@ -251,13 +253,13 @@ def test_monitor_webui_stop_and_transient_callbacks_reach_core(monkeypatch, tmp_
         sample_reporter=None,
     ):
         received.append((stop_requested, sample_reporter))
-        return command_execution_module.OperationResult(
+        return OperationResult(
             exit_code=130,
             result={"status": "cancelled"},
         )
 
-    monkeypatch.setattr(command_execution_module, "run_capture_monitor", fake_runner)
-    result = command_execution_module._execute_trigger_search_serial_segmented_workflow_command(
+    monkeypatch.setattr(command_execution_advanced, "run_capture_monitor", fake_runner)
+    result = command_execution_advanced._execute_trigger_search_serial_segmented_workflow_command(
         object(),
         "capture-monitor",
         "USB0::TEST::INSTR",

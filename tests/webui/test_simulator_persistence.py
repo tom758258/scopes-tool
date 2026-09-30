@@ -7,6 +7,7 @@ import time
 import pytest
 
 import scopes_tool_webui.command_execution as command_execution
+import scopes_tool_webui.command_execution_general as command_execution_general
 from scopes_tool_webui.commands import validate_job_request
 from scopes_tool_webui.jobs import JobManager
 
@@ -311,7 +312,7 @@ def test_known_unmodeled_math_operation_is_informational_not_parse_failure():
         def query_math_visualization(self, _function):
             raise AssertionError("typed visualization query must not run for another family")
 
-    result = command_execution._execute_math_visualization(
+    result = command_execution_general._execute_math_visualization(
         FakeScope(),
         {"action": "query", "function": 1},
     )

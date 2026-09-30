@@ -11,6 +11,7 @@ import pytest
 from scopes_tool_webui.jobs import Job, JobManager
 from scopes_tool_core.workflow import WorkflowProgress
 import scopes_tool_webui.command_execution as command_execution
+import scopes_tool_webui.command_execution_advanced as command_execution_advanced
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -238,7 +239,7 @@ def test_command_execution_forwards_progress_reporter_to_core_runner(
             timeout_ms=None,
         )
 
-    monkeypatch.setattr(command_execution, runner_name, fake_runner)
+    monkeypatch.setattr(command_execution_advanced, runner_name, fake_runner)
 
     class FakeScope:
         capabilities = object()
@@ -247,7 +248,7 @@ def test_command_execution_forwards_progress_reporter_to_core_runner(
             return None
 
     scope = FakeScope()
-    result = command_execution._execute_trigger_search_serial_segmented_workflow_command(
+    result = command_execution_advanced._execute_trigger_search_serial_segmented_workflow_command(
         scope,
         command,
         "SIM::TEST::INSTR",
