@@ -1000,7 +1000,7 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
         "Hardware-free preflight passed.",
         "Live instrument identity matches the selected target.",
         "Disconnect unknown or sensitive DUT signals",
-        "so no fixed Keysight-style CH1/CH2 probe-comp fixture is required.",
+        "Default checks use the instrument's current state; a fixed CH1/CH2 Probe Comp fixture is not required.",
         "that read is destructive and clears it.",
         "Perform supported same-value setters",
         "Same-value setters are real instrument writes, not read-only checks.",
@@ -1038,8 +1038,15 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
     # No optional action was requested, so none may be described as planned.
     for action in ("Acquisition", "Autoscale", "Configuration", "Storage Writes", "Screenshot"):
         assert f"- {action}: {NOT_REQUESTED}" in result.stdout, action
-    # The CH1 signal hint belongs to -IncludeConfigurationActions only.
-    assert "stable CH1 signal for the measurement and capture checks" not in result.stdout
+    # Without -IncludeConfigurationActions or -IncludeStorageWrites the default
+    # screen must not demand a CH1 fixture or writable instrument storage.
+    for absent in (
+        "Probe Comp / Demo output",
+        "Measurement and capture checks require CH1 to be displayed.",
+        "Reference Save requires CH1 display ON",
+        "Confirm the required instrument storage is available and writable",
+    ):
+        assert absent not in result.stdout, absent
 
 
 @requires_windows
@@ -1053,20 +1060,24 @@ def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -
     )
     assert result.returncode == 0, result.stdout + result.stderr
     for expected in (
-        # Physical preparation gains the configuration-signal requirement.
-        "stable CH1 signal for the measurement and capture checks",
+        # Physical preparation gains the configuration and storage requirements.
+        "Connect a suitable, stable signal to CH1 (for example, the oscilloscope's Probe Comp / Demo output).",
+        "Ensure CH1 display is ON and a stable waveform is visible. Measurement and capture checks require CH1 to be displayed.",
+        "Reference Save requires CH1 display ON; otherwise the reference-save case is N/A.",
+        "Confirm the required instrument storage is available and writable before saving files.",
         # Optional notes are specific to the options actually enabled.
         "Acquisition: Run/Stop state changes",
         "Autoscale: Changes multiple front-panel settings and is not restored.",
-        "Configuration: Runs measurement, capture, and cursor actions",
-        "cursors end off and measurements end cleared",
-        "TBS2074B cursor source selection may display CH1 or restart acquisition",
+        "Configuration: Runs measurement, BYTE waveform capture, and cursor actions. "
+        "Cursor mode may end OFF, measurement configuration may end cleared, "
+        "and waveform transfer settings are not restored. "
+        "TBS2074B cursor source selection may display CH1 or restart acquisition through Core.",
         # Storage slots and filenames come from the arguments, not from constants.
-        "Storage Writes: Setup slot 1 and reference slot 2 may be overwritten;",
-        "instrument image file 'acceptance.png'",
-        "instrument waveform file 'wave.csv'",
+        "Storage Writes: Setup slot 1 and reference slot 2 may be overwritten.",
+        "Requested instrument image file 'acceptance.png' may be overwritten.",
+        "Requested instrument waveform file 'wave.csv' may be overwritten.",
         # TBS2074B PNG capture is the supported screenshot path.
-        "Screenshot: PNG screenshot; Core writes a temporary instrument file and cleans it up.",
+        "Screenshot: PNG screenshot; Core writes a temporary instrument file and attempts to delete it during cleanup.",
     ):
         assert expected in result.stdout, expected
     assert f"- Storage Writes: {NOT_REQUESTED}" not in result.stdout
@@ -1074,10 +1085,13 @@ def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -
 
 @requires_windows
 @pytest.mark.parametrize(("target", "expected"), [
-    # TBS2074B supports a PNG screenshot; TBS1052B supports no screenshot format
-    # at all, so -IncludeScreenshot must not promise a screenshot file.
-    (TARGETS[0], "Screenshot: PNG screenshot; Core writes a temporary instrument file and cleans it up."),
-    (TARGETS[2], "Screenshot: No screenshot format is supported on this model; no screenshot file is written."),])
+    # TBS2074B supports a PNG screenshot written through a temporary instrument
+    # file; TDS2024B only over USBTMC; TBS1052B supports no screenshot format at
+    # all, so -IncludeScreenshot must not promise a screenshot file.
+    (TARGETS[0], "Screenshot: PNG screenshot; Core writes a temporary instrument file and attempts to delete it during cleanup."),
+    (TARGETS[1], "Screenshot: BMP screenshot is attempted only with a USBTMC instrument resource; otherwise this case is N/A."),
+    (TARGETS[2], "Screenshot: No screenshot format is supported on this model; no screenshot file is written."),
+])
 def test_operator_confirmation_screenshot_note_matches_model_support(
     tmp_path: Path, target: str, expected: str,
 ) -> None:

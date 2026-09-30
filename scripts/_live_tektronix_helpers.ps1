@@ -364,11 +364,23 @@ print(json.dumps({
         $physicalPreparation = [System.Collections.Generic.List[string]]@(
             "Confirm the correct oscilloscope is connected.",
             "Disconnect unknown or sensitive DUT signals, and any signal the test must not disturb.",
-            "Checks run against the instrument's own current state, so no fixed Keysight-style CH1/CH2 probe-comp fixture is required."
+            "Default checks use the instrument's current state; a fixed CH1/CH2 Probe Comp fixture is not required."
         )
         if ($IncludeConfigurationActions) {
             $physicalPreparation.Add(
-                "-IncludeConfigurationActions additionally needs a suitable, stable CH1 signal for the measurement and capture checks.")
+                "Connect a suitable, stable signal to CH1 (for example, the oscilloscope's Probe Comp / Demo output).")
+            $physicalPreparation.Add(
+                "Ensure CH1 display is ON and a stable waveform is visible. Measurement and capture checks require CH1 to be displayed.")
+        }
+        if ($IncludeStorageWrites) {
+            $physicalPreparation.Add(
+                "Reference Save requires CH1 display ON; otherwise the reference-save case is N/A.")
+        }
+        if ($IncludeStorageWrites -and
+            (-not [string]::IsNullOrWhiteSpace($ImageFilename) -or
+             -not [string]::IsNullOrWhiteSpace($WaveformFilename))) {
+            $physicalPreparation.Add(
+                "Confirm the required instrument storage is available and writable before saving files.")
         }
 
         $defaultActions = [System.Collections.Generic.List[string]]@(
@@ -388,46 +400,44 @@ print(json.dumps({
         )
 
         $acquisitionNote = if ($IncludeAcquisitionActions) {
-            "Run/Stop state changes; cleanup sends stop without an independent Running/Stopped readback, and the original state is not restored"
-        } else { "Not requested" }
+            "Run/Stop state changes; cleanup sends stop without an independent Running/Stopped readback, and the original state is not restored."
+        } else { "Not requested." }
         $autoscaleNote = if ($IncludeAutoscale) {
-            "Changes multiple front-panel settings and is not restored"
-        } else { "Not requested" }
+            "Changes multiple front-panel settings and is not restored."
+        } else { "Not requested." }
         $configurationNote = if ($IncludeConfigurationActions) {
-            $text = "Runs measurement, capture, and cursor actions; cursors end off and measurements end cleared, and transfer settings are not restored"
+            $text = "Runs measurement, BYTE waveform capture, and cursor actions. Cursor mode may end OFF, measurement configuration may end cleared, and waveform transfer settings are not restored."
             if ($script:Target -eq "tektronix-tbs2074b") {
-                $text += "; TBS2074B cursor source selection may display CH1 or restart acquisition through Core"
+                $text += " TBS2074B cursor source selection may display CH1 or restart acquisition through Core."
             }
             $text
-        } else { "Not requested" }
+        } else { "Not requested." }
         $storageNote = if ($IncludeStorageWrites) {
-            $text = "Setup slot $SetupSlot and reference slot $ReferenceSlot may be overwritten"
-            $files = [System.Collections.Generic.List[string]]@()
+            $text = "Setup slot $SetupSlot and reference slot $ReferenceSlot may be overwritten."
             if (-not [string]::IsNullOrWhiteSpace($ImageFilename)) {
-                $files.Add("instrument image file '$ImageFilename'")
+                $text += " Requested instrument image file '$ImageFilename' may be overwritten."
             }
             if (-not [string]::IsNullOrWhiteSpace($WaveformFilename)) {
-                $files.Add("instrument waveform file '$WaveformFilename'")
+                $text += " Requested instrument waveform file '$WaveformFilename' may be overwritten."
             }
-            if ($files.Count -gt 0) { $text += "; requested $($files -join ' and ') may be overwritten" }
             $text
-        } else { "Not requested" }
+        } else { "Not requested." }
         $screenshotNote = if (-not $IncludeScreenshot) {
-            "Not requested"
+            "Not requested."
         } elseif ($script:Target -eq "tektronix-tbs2074b") {
-            "PNG screenshot; Core writes a temporary instrument file and cleans it up"
+            "PNG screenshot; Core writes a temporary instrument file and attempts to delete it during cleanup."
         } elseif ($script:Target -eq "tektronix-tds2024b") {
-            "BMP screenshot, and only over a USBTMC resource; skipped otherwise"
+            "BMP screenshot is attempted only with a USBTMC instrument resource; otherwise this case is N/A."
         } else {
-            "No screenshot format is supported on this model; no screenshot file is written"
+            "No screenshot format is supported on this model; no screenshot file is written."
         }
 
         $optionalActions = [System.Collections.Generic.List[string]]@(
-            "Acquisition: ${acquisitionNote}.",
-            "Autoscale: ${autoscaleNote}.",
-            "Configuration: ${configurationNote}.",
-            "Storage Writes: ${storageNote}.",
-            "Screenshot: ${screenshotNote}."
+            "Acquisition: ${acquisitionNote}",
+            "Autoscale: ${autoscaleNote}",
+            "Configuration: ${configurationNote}",
+            "Storage Writes: ${storageNote}",
+            "Screenshot: ${screenshotNote}"
         )
 
         Write-Host ""
