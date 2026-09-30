@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
-import binascii
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 import math
 import re
-import struct
 from typing import Any, Sequence
-import zlib
 
 from .capabilities import capabilities_for_model_id
 from .demo import DEMO_FUNCTION_TOKENS
-from .errors import BackendClosedError, OscilloscopeError, ParameterValidationError
+from .errors import BackendClosedError, ParameterValidationError
 from .identity import VENDOR_REGISTRY, physical_model_for_id
 from .segmented import segmented_waveform_all_supported
+from .simulator_fft import apply_fft_write, query_fft
+from .simulator_rendering import (
+    _simulated_screenshot_bmp,
+    _simulated_screenshot_png,
+)
+from .simulator_search import apply_search_write, query_search
+from .simulator_support import SimulatorBackendError, _parse_scpi_bool_write
 from .serial import (
     SERIAL_MODE_TOKENS,
     parse_serial_can_trigger_id_mode,
@@ -46,10 +50,6 @@ from .wgen import (
     parse_wgen_function,
     parse_wgen_load,
 )
-
-
-class SimulatorBackendError(OscilloscopeError):
-    """Raised when the simulator receives unsupported SCPI."""
 
 
 @dataclass(frozen=True)
@@ -867,106 +867,8 @@ class SimulatorBackend:
             pass
         elif self._apply_serial_protocol_write(command):
             pass
-        elif upper.startswith(":SEARCH:STATE "):
-            self.search_enabled = _parse_scpi_bool_write(command)
-        elif upper.startswith(":SEARCH:MODE "):
-            value = command.rsplit(" ", 1)[1].upper()
-            canonical_by_scpi = {
-                "SER1": "serial1",
-                "SERIAL1": "serial1",
-                "SER2": "serial2",
-                "SERIAL2": "serial2",
-                "EDGE": "edge",
-                "GLIT": "glitch",
-                "GLITCH": "glitch",
-                "RUNT": "runt",
-                "TRAN": "transition",
-                "TRANSITION": "transition",
-                "PEAK": "peak",
-            }
-            scpi_by_canonical = {
-                "serial1": "SERial1",
-                "serial2": "SERial2",
-                "edge": "EDGE",
-                "glitch": "GLITch",
-                "runt": "RUNT",
-                "transition": "TRANsition",
-                "peak": "PEAK",
-            }
-            canonical = canonical_by_scpi.get(value)
-            if canonical is None or canonical not in self._capabilities.search_modes:
-                raise SimulatorBackendError(
-                    f"Search mode {value!r} is not supported by simulator model {self.model}."
-                )
-            self.search_mode = scpi_by_canonical[canonical]
-        elif upper.startswith(":SEARCH:SERIAL:UART:MODE "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_uart_mode[bus] = command.split(" ", 1)[1].strip()
-        elif upper.startswith(":SEARCH:SERIAL:UART:DATA "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_uart_data[bus] = int(command.split(" ", 1)[1].strip())
-        elif upper.startswith(":SEARCH:SERIAL:UART:QUALIFIER "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_uart_qualifier[bus] = command.split(" ", 1)[1].strip()
-        elif upper.startswith(":SEARCH:SERIAL:IIC:MODE "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_i2c_mode[bus] = command.split(" ", 1)[1].strip()
-        elif upper.startswith(":SEARCH:SERIAL:IIC:PATTERN:ADDRESS "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_i2c_address[bus] = int(command.split(" ", 1)[1].strip())
-        elif upper.startswith(":SEARCH:SERIAL:IIC:PATTERN:DATA2 "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_i2c_data2[bus] = int(command.split(" ", 1)[1].strip())
-        elif upper.startswith(":SEARCH:SERIAL:IIC:PATTERN:DATA "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_i2c_data[bus] = int(command.split(" ", 1)[1].strip())
-        elif upper.startswith(":SEARCH:SERIAL:IIC:QUALIFIER "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_i2c_qualifier[bus] = command.split(" ", 1)[1].strip()
-        elif upper.startswith(":SEARCH:SERIAL:SPI:MODE "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_spi_mode[bus] = command.split(" ", 1)[1].strip()
-        elif upper.startswith(":SEARCH:SERIAL:SPI:PATTERN:DATA "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            raw_pattern = command.split(" ", 1)[1].strip().strip('"')
-            self.search_spi_data[bus] = raw_pattern.upper() if raw_pattern.lower().startswith("0x") else raw_pattern
-        elif upper.startswith(":SEARCH:SERIAL:SPI:PATTERN:WIDTH "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_spi_width[bus] = int(command.split(" ", 1)[1].strip())
-        elif upper.startswith(":SEARCH:SERIAL:CAN:MODE "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_can_mode[bus] = command.split(" ", 1)[1].strip()
-        elif upper.startswith(":SEARCH:SERIAL:CAN:PATTERN:DATA:LENGTH "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_can_data_length[bus] = int(command.split(" ", 1)[1].strip())
-        elif upper.startswith(":SEARCH:SERIAL:CAN:PATTERN:DATA "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            raw_pattern = command.split(" ", 1)[1].strip().strip('"')
-            self.search_can_data[bus] = raw_pattern.upper() if raw_pattern.lower().startswith("0x") else raw_pattern
-        elif upper.startswith(":SEARCH:SERIAL:CAN:PATTERN:ID:MODE "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            self.search_can_id_mode[bus] = command.split(" ", 1)[1].strip()
-        elif upper.startswith(":SEARCH:SERIAL:CAN:PATTERN:ID "):
-            bus = 2 if self.search_mode == "SERial2" else 1
-            raw_pattern = command.split(" ", 1)[1].strip().strip('"')
-            self.search_can_id[bus] = raw_pattern.upper() if raw_pattern.lower().startswith("0x") else raw_pattern
-        elif upper.startswith(":SEARCH:EVENT "):
-            if not self._capabilities.supports_search_event_navigation:
-                raise SimulatorBackendError(
-                    f"Search event navigation is not supported by simulator model {self.model}."
-                )
-            value_str = command.rsplit(" ", 1)[1].strip()
-            try:
-                val = int(value_str)
-            except ValueError as exc:
-                raise SimulatorBackendError(
-                    f"Invalid search event for simulator: {command}"
-                ) from exc
-            if val <= 0:
-                raise SimulatorBackendError(
-                    f"Invalid search event for simulator: {command}"
-                )
-            self.search_event = val
+        elif apply_search_write(self, command):
+            pass
         elif upper.startswith(":SAVE:PWD "):
             self.save_pwd = _parse_quoted_scpi_argument(command, ":SAVE:PWD")
         elif upper.startswith(":SAVE:FILENAME "):
@@ -1534,69 +1436,9 @@ class SimulatorBackend:
             if setting.upper() == "MODE":
                 return self.serial_modes[bus]
             return "1" if self.serial_display[bus] else "0"
-        if upper == ":SEARCH:STATE?":
-            return "1" if self.search_enabled else "0"
-        if upper == ":SEARCH:MODE?":
-            return self.search_mode if self.search_enabled else "OFF"
-        if upper == ":SEARCH:COUNT?":
-            return str(self.search_count)
-        if upper == ":SEARCH:SERIAL:UART:MODE?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return self.search_uart_mode[bus]
-        if upper == ":SEARCH:SERIAL:UART:DATA?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return str(self.search_uart_data[bus])
-        if upper == ":SEARCH:SERIAL:UART:QUALIFIER?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return self.search_uart_qualifier[bus]
-        if upper == ":SEARCH:SERIAL:IIC:MODE?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return self.search_i2c_mode[bus]
-        if upper == ":SEARCH:SERIAL:IIC:PATTERN:ADDRESS?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return str(self.search_i2c_address[bus])
-        if upper == ":SEARCH:SERIAL:IIC:PATTERN:DATA?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return str(self.search_i2c_data[bus])
-        if upper == ":SEARCH:SERIAL:IIC:PATTERN:DATA2?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return str(self.search_i2c_data2[bus])
-        if upper == ":SEARCH:SERIAL:IIC:QUALIFIER?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return self.search_i2c_qualifier[bus]
-        if upper == ":SEARCH:SERIAL:SPI:MODE?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return self.search_spi_mode[bus]
-        if upper == ":SEARCH:SERIAL:SPI:PATTERN:DATA?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            val = self.search_spi_data[bus]
-            return f'"{val}"' if not (val.startswith('"') and val.endswith('"')) else val
-        if upper == ":SEARCH:SERIAL:SPI:PATTERN:WIDTH?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return str(self.search_spi_width[bus])
-        if upper == ":SEARCH:SERIAL:CAN:MODE?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return self.search_can_mode[bus]
-        if upper == ":SEARCH:SERIAL:CAN:PATTERN:DATA?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            val = self.search_can_data[bus]
-            return f'"{val}"' if not (val.startswith('"') and val.endswith('"')) else val
-        if upper == ":SEARCH:SERIAL:CAN:PATTERN:DATA:LENGTH?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return str(self.search_can_data_length[bus])
-        if upper == ":SEARCH:SERIAL:CAN:PATTERN:ID?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            val = self.search_can_id[bus]
-            return f'"{val}"' if not (val.startswith('"') and val.endswith('"')) else val
-        if upper == ":SEARCH:SERIAL:CAN:PATTERN:ID:MODE?":
-            bus = 2 if self.search_mode == "SERial2" else 1
-            return self.search_can_id_mode[bus]
-        if upper == ":SEARCH:EVENT?":
-            if not self._capabilities.supports_search_event_navigation:
-                raise SimulatorBackendError(
-                    f"Search event navigation is not supported by simulator model {self.model}."
-                )
-            return str(self.search_event)
+        search_response = query_search(self, command)
+        if search_response is not None:
+            return search_response
         if upper == ":SAVE:PWD?":
             return f'"{self.save_pwd}"'
         if upper == ":SAVE:FILENAME?":
@@ -2555,318 +2397,11 @@ class SimulatorBackend:
         return ",".join(parts)
 
     def _apply_fft_write(self, command: str) -> bool:
-        clear_match = re.fullmatch(
-            r":FUNCtion(\d+):CLEar",
-            command,
-            flags=re.IGNORECASE,
-        )
-        if clear_match is not None:
-            function = int(clear_match.group(1))
-            accumulation_operations = (
-                self._capabilities.math_filter_operations
-                | self._capabilities.math_visualization_operations
-            )
-            if (
-                not (
-                    {"average", "max-hold", "min-hold"}
-                    & accumulation_operations
-                )
-                or function > self._capabilities.math_function_count
-            ):
-                raise SimulatorBackendError(
-                    "Math clear is not supported by this simulator profile."
-                )
-            return True
-        match = re.fullmatch(
-            r":FUNCtion(\d*):([A-Za-z0-9]+)(?::([A-Za-z0-9]+))?\s+(.+)",
-            command,
-            flags=re.IGNORECASE,
-        )
-        if not match:
-            return False
-        function = int(match.group(1) or "1")
-        key = self.fft_functions.setdefault(
-            function,
-            {
-                "operation": "FFT",
-                "source": "CHANnel1",
-                "source2": "CHANnel2",
-                "units": "DECibel",
-                "window": "HANNing",
-                "center": 0.0,
-                "span": 1.0e6,
-                "start": 0.0,
-                "stop": 1.0e6,
-                "gate": "NONE",
-                "phase_reference": "TRIGger",
-                "detection_type": "OFF",
-                "detection_points": 640,
-                "bin_size": 1000.0,
-                "fft_sample_rate": 1.0e9,
-                "resolution_bandwidth": 1500.0,
-                "display": False,
-                "scale": 1.0,
-                "range": 8.0,
-                "offset": 0.0,
-                "integrate_input_offset": 0.0,
-                "linear_gain": 1.0,
-                "linear_offset": 0.0,
-                "low_pass_cutoff": 1.0e6,
-                "high_pass_cutoff": 1.0e3,
-                "average_count": 64,
-                "smooth_points": 9,
-                "trend_measurement": "VAVerage",
-                "trend_measurement_slot": "NONE",
-            },
-        )
-        primary, secondary, value = match.group(2).upper(), (match.group(3) or "").upper(), match.group(4)
-        advanced_fft_setting = (
-            (primary == "FREQUENCY" and secondary in {"START", "STOP"})
-            or primary == "GATE"
-            or (primary == "PHASE" and secondary == "REFERENCE")
-            or (primary == "DETECTION" and secondary in {"TYPE", "POINTS"})
-        )
-        if advanced_fft_setting and not self._capabilities.supports_advanced_fft:
-            raise SimulatorBackendError(
-                "Advanced FFT controls are not supported by this simulator profile."
-            )
-        if primary == "GOFT" and secondary == "OPERATION":
-            self.math_goft_operation = value.upper()
-        elif primary == "GOFT" and secondary == "SOURCE1":
-            self.math_goft_source1 = self._validate_channel(
-                int(value.upper().rsplit("CHANNEL", 1)[1])
-            )
-        elif primary == "GOFT" and secondary == "SOURCE2":
-            self.math_goft_source2 = self._validate_channel(
-                int(value.upper().rsplit("CHANNEL", 1)[1])
-            )
-        elif primary == "OPERATION":
-            operation = value.upper()
-            if (
-                operation == "FFTPHASE"
-                and not self._capabilities.supports_advanced_fft
-            ):
-                raise SimulatorBackendError(
-                    "FFT Phase is not supported by this simulator profile."
-                )
-            key["operation"] = (
-                "FFTPhase" if operation == "FFTPHASE" else operation
-            )
-        elif primary == "SOURCE1":
-            source = self._normalize_math_source_token(value)
-            if (
-                source.upper().startswith("FUNCTION")
-                and str(key["operation"]).upper()
-                in {"ADD", "SUBTRACT", "MULTIPLY", "DIVIDE"}
-            ):
-                raise SimulatorBackendError(
-                    "Arithmetic Math operators require an analog source1."
-                )
-            if (
-                str(key["operation"]).upper() == "TREND"
-                and self._capabilities.series == "4000X"
-            ):
-                raise SimulatorBackendError(
-                    "4000X Trend does not accept a Math source write."
-                )
-            key["source"] = source
-        elif primary == "SOURCE2":
-            if (
-                str(key["operation"]).upper() == "TREND"
-                and self._capabilities.series == "4000X"
-            ):
-                raise SimulatorBackendError(
-                    "4000X Trend does not accept a Math source write."
-                )
-            key["source2"] = self._normalize_math_source_token(value)
-        elif primary == "DISPLAY":
-            key["display"] = value.upper() == "ON"
-        elif primary == "SCALE":
-            key["scale"] = float(value)
-        elif primary == "RANGE":
-            key["range"] = float(value)
-        elif primary == "OFFSET":
-            key["offset"] = float(value)
-        elif primary == "INTEGRATE" and secondary == "IOFFSET":
-            key["integrate_input_offset"] = float(value)
-        elif primary == "LINEAR" and secondary == "GAIN":
-            key["linear_gain"] = float(value)
-        elif primary == "LINEAR" and secondary == "OFFSET":
-            key["linear_offset"] = float(value)
-        elif primary == "FREQUENCY" and secondary == "LOWPASS":
-            key["low_pass_cutoff"] = float(value)
-        elif primary == "FREQUENCY" and secondary == "HIGHPASS":
-            key["high_pass_cutoff"] = float(value)
-        elif primary == "AVERAGE" and secondary == "COUNT":
-            key["average_count"] = int(value)
-        elif primary == "SMOOTH" and secondary == "POINTS":
-            key["smooth_points"] = int(value)
-        elif primary == "TREND" and secondary == "MEASUREMENT":
-            key["trend_measurement"] = value
-        elif primary == "TREND" and secondary == "NMEASUREMENT":
-            key["trend_measurement_slot"] = value.upper()
-        elif primary == "FFT" and secondary == "VTYPE":
-            key["units"] = value
-        elif primary == "FFT" and secondary == "WINDOW":
-            key["window"] = value
-        elif primary == "FFT" and secondary == "CENTER":
-            key["center"] = float(value)
-        elif primary == "FFT" and secondary == "SPAN":
-            key["span"] = float(value)
-        elif primary == "FREQUENCY" and secondary == "START":
-            key["start"] = float(value)
-        elif primary == "FREQUENCY" and secondary == "STOP":
-            key["stop"] = float(value)
-        elif primary == "GATE":
-            key["gate"] = value
-        elif primary == "PHASE" and secondary == "REFERENCE":
-            key["phase_reference"] = value
-        elif primary == "DETECTION" and secondary == "TYPE":
-            key["detection_type"] = value
-        elif primary == "DETECTION" and secondary == "POINTS":
-            points = int(value)
-            if points < 640 or points > 65536:
-                raise SimulatorBackendError(
-                    "FFT detection points must be between 640 and 65536."
-                )
-            key["detection_points"] = points
-        else:
-            return False
-        return True
+        return apply_fft_write(self, command)
 
     def _query_fft(self, command: str) -> str | None:
-        match = re.fullmatch(
-            r":FUNCtion(\d*):([A-Za-z0-9]+)(?::([A-Za-z0-9]+))?\?",
-            command,
-            flags=re.IGNORECASE,
-        )
-        if not match:
-            return None
-        function = int(match.group(1) or "1")
-        state = self.fft_functions.setdefault(
-            function,
-            {
-                "operation": "FFT",
-                "source": "CHANnel1",
-                "source2": "CHANnel2",
-                "units": "DECibel",
-                "window": "HANNing",
-                "center": 0.0,
-                "span": 1.0e6,
-                "start": 0.0,
-                "stop": 1.0e6,
-                "gate": "NONE",
-                "phase_reference": "TRIGger",
-                "detection_type": "OFF",
-                "detection_points": 640,
-                "bin_size": 1000.0,
-                "fft_sample_rate": 1.0e9,
-                "resolution_bandwidth": 1500.0,
-                "display": False,
-                "scale": 1.0,
-                "range": 8.0,
-                "offset": 0.0,
-                "integrate_input_offset": 0.0,
-                "linear_gain": 1.0,
-                "linear_offset": 0.0,
-                "low_pass_cutoff": 1.0e6,
-                "high_pass_cutoff": 1.0e3,
-                "average_count": 64,
-                "smooth_points": 9,
-                "trend_measurement": "VAVerage",
-                "trend_measurement_slot": "NONE",
-            },
-        )
-        primary, secondary = match.group(2).upper(), (match.group(3) or "").upper()
-        advanced_fft_query = (
-            (primary == "FREQUENCY" and secondary in {"START", "STOP"})
-            or primary in {"GATE", "BSIZE", "SRATE", "RBWIDTH"}
-            or (primary == "PHASE" and secondary == "REFERENCE")
-            or (primary == "DETECTION" and secondary in {"TYPE", "POINTS"})
-        )
-        if advanced_fft_query and not self._capabilities.supports_advanced_fft:
-            raise SimulatorBackendError(
-                "Advanced FFT queries are not supported by this simulator profile."
-            )
-        if primary == "GOFT" and secondary == "OPERATION":
-            return self.math_goft_operation
-        if primary == "GOFT" and secondary == "SOURCE1":
-            return f"CHANnel{self.math_goft_source1}"
-        if primary == "GOFT" and secondary == "SOURCE2":
-            return f"CHANnel{self.math_goft_source2}"
-        if primary == "OPERATION":
-            return str(state["operation"])
-        if primary == "SOURCE1":
-            return str(state["source"])
-        if primary == "SOURCE2":
-            return str(state["source2"])
-        if primary == "DISPLAY":
-            return "1" if state["display"] else "0"
-        if primary == "SCALE":
-            return f"{float(state['scale']):.12g}"
-        if primary == "RANGE":
-            return f"{float(state['range']):.12g}"
-        if primary == "OFFSET":
-            return f"{float(state['offset']):.12g}"
-        if primary == "INTEGRATE" and secondary == "IOFFSET":
-            return f"{float(state['integrate_input_offset']):.12g}"
-        if primary == "LINEAR" and secondary == "GAIN":
-            return f"{float(state['linear_gain']):.12g}"
-        if primary == "LINEAR" and secondary == "OFFSET":
-            return f"{float(state['linear_offset']):.12g}"
-        if primary == "FREQUENCY" and secondary == "LOWPASS":
-            return f"{float(state['low_pass_cutoff']):.12g}"
-        if primary == "FREQUENCY" and secondary == "HIGHPASS":
-            return f"{float(state['high_pass_cutoff']):.12g}"
-        if primary == "AVERAGE" and secondary == "COUNT":
-            return str(int(state["average_count"]))
-        if primary == "SMOOTH" and secondary == "POINTS":
-            return str(int(state["smooth_points"]))
-        if primary == "TREND" and secondary == "MEASUREMENT":
-            return str(state["trend_measurement"])
-        if primary == "TREND" and secondary == "NMEASUREMENT":
-            return str(state["trend_measurement_slot"])
-        if primary == "FFT" and secondary == "VTYPE":
-            return str(state["units"])
-        if primary == "FFT" and secondary == "WINDOW":
-            return str(state["window"])
-        if primary == "FFT" and secondary == "CENTER":
-            return f"{float(state['center']):.12g}"
-        if primary == "FFT" and secondary == "SPAN":
-            return f"{float(state['span']):.12g}"
-        if primary == "FREQUENCY" and secondary == "START":
-            return f"{float(state['start']):.12g}"
-        if primary == "FREQUENCY" and secondary == "STOP":
-            return f"{float(state['stop']):.12g}"
-        if primary == "GATE":
-            return str(state["gate"])
-        if primary == "PHASE" and secondary == "REFERENCE":
-            return str(state["phase_reference"])
-        if primary == "DETECTION" and secondary == "TYPE":
-            return str(state["detection_type"])
-        if primary == "DETECTION" and secondary == "POINTS":
-            return str(int(state["detection_points"]))
-        if primary == "BSIZE":
-            return f"{float(state['bin_size']):.12g}"
-        if primary == "SRATE":
-            return f"{float(state['fft_sample_rate']):.12g}"
-        if primary == "RBWIDTH":
-            return f"{float(state['resolution_bandwidth']):.12g}"
-        return None
+        return query_fft(self, command)
 
-    def _normalize_math_source_token(self, value: str) -> str:
-        normalized = value.strip().upper()
-        if normalized.startswith("CHANNEL"):
-            channel = self._validate_channel(
-                int(normalized.removeprefix("CHANNEL"))
-            )
-            return f"CHANnel{channel}"
-        if normalized == "GOFT":
-            return "GOFT"
-        if normalized.startswith("FUNCTION"):
-            function = int(normalized.removeprefix("FUNCTION"))
-            return f"FUNCtion{function}"
-        raise SimulatorBackendError(f"Unsupported Math source: {value}")
 
     def _apply_channel_write(self, command: str) -> bool:
         channel = _extract_channel(command)
@@ -3374,15 +2909,6 @@ def _canonical_lister_reference(raw: str) -> str:
         ) from exc
 
 
-def _parse_scpi_bool_write(command: str) -> bool:
-    value = command.rsplit(" ", 1)[1].strip().upper()
-    if value in {"1", "ON"}:
-        return True
-    if value in {"0", "OFF"}:
-        return False
-    raise SimulatorBackendError(f"Unsupported simulator write: {command}")
-
-
 def _parse_simulator_wgen_number(command: str, field: str) -> float:
     try:
         value = float(command.rsplit(" ", 1)[1])
@@ -3550,218 +3076,9 @@ def _parse_scpi_number(value: str) -> float:
     return float(parts[0])
 
 
-_SCREENSHOT_WIDTH = 480
-_SCREENSHOT_HEIGHT = 272
-_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-
-_FONT_5X7 = {
-    " ": ("00000", "00000", "00000", "00000", "00000", "00000", "00000"),
-    "-": ("00000", "00000", "00000", "11111", "00000", "00000", "00000"),
-    "0": ("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
-    "1": ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
-    "2": ("01110", "10001", "00001", "00010", "00100", "01000", "11111"),
-    "3": ("11110", "00001", "00001", "01110", "00001", "00001", "11110"),
-    "4": ("00010", "00110", "01010", "10010", "11111", "00010", "00010"),
-    "5": ("11111", "10000", "10000", "11110", "00001", "00001", "11110"),
-    "6": ("01110", "10000", "10000", "11110", "10001", "10001", "01110"),
-    "7": ("11111", "00001", "00010", "00100", "01000", "01000", "01000"),
-    "8": ("01110", "10001", "10001", "01110", "10001", "10001", "01110"),
-    "9": ("01110", "10001", "10001", "01111", "00001", "00001", "01110"),
-    "A": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
-    "B": ("11110", "10001", "10001", "11110", "10001", "10001", "11110"),
-    "C": ("01110", "10001", "10000", "10000", "10000", "10001", "01110"),
-    "D": ("11110", "10001", "10001", "10001", "10001", "10001", "11110"),
-    "E": ("11111", "10000", "10000", "11110", "10000", "10000", "11111"),
-    "F": ("11111", "10000", "10000", "11110", "10000", "10000", "10000"),
-    "G": ("01110", "10001", "10000", "10111", "10001", "10001", "01110"),
-    "H": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
-    "I": ("01110", "00100", "00100", "00100", "00100", "00100", "01110"),
-    "J": ("00111", "00010", "00010", "00010", "00010", "10010", "01100"),
-    "K": ("10001", "10010", "10100", "11000", "10100", "10010", "10001"),
-    "L": ("10000", "10000", "10000", "10000", "10000", "10000", "11111"),
-    "M": ("10001", "11011", "10101", "10101", "10001", "10001", "10001"),
-    "N": ("10001", "11001", "10101", "10011", "10001", "10001", "10001"),
-    "O": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
-    "P": ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
-    "Q": ("01110", "10001", "10001", "10001", "10101", "10010", "01101"),
-    "R": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
-    "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
-    "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
-    "U": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
-    "V": ("10001", "10001", "10001", "10001", "10001", "01010", "00100"),
-    "W": ("10001", "10001", "10001", "10101", "10101", "10101", "01010"),
-    "X": ("10001", "10001", "01010", "00100", "01010", "10001", "10001"),
-    "Y": ("10001", "10001", "01010", "00100", "00100", "00100", "00100"),
-    "Z": ("11111", "00001", "00010", "00100", "01000", "10000", "11111"),
-}
-
-
 def _abbreviate_hardcopy_palette(value: str) -> str:
     return {"COLOR": "COL", "GRAYSCALE": "GRAY", "NONE": "NONE"}[value.upper()]
 
 
 def _abbreviate_hardcopy_layout(value: str) -> str:
     return {"LANDSCAPE": "LAND", "PORTRAIT": "PORT"}[value.upper()]
-
-
-def _simulated_screenshot_bmp(eight_bit: bool) -> bytes:
-    """Return a deterministic valid 1x1 BMP payload."""
-
-    if eight_bit:
-        palette = b"".join(bytes((value, value, value, 0)) for value in range(256))
-        pixel_offset = 14 + 40 + len(palette)
-        pixels = b"\x7f\x00\x00\x00"
-        dib = struct.pack("<IIIHHIIIIII", 40, 1, 1, 1, 8, 0, len(pixels), 0, 0, 256, 0)
-        size = pixel_offset + len(pixels)
-        return struct.pack("<2sIHHI", b"BM", size, 0, 0, pixel_offset) + dib + palette + pixels
-    pixels = b"\x00\xd6\xff\x00"
-    pixel_offset = 14 + 40
-    dib = struct.pack("<IIIHHIIIIII", 40, 1, 1, 1, 24, 0, len(pixels), 0, 0, 0, 0)
-    size = pixel_offset + len(pixels)
-    return struct.pack("<2sIHHI", b"BM", size, 0, 0, pixel_offset) + dib + pixels
-
-
-def _simulated_screenshot_png(model: str, *, white_background: bool) -> bytes:
-    background = (255, 255, 255) if white_background else (0, 0, 0)
-    grid = (210, 210, 210) if white_background else (42, 42, 42)
-    axis = (160, 160, 160) if white_background else (72, 72, 72)
-    text = (28, 32, 38) if white_background else (244, 244, 244)
-    ch1 = (156, 112, 0) if white_background else (255, 214, 0)
-    ch2 = (0, 120, 132) if white_background else (0, 220, 235)
-
-    pixels = bytearray(background * (_SCREENSHOT_WIDTH * _SCREENSHOT_HEIGHT))
-
-    for x in range(40, _SCREENSHOT_WIDTH, 40):
-        _draw_vertical_line(pixels, x, grid if x != _SCREENSHOT_WIDTH // 2 else axis)
-    for y in range(34, _SCREENSHOT_HEIGHT, 34):
-        _draw_horizontal_line(pixels, y, grid if y != _SCREENSHOT_HEIGHT // 2 else axis)
-
-    _draw_waveform(pixels, ch1, center_y=116, amplitude=42, phase=0.0)
-    _draw_waveform(pixels, ch2, center_y=158, amplitude=36, phase=math.pi / 4.0)
-    _draw_text(pixels, 12, 10, f"SIM {model.upper()}", text, scale=2)
-    _draw_text(pixels, 12, 244, "CH1", ch1, scale=2)
-    _draw_text(pixels, 66, 244, "CH2", ch2, scale=2)
-    return _encode_rgb_png(_SCREENSHOT_WIDTH, _SCREENSHOT_HEIGHT, pixels)
-
-
-def _encode_rgb_png(width: int, height: int, pixels: bytearray) -> bytes:
-    stride = width * 3
-    raw = bytearray()
-    for y in range(height):
-        raw.append(0)
-        start = y * stride
-        raw.extend(pixels[start : start + stride])
-    return b"".join(
-        (
-            _PNG_SIGNATURE,
-            _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)),
-            _png_chunk(b"IDAT", zlib.compress(bytes(raw), level=9)),
-            _png_chunk(b"IEND", b""),
-        )
-    )
-
-
-def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
-    checksum = binascii.crc32(chunk_type)
-    checksum = binascii.crc32(data, checksum) & 0xFFFFFFFF
-    return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", checksum)
-
-
-def _draw_vertical_line(pixels: bytearray, x: int, color: tuple[int, int, int]) -> None:
-    for y in range(_SCREENSHOT_HEIGHT):
-        _set_pixel(pixels, x, y, color)
-
-
-def _draw_horizontal_line(pixels: bytearray, y: int, color: tuple[int, int, int]) -> None:
-    for x in range(_SCREENSHOT_WIDTH):
-        _set_pixel(pixels, x, y, color)
-
-
-def _draw_waveform(
-    pixels: bytearray,
-    color: tuple[int, int, int],
-    *,
-    center_y: int,
-    amplitude: int,
-    phase: float,
-) -> None:
-    previous: tuple[int, int] | None = None
-    for x in range(24, _SCREENSHOT_WIDTH - 16):
-        angle = (x - 24) / (_SCREENSHOT_WIDTH - 40) * 2.0 * math.pi * 2.4 + phase
-        y = round(center_y - amplitude * math.sin(angle))
-        if previous is not None:
-            _draw_line(pixels, previous[0], previous[1], x, y, color)
-            _draw_line(pixels, previous[0], previous[1] + 1, x, y + 1, color)
-        previous = (x, y)
-
-
-def _draw_line(
-    pixels: bytearray,
-    x0: int,
-    y0: int,
-    x1: int,
-    y1: int,
-    color: tuple[int, int, int],
-) -> None:
-    dx = abs(x1 - x0)
-    dy = -abs(y1 - y0)
-    sx = 1 if x0 < x1 else -1
-    sy = 1 if y0 < y1 else -1
-    error = dx + dy
-    while True:
-        _set_pixel(pixels, x0, y0, color)
-        if x0 == x1 and y0 == y1:
-            return
-        doubled = 2 * error
-        if doubled >= dy:
-            error += dy
-            x0 += sx
-        if doubled <= dx:
-            error += dx
-            y0 += sy
-
-
-def _draw_text(
-    pixels: bytearray,
-    x: int,
-    y: int,
-    text: str,
-    color: tuple[int, int, int],
-    *,
-    scale: int,
-) -> None:
-    cursor = x
-    for char in text:
-        glyph = _FONT_5X7.get(char, _FONT_5X7["-"])
-        for row_index, row in enumerate(glyph):
-            for column_index, value in enumerate(row):
-                if value == "1":
-                    _fill_rect(
-                        pixels,
-                        cursor + column_index * scale,
-                        y + row_index * scale,
-                        scale,
-                        scale,
-                        color,
-                    )
-        cursor += 6 * scale
-
-
-def _fill_rect(
-    pixels: bytearray,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-    color: tuple[int, int, int],
-) -> None:
-    for row in range(y, y + height):
-        for column in range(x, x + width):
-            _set_pixel(pixels, column, row, color)
-
-
-def _set_pixel(pixels: bytearray, x: int, y: int, color: tuple[int, int, int]) -> None:
-    if x < 0 or x >= _SCREENSHOT_WIDTH or y < 0 or y >= _SCREENSHOT_HEIGHT:
-        return
-    offset = (y * _SCREENSHOT_WIDTH + x) * 3
-    pixels[offset : offset + 3] = bytes(color)
