@@ -395,6 +395,31 @@ def fake_run(
 
 
 @requires_windows
+def test_fail_detail_is_printed_and_carries_cli_error_fields(tmp_path: Path) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[0], "-IncludeConfigurationActions",
+        cursor_error=("OscilloscopeError", "Cursor X setter failed"),
+    )
+    assert result.returncode != 0
+    assert report["status"] == "failed"
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["cursor-set"]["status"] == "FAIL"
+
+    detail = cases["cursor-set"]["detail"]
+    # The CLI error type and message must survive instead of being masked by the
+    # exit-code and artifact-path summary.
+    assert "OscilloscopeError: Cursor X setter failed" in detail
+    assert "exit 1" in detail and "timeout=False" in detail
+
+    lines = [line.strip() for line in result.stdout.splitlines()]
+    status_index = next(
+        index for index, line in enumerate(lines)
+        if line.startswith("FAIL") and "[live][tektronix] cursor-set" in line
+    )
+    assert lines[status_index + 1] == detail
+
+
+@requires_windows
 def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
     result, report = fake_run(
         tmp_path, TARGETS[0], math_error=("OscilloscopeError", "Unsupported Tek Math expression: 'FFT'"),

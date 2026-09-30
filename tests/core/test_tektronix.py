@@ -644,10 +644,25 @@ def test_save_uses_actual_readback_completion_and_restores_timeout():
     assert backend.timeout == 3210
 
 
+@pytest.mark.parametrize("model_id,model,channels", MODELS)
+def test_channel_units_write_uses_quoted_qstring(model_id, model, channels):
+    # CH<x>:YUNit is a <QString> command; an unquoted unit returns SESR 32 (CME).
+    scope, backend = make_scope(model_id)
+    for channel, units, token in ((1, "volt", "V"), (1, "amp", "A")):
+        scope.set_channel_units(channel, units)
+        assert backend.history[-1] == f'CH{channel}:YUNit "{token}"'
+    with pytest.raises(ParameterValidationError):
+        scope.set_channel_units(channels + 1, "volt")
+
+
 @pytest.mark.parametrize("model_id,_,__", MODELS)
 def test_simulator_roundtrips_and_slot_safety(model_id, _, __):
     with simulated_scope(model_id) as scope:
         scope.set_channel_units(1, "amp")
+        assert scope.query_channel_units(1) == "amp"
+        # The simulator must reject the unquoted form so the CME regression cannot hide.
+        with pytest.raises(SimulatorBackendError):
+            scope.backend.write("CH1:YUNit V")
         assert scope.query_channel_units(1) == "amp"
         if model_id != "tektronix-tbs2074b":
             scope.set_display_persistence("minimum")

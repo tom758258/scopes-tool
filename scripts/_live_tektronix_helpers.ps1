@@ -1,5 +1,20 @@
 # Private helpers for the public CLI and workflow live validators.
 
+function Get-CliErrorDetail {
+    param([AllowNull()][object]$Payload)
+
+    if ($null -eq $Payload) { return "" }
+    $errorProperty = $Payload.PSObject.Properties["error"]
+    if ($null -eq $errorProperty -or $null -eq $errorProperty.Value) { return "" }
+    $cliError = $errorProperty.Value
+    $errorType = ""
+    $errorMessage = ""
+    if ($null -ne $cliError.PSObject.Properties["type"]) { $errorType = [string]$cliError.type }
+    if ($null -ne $cliError.PSObject.Properties["message"]) { $errorMessage = [string]$cliError.message }
+    if ([string]::IsNullOrWhiteSpace($errorType) -and [string]::IsNullOrWhiteSpace($errorMessage)) { return "" }
+    return @($errorType, $errorMessage | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ": "
+}
+
 function Assert-TektronixCommandStatus {
     param([Parameter(Mandatory = $true)][object]$Payload)
 
@@ -64,6 +79,9 @@ function Invoke-TektronixCliValidation {
             Passed = ($Status -eq "PASS"); Status = $Status; Detail = $Detail
         }
         Write-CaseStatus -Status $Status -Name $Name -Context "[live][tektronix]"
+        if ($Status -eq "FAIL" -and -not [string]::IsNullOrWhiteSpace($Detail)) {
+            Write-Host "      ${Detail}"
+        }
         if ($Status -eq "FAIL") { $script:Failure = $true }
     }
 
@@ -111,6 +129,9 @@ function Invoke-TektronixCliValidation {
                 $record.json = $jsonPath
             } catch { }
         }
+        $cliErrorDetail = ""
+        if ($record.json) { $cliErrorDetail = Get-CliErrorDetail -Payload $parsed }
+        if (-not [string]::IsNullOrWhiteSpace($cliErrorDetail)) { $cliErrorDetail = "; $cliErrorDetail" }
         $invocation = [ordered]@{
             index = $script:CliInvocationIndex
             command = "$pythonPath -m scopes_tool_cli.cli"
@@ -152,12 +173,12 @@ function Invoke-TektronixCliValidation {
         }
         if (-not $record.success -or -not $record.json) {
             $invocation.result = "FAIL"
-            throw "$Stage failed (exit $($record.exit_code), timeout=$timedOut); see $stdoutPath and $stderrPath"
+            throw "$Stage failed (exit $($record.exit_code), timeout=$timedOut)$cliErrorDetail; see $stdoutPath and $stderrPath"
         }
         $payload = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json -ErrorAction Stop
         if ($payload.ok -ne $true) {
             $invocation.result = "FAIL"
-            throw "$Stage returned ok=false; see $jsonPath"
+            throw "$Stage returned ok=false$cliErrorDetail; see $jsonPath"
         }
         if ($Command -in @("run", "stop-acquisition")) {
             Assert-TektronixCommandStatus -Payload $payload

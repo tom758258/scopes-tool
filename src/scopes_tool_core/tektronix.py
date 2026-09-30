@@ -946,7 +946,8 @@ class TektronixOscilloscope(Oscilloscope):
         if not self._units_available(channel):
             raise ParameterValidationError("Channel units are unsupported for this channel")
         token = {"volt": "V", "amp": "A"}[normalize_channel_units(units)]
-        self.scpi.write(f"CH{channel}:YUNit {token}")
+        # CH<x>:YUNit takes a <QString> argument, so the unit must stay quoted.
+        self.scpi.write(f'CH{channel}:YUNit "{token}"')
 
     def query_channel_units(self, channel: int) -> str:
         channel = self._channel(channel)

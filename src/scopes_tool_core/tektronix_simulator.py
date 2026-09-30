@@ -166,8 +166,9 @@ class TektronixSimulatorBackend(SimulatorBackend):
         match = re.fullmatch(r"CH(\d+):YUNIT", header)
         if match:
             channel = self._channel_number(match[1])
-            if (not is_tbs2000b or channel in self._capabilities.channel_units_channels) and token in {"V", "A"}:
-                self.channel_units[channel] = "volt" if token == "V" else "amp"
+            # CH<x>:YUNit is a <QString> command; an unquoted unit is a command error.
+            if (not is_tbs2000b or channel in self._capabilities.channel_units_channels) and token in {'"V"', '"A"'}:
+                self.channel_units[channel] = "volt" if token == '"V"' else "amp"
                 return True
         if header == "DISPLAY:PERSISTENCE" and not is_tbs2000b:
             if token in {"OFF", "INFINITE"} or value in {"1", "2", "5"}:
