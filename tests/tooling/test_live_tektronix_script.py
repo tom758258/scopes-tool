@@ -969,8 +969,24 @@ def test_non_blank_detail_is_printed_for_pass_na_and_fail(tmp_path: Path) -> Non
             assert name not in printed or printed[name] == "", name
 
 
+CONFIRMATION_SECTIONS = (
+    "PRE-VALIDATION",
+    "PHYSICAL PREPARATION",
+    "DEFAULT VALIDATION ACTIONS",
+    "STATE / CLEANUP LIMITATIONS",
+    "OPTIONAL ACTIONS",
+)
+CONFIRMATION_PROMPT = (
+    "Press Enter only after reviewing the information above.",
+    "Any other input cancels validation.",
+    "Ctrl+C to abort.",
+)
+NOT_REQUESTED = "Not requested."
+
+
 @requires_windows
 def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: Path) -> None:
+    # An explicit empty Enter is the only input that may continue.
     result, report = fake_run(tmp_path, TARGETS[2], live_model_name="TBS 1052B")
     assert result.returncode == 0, result.stdout + result.stderr
     assert report["status"] == "passed"
@@ -980,20 +996,29 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
         "Detected instrument: TBS 1052B",
         "Target: tektronix-tbs1052b",
         "Connection: usb",
-        "BEFORE VALIDATION",
-        "Disconnect unknown or sensitive DUT signals.",
-        "THE VALIDATOR WILL",
-        "Read and clear instrument status.",
-        "Restore original values where supported.",
+        *CONFIRMATION_SECTIONS,
+        "Hardware-free preflight passed.",
+        "Live instrument identity matches the selected target.",
+        "Disconnect unknown or sensitive DUT signals",
+        "so no fixed Keysight-style CH1/CH2 probe-comp fixture is required.",
+        "that read is destructive and clears it.",
+        "Perform supported same-value setters",
+        "Same-value setters are real instrument writes, not read-only checks.",
         "Not every setting is guaranteed to be fully restored.",
-        "Press Enter to continue.",
-        "Type N to cancel, or Ctrl+C to abort.",
+        *CONFIRMATION_PROMPT,
     ):
         assert banner in result.stdout, banner
 
+    # The screen must be printed before the first system command runs.
+    assert result.stdout.index("Scopes Tool Tektronix Live Validation") < result.stdout.index(
+        "PASS  [live][tektronix] system-status-byte"
+    )
+    # Sections stay in the documented order.
+    positions = [result.stdout.index(section) for section in CONFIRMATION_SECTIONS]
+    assert positions == sorted(positions)
+
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["operator-confirmation"]["status"] == "PASS"
-    # Confirmation happens after live identity and before the first system case.
     commands = [inv["arguments"][0] for inv in report["invocations"]]
     assert commands[:2] == ["identify", "identify"]
     assert commands.index("system-status-byte") > 1
@@ -1010,39 +1035,64 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
     )
     assert result.stdout.rstrip().endswith("PASS  [live][tektronix] baseline live validation")
 
-    # The confirmation screen only lists warnings for options actually enabled.
-    for warning in (
-        "-IncludeAcquisitionActions changes Run/Stop state",
-        "-IncludeAutoscale changes multiple front-panel settings",
-        "-IncludeConfigurationActions changes Cursor/Measurement settings",
-        "-IncludeStorageWrites may overwrite setup slot",
-        "-IncludeScreenshot may write a temporary instrument file",
-    ):
-        assert warning not in result.stdout, warning
+    # No optional action was requested, so none may be described as planned.
+    for action in ("Acquisition", "Autoscale", "Configuration", "Storage Writes", "Screenshot"):
+        assert f"- {action}: {NOT_REQUESTED}" in result.stdout, action
+    # The CH1 signal hint belongs to -IncludeConfigurationActions only.
+    assert "stable CH1 signal for the measurement and capture checks" not in result.stdout
 
 
 @requires_windows
 def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -> None:
     result, report = fake_run(
         tmp_path, TARGETS[0], "-IncludeAcquisitionActions", "-IncludeAutoscale",
-        "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "2",
-        "-IncludeScreenshot", "-ImageFilename", "acceptance.png",
+        "-IncludeConfigurationActions", "-IncludeStorageWrites",
+        "-SetupSlot", "1", "-ReferenceSlot", "2", "-IncludeScreenshot",
+        "-ImageFilename", "acceptance.png", "-WaveformFilename", "wave.csv",
+        "-WaveformSourceChannel", "2",
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    for warning in (
-        "-IncludeAcquisitionActions changes Run/Stop state",
-        "-IncludeAutoscale changes multiple front-panel settings",
-        "-IncludeStorageWrites may overwrite setup slot 1, reference slot 2",
-        "-IncludeScreenshot may write a temporary instrument file",
+    for expected in (
+        # Physical preparation gains the configuration-signal requirement.
+        "stable CH1 signal for the measurement and capture checks",
+        # Optional notes are specific to the options actually enabled.
+        "Acquisition: Run/Stop state changes",
+        "Autoscale: Changes multiple front-panel settings and is not restored.",
+        "Configuration: Runs measurement, capture, and cursor actions",
+        "cursors end off and measurements end cleared",
+        "TBS2074B cursor source selection may display CH1 or restart acquisition",
+        # Storage slots and filenames come from the arguments, not from constants.
+        "Storage Writes: Setup slot 1 and reference slot 2 may be overwritten;",
+        "instrument image file 'acceptance.png'",
+        "instrument waveform file 'wave.csv'",
+        # TBS2074B PNG capture is the supported screenshot path.
+        "Screenshot: PNG screenshot; Core writes a temporary instrument file and cleans it up.",
     ):
-        assert warning in result.stdout, warning
-    # -IncludeConfigurationActions was not requested for this run.
-    assert "-IncludeConfigurationActions changes Cursor/Measurement settings" not in result.stdout
+        assert expected in result.stdout, expected
+    assert f"- Storage Writes: {NOT_REQUESTED}" not in result.stdout
+
+
+@requires_windows
+@pytest.mark.parametrize(("target", "expected"), [
+    # TBS2074B supports a PNG screenshot; TBS1052B supports no screenshot format
+    # at all, so -IncludeScreenshot must not promise a screenshot file.
+    (TARGETS[0], "Screenshot: PNG screenshot; Core writes a temporary instrument file and cleans it up."),
+    (TARGETS[2], "Screenshot: No screenshot format is supported on this model; no screenshot file is written."),])
+def test_operator_confirmation_screenshot_note_matches_model_support(
+    tmp_path: Path, target: str, expected: str,
+) -> None:
+    result, report = fake_run(tmp_path, target, "-IncludeScreenshot")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"- {expected}" in result.stdout, expected
 
 
 @requires_windows
 @pytest.mark.parametrize("confirmation,reason", [
-    ("decline", "cancelled"),
+    # Any non-empty input, whitespace-only input, or a null result must fail
+    # closed exactly like a declined prompt.
+    ("decline", "only an explicit empty Enter continues"),
+    ("whitespace", "only an explicit empty Enter continues"),
+    ("null", "only an explicit empty Enter continues"),
     ("unavailable", "could not be read"),
 ])
 def test_operator_confirmation_blocks_all_later_commands(

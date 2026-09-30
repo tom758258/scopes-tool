@@ -1,6 +1,7 @@
 param(
     [string]$ScriptPath, [string]$FixturePath, [string]$PythonPath, [string]$OutputRoot,
-    [ValidateSet("enter", "decline", "unavailable")][string]$OperatorConfirmation = "enter"
+    [ValidateSet("enter", "decline", "whitespace", "null", "unavailable")]
+    [string]$OperatorConfirmation = "enter"
 )
 
 Set-StrictMode -Version Latest
@@ -23,6 +24,8 @@ function Read-Host {
     switch ($OperatorConfirmation) {
         "enter" { return "" }
         "decline" { return "N" }
+        "whitespace" { return " " }
+        "null" { return $null }
         "unavailable" { throw "No interactive console is attached." }
     }
     throw "Unsupported operator confirmation mode: $OperatorConfirmation"

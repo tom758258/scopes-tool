@@ -345,29 +345,90 @@ print(json.dumps({
         return [string]$Value
     }
 
+    function Write-OperatorSection {
+        param([string]$Title, [System.Collections.Generic.List[string]]$Lines)
+
+        Write-Host ""
+        Write-Host $Title
+        foreach ($line in $Lines) { Write-Host "  - ${line}" }
+    }
+
     function Confirm-OperatorContinuation {
-        # Only an explicit empty Enter continues. Any other input, an unreadable
-        # prompt, or a non-interactive host stops the run before any further
-        # functional command touches the instrument.
+        # Only an explicit empty Enter continues. Whitespace-only input, any other
+        # text, a null result, an unreadable prompt, or a non-interactive host all
+        # stop the run before any further functional command touches the
+        # instrument. The wording below describes what this runner really does;
+        # it deliberately avoids raw SCPI so the runner stays CLI-only.
         param([object]$DetectedModel)
 
-        $warnings = New-Object System.Collections.Generic.List[string]
-        $warnings.Add("  - Not every setting is guaranteed to be fully restored.")
-        if ($IncludeAcquisitionActions) {
-            $warnings.Add("  - -IncludeAcquisitionActions changes Run/Stop state; the original state is not guaranteed to be restored.")
-        }
-        if ($IncludeAutoscale) {
-            $warnings.Add("  - -IncludeAutoscale changes multiple front-panel settings and is not fully restored.")
-        }
+        $physicalPreparation = [System.Collections.Generic.List[string]]@(
+            "Confirm the correct oscilloscope is connected.",
+            "Disconnect unknown or sensitive DUT signals, and any signal the test must not disturb.",
+            "Checks run against the instrument's own current state, so no fixed Keysight-style CH1/CH2 probe-comp fixture is required."
+        )
         if ($IncludeConfigurationActions) {
-            $warnings.Add("  - -IncludeConfigurationActions changes Cursor/Measurement settings that may not be restored.")
+            $physicalPreparation.Add(
+                "-IncludeConfigurationActions additionally needs a suitable, stable CH1 signal for the measurement and capture checks.")
         }
-        if ($IncludeStorageWrites) {
-            $warnings.Add("  - -IncludeStorageWrites may overwrite setup slot $SetupSlot, reference slot $ReferenceSlot, and instrument files.")
+
+        $defaultActions = [System.Collections.Generic.List[string]]@(
+            "Read the instrument status byte.",
+            "Read the Standard Event Status register; that read is destructive and clears it.",
+            "Send a status clear, which discards the current status and event state.",
+            "Query the current channel, timebase, acquisition, and trigger settings.",
+            "Perform supported same-value setters, read each value back, then attempt to restore the original value.",
+            "Report a case as N/A when the model or the current instrument state is outside the supported subset, instead of changing state to force a result."
+        )
+
+        $cleanupLimitations = [System.Collections.Generic.List[string]]@(
+            "Same-value setters are real instrument writes, not read-only checks.",
+            "Not every setting is guaranteed to be fully restored.",
+            "Status reads and the status clear may consume or discard existing error and event state that was pending before validation.",
+            "Waveform transfer settings have no public restore path and may remain changed."
+        )
+
+        $acquisitionNote = if ($IncludeAcquisitionActions) {
+            "Run/Stop state changes; cleanup sends stop without an independent Running/Stopped readback, and the original state is not restored"
+        } else { "Not requested" }
+        $autoscaleNote = if ($IncludeAutoscale) {
+            "Changes multiple front-panel settings and is not restored"
+        } else { "Not requested" }
+        $configurationNote = if ($IncludeConfigurationActions) {
+            $text = "Runs measurement, capture, and cursor actions; cursors end off and measurements end cleared, and transfer settings are not restored"
+            if ($script:Target -eq "tektronix-tbs2074b") {
+                $text += "; TBS2074B cursor source selection may display CH1 or restart acquisition through Core"
+            }
+            $text
+        } else { "Not requested" }
+        $storageNote = if ($IncludeStorageWrites) {
+            $text = "Setup slot $SetupSlot and reference slot $ReferenceSlot may be overwritten"
+            $files = [System.Collections.Generic.List[string]]@()
+            if (-not [string]::IsNullOrWhiteSpace($ImageFilename)) {
+                $files.Add("instrument image file '$ImageFilename'")
+            }
+            if (-not [string]::IsNullOrWhiteSpace($WaveformFilename)) {
+                $files.Add("instrument waveform file '$WaveformFilename'")
+            }
+            if ($files.Count -gt 0) { $text += "; requested $($files -join ' and ') may be overwritten" }
+            $text
+        } else { "Not requested" }
+        $screenshotNote = if (-not $IncludeScreenshot) {
+            "Not requested"
+        } elseif ($script:Target -eq "tektronix-tbs2074b") {
+            "PNG screenshot; Core writes a temporary instrument file and cleans it up"
+        } elseif ($script:Target -eq "tektronix-tds2024b") {
+            "BMP screenshot, and only over a USBTMC resource; skipped otherwise"
+        } else {
+            "No screenshot format is supported on this model; no screenshot file is written"
         }
-        if ($IncludeScreenshot) {
-            $warnings.Add("  - -IncludeScreenshot may write a temporary instrument file.")
-        }
+
+        $optionalActions = [System.Collections.Generic.List[string]]@(
+            "Acquisition: ${acquisitionNote}.",
+            "Autoscale: ${autoscaleNote}.",
+            "Configuration: ${configurationNote}.",
+            "Storage Writes: ${storageNote}.",
+            "Screenshot: ${screenshotNote}."
+        )
 
         Write-Host ""
         Write-Host "--------------------------------------------------"
@@ -376,19 +437,19 @@ print(json.dumps({
         Write-Host "Detected instrument: $DetectedModel"
         Write-Host "Target: $($script:Target)"
         Write-Host "Connection: $($script:Connection)"
+
+        Write-OperatorSection -Title "PRE-VALIDATION" -Lines ([System.Collections.Generic.List[string]]@(
+            "Hardware-free preflight passed.",
+            "Live instrument identity matches the selected target."
+        ))
+        Write-OperatorSection -Title "PHYSICAL PREPARATION" -Lines $physicalPreparation
+        Write-OperatorSection -Title "DEFAULT VALIDATION ACTIONS" -Lines $defaultActions
+        Write-OperatorSection -Title "STATE / CLEANUP LIMITATIONS" -Lines $cleanupLimitations
+        Write-OperatorSection -Title "OPTIONAL ACTIONS" -Lines $optionalActions
         Write-Host ""
-        Write-Host "BEFORE VALIDATION"
-        Write-Host "  - Disconnect unknown or sensitive DUT signals."
-        Write-Host "  - Confirm the correct instrument is connected."
-        Write-Host ""
-        Write-Host "THE VALIDATOR WILL"
-        Write-Host "  - Read and clear instrument status."
-        Write-Host "  - Perform same-value setting and readback checks."
-        Write-Host "  - Restore original values where supported."
-        foreach ($warning in $warnings) { Write-Host $warning }
-        Write-Host ""
-        Write-Host "Press Enter to continue."
-        Write-Host "Type N to cancel, or Ctrl+C to abort."
+        Write-Host "Press Enter only after reviewing the information above."
+        Write-Host "Any other input cancels validation."
+        Write-Host "Ctrl+C to abort."
         Write-Host ""
 
         $response = $null
@@ -399,12 +460,13 @@ print(json.dumps({
             $reason = "Operator confirmation could not be read: $($_.Exception.Message)"
         }
         if ([string]::IsNullOrWhiteSpace($reason)) {
-            if ([string]::IsNullOrWhiteSpace([string]$response)) {
+            # Fail closed: only an actual empty string counts as an explicit Enter.
+            if ($response -is [string] -and $response.Length -eq 0) {
                 Add-Case -Name "operator-confirmation" -Status "PASS" `
                     -Detail "Operator confirmed after live identity and target match"
                 return $true
             }
-            $reason = "Operator cancelled live validation at the confirmation prompt."
+            $reason = "Operator confirmation was not given; only an explicit empty Enter continues."
         }
         Add-Case -Name "operator-confirmation" -Status "FAIL" -Detail $reason
         # Reuse the identity gate so no later functional command runs.
