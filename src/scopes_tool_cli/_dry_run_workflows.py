@@ -216,7 +216,7 @@ def _plan_workflows(
         plan = plan_smoke(SmokePlanRequest(output_dir=args.output_dir), capabilities)
         return list(plan.planned_scpi), list(plan.files), plan.result
 
-    if command in {"capture", "capture-batch"}:
+    if command == "capture-batch":
         channels = _resolve_capture_channels(args.channel, capabilities)
         points = validate_waveform_points(args.points, capabilities)
         if args.waveform_format == "word":
@@ -224,10 +224,7 @@ def _plan_workflows(
         planned = list(plan_capture(CapturePlanRequest(channels, points, args.waveform_format), capabilities, workflow=True).planned_scpi)
         files = _planned_capture_files(args, command)
         result = {"channels": list(channels), "points": points, "format": args.waveform_format.upper(), "files": files}
-        if command == "capture":
-            result["requested_points"] = points
-        else:
-            result.update({"status": "planned", "requested_count": args.count, "completed_count": 0, "captures": [], "manifest_path": files[0]["path"], "scpi_log_path": files[1]["path"]})
+        result.update({"status": "planned", "requested_count": args.count, "completed_count": 0, "captures": [], "manifest_path": files[0]["path"], "scpi_log_path": files[1]["path"]})
         return planned, files, result
 
     if command == "measure-log":
