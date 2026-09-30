@@ -25,9 +25,8 @@ from scopes_tool_core.drivers import driver_for_physical_model
 from scopes_tool_core.errors import (
     OscilloscopeError,
     ParameterValidationError,
-    UnsupportedModelError,
 )
-from scopes_tool_core.identity import identify_requires_registered_model, physical_model_for_id
+from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.output_files import (
     write_json_file,
@@ -656,18 +655,6 @@ def _print_live_resources(
                 with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                     idn = scope.query_idn()
             except OscilloscopeError:
-                continue
-
-        if identify_requires_registered_model(idn.vendor):
-            try:
-                _ = idn.physical_model
-            except UnsupportedModelError:
-                verification_failures.append({
-                    "resource": resource,
-                    "live": False,
-                    "raw_idn": idn.raw,
-                    "detail": "Unsupported physical oscilloscope model",
-                })
                 continue
 
         live_count += 1

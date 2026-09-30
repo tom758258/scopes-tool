@@ -264,8 +264,8 @@ def test_tds2000b_display_vectors_metadata_matches_sent_command(monkeypatch, cap
     assert payload["result"]["command"] == "DISPlay:STYle VECtors"
 
 
-def test_live_resource_discovery_reports_unknown_tek_as_unsupported(monkeypatch, capsys):
-    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS9999B,SN1,1.0"})
+def test_live_resource_discovery_lists_unregistered_tek_model(monkeypatch, capsys):
+    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074,FAKE_SERIAL,FW1"})
     monkeypatch.setattr(
         cli, "list_visa_resources",
         lambda visa_library=None: VisaResourceListing(resources=("USB0::FAKE::INSTR",), backend="test"),
@@ -279,8 +279,20 @@ def test_live_resource_discovery_reports_unknown_tek_as_unsupported(monkeypatch,
     assert cli.main(["list-resources", "--live-only", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert backend.history == ["*IDN?"]
-    assert payload["result"]["live_resources"] == []
-    assert payload["result"]["verification_failures"][0]["detail"] == "Unsupported physical oscilloscope model"
+    assert payload["result"]["live_resources"] == [
+        {
+            "resource": "USB0::FAKE::INSTR",
+            "idn": {
+                "raw": "TEKTRONIX,TBS2074,FAKE_SERIAL,FW1",
+                "vendor": "TEKTRONIX",
+                "model": "TBS2074",
+                "series": None,
+                "serial": "FAKE_SERIAL",
+                "firmware": "FW1",
+            },
+        }
+    ]
+    assert "verification_failures" not in payload["result"]
 
 
 @pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
