@@ -397,8 +397,8 @@ function Assert-TargetModelMatch {
         )
     }
     if ($ResolvedTarget -in @($script:TektronixValidationTargetProfiles.model_id)) {
+        # The physical model is already matched by the normalized token check above.
         if ([string]$Identity.idn.vendor -ine "Tektronix" -or
-            [string]$Identity.idn.model -cne [string]$profile.model -or
             [int]$Identity.capabilities.analog_channels -ne [int]$profile.channels -or
             [string]$Identity.capabilities.series -cne [string]$profile.series) {
             throw "Detected vendor, physical model, channel count, or profile differs from -Target."

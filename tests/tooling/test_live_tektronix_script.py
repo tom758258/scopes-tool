@@ -132,6 +132,24 @@ def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     assert all(inv["arguments"][0] == "identify" for inv in report["invocations"])
 
 
+@requires_windows
+def test_physical_model_spacing_passes_identity_gate(tmp_path: Path) -> None:
+    # Real Tektronix instruments report "TBS 1052B" while the target profile
+    # declares "TBS1052B"; the normalized token match must accept it.
+    result, report = fake_run(
+        tmp_path, TARGETS[2], live_model_name="TBS 1052B",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["preflight"]["status"] == "PASS"
+    assert cases["identify"]["status"] == "PASS", cases["identify"]
+    assert not [case for case in report["cases"] if case["status"] == "FAIL"]
+    assert report["status"] == "passed"
+    assert [inv["arguments"][0] for inv in report["invocations"]][:2] == [
+        "identify", "identify"
+    ]
+
+
 def fake_run(
     tmp_path: Path, target: str, *extra: str, mode: str = "edge", mismatch: bool = False,
     connection: str = "usb", bad_bmp: bool = False,
@@ -140,6 +158,7 @@ def fake_run(
     waveform_rows: tuple[str, ...] = ("0,0.5", "0.001,0.6"),
     actual_points: int | None = None, hidden_outcome: str | None = None,
     subprocess_cli: bool = False, live_model: str | None = None,
+    live_model_name: str | None = None,
     native_status_command: str | None = None, native_status_value: int = 0,
     native_status_raw: str = "0",
     core_supported_operations: tuple[str, ...] | None = None,
@@ -149,11 +168,13 @@ def fake_run(
         TARGETS[1]: ("TDS2024B", 4, "TDS2000B"),
         TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
     }[target]
-    live_model_name, live_channels, live_series = {
+    live_detected_model, live_channels, live_series = {
         TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
         TARGETS[1]: ("TDS2024B", 4, "TDS2000B"),
         TARGETS[2]: ("TBS1052B", 2, "TBS1000B"),
     }[live_model or target]
+    if live_model_name is not None:
+        live_detected_model = live_model_name
     screenshot_bytes = b"bad" if bad_bmp else (b"\x89PNG\r\n\x1a\nfake" if target == TARGETS[0] else b"BMfake")
     default_supported_operations = {
         TARGETS[0]: (
@@ -341,7 +362,7 @@ def fake_run(
             "values": values,
             "idn": {"vendor": "TEKTRONIX", "model": model},
             "capabilities": {"analog_channels": channels, "series": series},
-            "live_idn": {"vendor": "TEKTRONIX", "model": live_model_name},
+            "live_idn": {"vendor": "TEKTRONIX", "model": live_detected_model},
             "live_capabilities": {"analog_channels": live_channels, "series": live_series},
             "native_status_command": native_status_command,
             "native_status_value": native_status_value,
@@ -792,7 +813,10 @@ def test_runner_uses_only_public_cli_and_default_options_are_off() -> None:
 def test_identity_gate_and_vectors_safety_are_explicit() -> None:
     assert TEXT.index('Invoke-Cli -Stage "identify"') < TEXT.index("if (-not $script:StopAfterIdentity)")
     assert "[string]$Identity.idn.vendor" in VALIDATION_HELPERS_TEXT
-    assert "[string]$Identity.idn.model" in VALIDATION_HELPERS_TEXT
+    # The physical model is read through the StrictMode-safe accessor and matched
+    # by normalized token, so a real "TBS 1052B" still matches the TBS1052B target.
+    assert 'PSObject.Properties["model"]' in VALIDATION_HELPERS_TEXT
+    assert "Get-NormalizedModelToken -Value $detected" in VALIDATION_HELPERS_TEXT
     assert "[int]$Identity.capabilities.analog_channels" in VALIDATION_HELPERS_TEXT
     assert 'Invoke-Cli -Stage "display-vectors-query"' in TEXT
     assert "if ($isOn -is [bool] -and $isOn)" in TEXT
