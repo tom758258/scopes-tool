@@ -162,6 +162,7 @@ def fake_run(
     native_status_command: str | None = None, native_status_value: int = 0,
     native_status_raw: str = "0",
     core_supported_operations: tuple[str, ...] | None = None,
+    confirmation: str = "enter",
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074B", 4, "TBS2000B"),
@@ -379,6 +380,7 @@ def fake_run(
     result = run_script(
         "-ScriptPath", str(SCRIPT), "-FixturePath", str(fixture),
         "-PythonPath", sys.executable, "-OutputRoot", str(output_root),
+        "-OperatorConfirmation", confirmation,
         script=Path(__file__).with_name("tektronix_function_harness.ps1"), env=env,
     )
     runs = set(output_root.glob("run_*/private/report.json")) - previous_runs
@@ -392,6 +394,34 @@ def fake_run(
     assert counts["na"] == sum(case["status"] == "N/A" for case in report["cases"])
     assert counts["invocations"] == len(report["invocations"])
     return result, report
+
+
+CASE_STATUS_PATTERN = re.compile(r"^(PASS|FAIL|N/A)\s+\[live\]\[tektronix\] (\S+)\s*$")
+
+
+def printed_case_details(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    """Return the console Detail printed for the first status line of each case.
+
+    The trailing Summary reprints every case status without a Detail, so only the
+    first occurrence of each case name carries the runner's Add-Case output.
+    """
+    lines = [line.rstrip() for line in result.stdout.splitlines()]
+    printed: dict[str, str] = {}
+    for index, line in enumerate(lines):
+        match = CASE_STATUS_PATTERN.match(line)
+        if match is None or match.group(2) in printed:
+            continue
+        detail: list[str] = []
+        for candidate in lines[index + 1:]:
+            if not candidate.strip():
+                if detail:
+                    break
+                continue
+            if not candidate.startswith(" "):
+                break
+            detail.append(candidate.strip())
+        printed[match.group(2)] = " ".join(detail)
+    return printed
 
 
 @requires_windows
@@ -906,3 +936,142 @@ def test_generated_arguments_match_parser_contract(tmp_path: Path, target: str, 
             assert parsed.live is True
             assert parsed.resource == "USB0::FAKE::INSTR"
             assert "--model" not in argv
+
+
+@requires_windows
+def test_non_blank_detail_is_printed_for_pass_na_and_fail(tmp_path: Path) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[0], "-IncludeConfigurationActions",
+        cursor_error=("OscilloscopeError", "Cursor X setter failed"),
+    )
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    printed = printed_case_details(result)
+
+    # PASS, N/A and FAIL must all surface a non-blank Detail in the console, and
+    # the console Detail must stay identical to the reported Detail.
+    assert printed["preflight"] == cases["preflight"]["detail"]
+    assert printed["preflight"] == "Selected model CLI simulation; no hardware accessed"
+    assert printed["channel-units"] == cases["channel-units"]["detail"]
+    assert printed["channel-units"] == "query, same-value set, and readback"
+    assert printed["autoscale"] == cases["autoscale"]["detail"]
+    assert printed["autoscale"] == "Requires -IncludeAutoscale"
+    assert cases["autoscale"]["status"] == "N/A"
+    assert printed["cursor-set"] == cases["cursor-set"]["detail"]
+    assert cases["cursor-set"]["status"] == "FAIL"
+    assert "OscilloscopeError: Cursor X setter failed" in printed["cursor-set"]
+
+    # A blank Detail must not produce a stray detail line.
+    for name, case in cases.items():
+        if case["detail"]:
+            assert printed.get(name), name
+        else:
+            assert name not in printed or printed[name] == "", name
+
+
+@requires_windows
+def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: Path) -> None:
+    result, report = fake_run(tmp_path, TARGETS[2], live_model_name="TBS 1052B")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert report["status"] == "passed"
+
+    for banner in (
+        "Scopes Tool Tektronix Live Validation",
+        "Detected instrument: TBS 1052B",
+        "Target: tektronix-tbs1052b",
+        "Connection: usb",
+        "BEFORE VALIDATION",
+        "Disconnect unknown or sensitive DUT signals.",
+        "THE VALIDATOR WILL",
+        "Read and clear instrument status.",
+        "Restore original values where supported.",
+        "Not every setting is guaranteed to be fully restored.",
+        "Press Enter to continue.",
+        "Type N to cancel, or Ctrl+C to abort.",
+    ):
+        assert banner in result.stdout, banner
+
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["operator-confirmation"]["status"] == "PASS"
+    # Confirmation happens after live identity and before the first system case.
+    commands = [inv["arguments"][0] for inv in report["invocations"]]
+    assert commands[:2] == ["identify", "identify"]
+    assert commands.index("system-status-byte") > 1
+    assert commands[-1] == "system-standard-event"
+    assert cases["system-status-byte"]["status"] == "PASS"
+    assert cases["final-standard-event"]["status"] == "PASS"
+
+    assert "\nSummary\n" in result.stdout
+    counts = report["summary_counts"]
+    totals = re.search(r"Totals: (\d+) PASS / (\d+) FAIL / (\d+) N/A", result.stdout)
+    assert totals is not None, result.stdout[-2000:]
+    assert (int(totals.group(1)), int(totals.group(2)), int(totals.group(3))) == (
+        counts["passed"], counts["failed"], counts["na"],
+    )
+    assert result.stdout.rstrip().endswith("PASS  [live][tektronix] baseline live validation")
+
+    # The confirmation screen only lists warnings for options actually enabled.
+    for warning in (
+        "-IncludeAcquisitionActions changes Run/Stop state",
+        "-IncludeAutoscale changes multiple front-panel settings",
+        "-IncludeConfigurationActions changes Cursor/Measurement settings",
+        "-IncludeStorageWrites may overwrite setup slot",
+        "-IncludeScreenshot may write a temporary instrument file",
+    ):
+        assert warning not in result.stdout, warning
+
+
+@requires_windows
+def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[0], "-IncludeAcquisitionActions", "-IncludeAutoscale",
+        "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "2",
+        "-IncludeScreenshot", "-ImageFilename", "acceptance.png",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    for warning in (
+        "-IncludeAcquisitionActions changes Run/Stop state",
+        "-IncludeAutoscale changes multiple front-panel settings",
+        "-IncludeStorageWrites may overwrite setup slot 1, reference slot 2",
+        "-IncludeScreenshot may write a temporary instrument file",
+    ):
+        assert warning in result.stdout, warning
+    # -IncludeConfigurationActions was not requested for this run.
+    assert "-IncludeConfigurationActions changes Cursor/Measurement settings" not in result.stdout
+
+
+@requires_windows
+@pytest.mark.parametrize("confirmation,reason", [
+    ("decline", "cancelled"),
+    ("unavailable", "could not be read"),
+])
+def test_operator_confirmation_blocks_all_later_commands(
+    tmp_path: Path, confirmation: str, reason: str,
+) -> None:
+    result, report = fake_run(tmp_path, TARGETS[0], confirmation=confirmation)
+    assert result.returncode != 0
+    assert report["status"] == "failed"
+    # Live identify already ran, so hardware access must not be denied.
+    assert report["hardware_touched"] is True
+
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["operator-confirmation"]["status"] == "FAIL"
+    assert reason in cases["operator-confirmation"]["detail"]
+    assert reason in printed_case_details(result)["operator-confirmation"]
+    assert cases["preflight"]["status"] == "PASS"
+    assert cases["identify"]["status"] == "PASS"
+
+    commands = [inv["arguments"][0] for inv in report["invocations"]]
+    assert commands == ["identify", "identify"]
+    assert not {"system-status-byte", "system-standard-event",
+                "system-clear-status", "system-opc"} & set(commands)
+
+    counts = report["summary_counts"]
+    assert counts["failed"] == 1
+    assert counts["passed"] >= 2
+    totals = re.search(r"Totals: (\d+) PASS / (\d+) FAIL / (\d+) N/A", result.stdout)
+    assert totals is not None, result.stdout[-2000:]
+    assert (int(totals.group(1)), int(totals.group(2))) == (counts["passed"], counts["failed"])
+    assert "FAIL  [live][tektronix] baseline live validation" in result.stdout
+    assert result.stdout.rstrip().endswith("FAIL  [live][tektronix] baseline live validation")
+    assert "PASS  [live][tektronix] baseline live validation" not in result.stdout

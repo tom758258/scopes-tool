@@ -1,4 +1,7 @@
-param([string]$ScriptPath, [string]$FixturePath, [string]$PythonPath, [string]$OutputRoot)
+param(
+    [string]$ScriptPath, [string]$FixturePath, [string]$PythonPath, [string]$OutputRoot,
+    [ValidateSet("enter", "decline", "unavailable")][string]$OperatorConfirmation = "enter"
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -10,6 +13,20 @@ $script:HiddenCaptured = $false
 $script:CursorState = $null
 $script:ValidatorRoot = Split-Path -Parent $ScriptPath
 $script:PositionState = $null
+
+# Test double for the operator confirmation prompt. The fake harness runs
+# non-interactively, so the confirmation must be simulated here only. The real
+# runner keeps using the Read-Host cmdlet and exposes no bypass option.
+function Read-Host {
+    param([Parameter(Position = 0)][string]$Prompt)
+
+    switch ($OperatorConfirmation) {
+        "enter" { return "" }
+        "decline" { return "N" }
+        "unavailable" { throw "No interactive console is attached." }
+    }
+    throw "Unsupported operator confirmation mode: $OperatorConfirmation"
+}
 
 function Invoke-FakeTransport {
     param([string]$Command, [string[]]$Options, [switch]$Simulate)
@@ -128,6 +145,7 @@ $script:Target = switch ([string]$fixture.idn.model.ToUpperInvariant()) {
     default { throw "Unsupported fake model: $($fixture.idn.model)" }
 }
 $script:Connection = "usb"
+$script:IsTektronix = $true
 $script:BackendName = "system_visa"
 $script:LiveConnectionArguments = @("--live", "--resource", "USB0::FAKE::INSTR")
 $script:CliInvocationIndex = 0
@@ -237,5 +255,16 @@ $ImageFilename = [string]$parameterValues["ImageFilename"]
 $WaveformFilename = [string]$parameterValues["WaveformFilename"]
 $WaveformSourceChannel = if ($parameterValues.ContainsKey("WaveformSourceChannel")) { [int]$parameterValues["WaveformSourceChannel"] } else { 1 }
 
-& ([scriptblock]::Create($source + "`nInvoke-TektronixCliValidation`n"))
-if ($script:FunctionalFailed -or $script:ShareableGenerationFailed) { exit 1 }
+# Run the real Tektronix branch tail from live-cli-check.ps1 instead of a local
+# copy, so the fake harness observes the same Summary, totals, and exit codes as
+# the public runner.
+$tektronixBranchAst = $null
+foreach ($statement in $cliAst.EndBlock.Statements) {
+    if ($statement -isnot [System.Management.Automation.Language.IfStatementAst]) { continue }
+    if ($statement.Clauses[0].Item2.Extent.Text.Contains("Invoke-TektronixCliValidation")) {
+        $tektronixBranchAst = $statement
+    }
+}
+if ($null -eq $tektronixBranchAst) { throw "Tektronix validation branch was not found" }
+
+& ([scriptblock]::Create($source + "`n" + $tektronixBranchAst.Extent.Text))

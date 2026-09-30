@@ -79,7 +79,7 @@ function Invoke-TektronixCliValidation {
             Passed = ($Status -eq "PASS"); Status = $Status; Detail = $Detail
         }
         Write-CaseStatus -Status $Status -Name $Name -Context "[live][tektronix]"
-        if ($Status -eq "FAIL" -and -not [string]::IsNullOrWhiteSpace($Detail)) {
+        if (-not [string]::IsNullOrWhiteSpace($Detail)) {
             Write-Host "      ${Detail}"
         }
         if ($Status -eq "FAIL") { $script:Failure = $true }
@@ -345,6 +345,73 @@ print(json.dumps({
         return [string]$Value
     }
 
+    function Confirm-OperatorContinuation {
+        # Only an explicit empty Enter continues. Any other input, an unreadable
+        # prompt, or a non-interactive host stops the run before any further
+        # functional command touches the instrument.
+        param([object]$DetectedModel)
+
+        $warnings = New-Object System.Collections.Generic.List[string]
+        $warnings.Add("  - Not every setting is guaranteed to be fully restored.")
+        if ($IncludeAcquisitionActions) {
+            $warnings.Add("  - -IncludeAcquisitionActions changes Run/Stop state; the original state is not guaranteed to be restored.")
+        }
+        if ($IncludeAutoscale) {
+            $warnings.Add("  - -IncludeAutoscale changes multiple front-panel settings and is not fully restored.")
+        }
+        if ($IncludeConfigurationActions) {
+            $warnings.Add("  - -IncludeConfigurationActions changes Cursor/Measurement settings that may not be restored.")
+        }
+        if ($IncludeStorageWrites) {
+            $warnings.Add("  - -IncludeStorageWrites may overwrite setup slot $SetupSlot, reference slot $ReferenceSlot, and instrument files.")
+        }
+        if ($IncludeScreenshot) {
+            $warnings.Add("  - -IncludeScreenshot may write a temporary instrument file.")
+        }
+
+        Write-Host ""
+        Write-Host "--------------------------------------------------"
+        Write-Host "Scopes Tool Tektronix Live Validation"
+        Write-Host ""
+        Write-Host "Detected instrument: $DetectedModel"
+        Write-Host "Target: $($script:Target)"
+        Write-Host "Connection: $($script:Connection)"
+        Write-Host ""
+        Write-Host "BEFORE VALIDATION"
+        Write-Host "  - Disconnect unknown or sensitive DUT signals."
+        Write-Host "  - Confirm the correct instrument is connected."
+        Write-Host ""
+        Write-Host "THE VALIDATOR WILL"
+        Write-Host "  - Read and clear instrument status."
+        Write-Host "  - Perform same-value setting and readback checks."
+        Write-Host "  - Restore original values where supported."
+        foreach ($warning in $warnings) { Write-Host $warning }
+        Write-Host ""
+        Write-Host "Press Enter to continue."
+        Write-Host "Type N to cancel, or Ctrl+C to abort."
+        Write-Host ""
+
+        $response = $null
+        $reason = ""
+        try {
+            $response = Read-Host
+        } catch {
+            $reason = "Operator confirmation could not be read: $($_.Exception.Message)"
+        }
+        if ([string]::IsNullOrWhiteSpace($reason)) {
+            if ([string]::IsNullOrWhiteSpace([string]$response)) {
+                Add-Case -Name "operator-confirmation" -Status "PASS" `
+                    -Detail "Operator confirmed after live identity and target match"
+                return $true
+            }
+            $reason = "Operator cancelled live validation at the confirmation prompt."
+        }
+        Add-Case -Name "operator-confirmation" -Status "FAIL" -Detail $reason
+        # Reuse the identity gate so no later functional command runs.
+        $script:StopAfterIdentity = $true
+        return $false
+    }
+
     try {
         $script:CoreProfile = Invoke-CoreProfileProbe
         $preflight = Invoke-Cli -Stage "preflight-identify" -Command "identify" -Simulate
@@ -359,14 +426,24 @@ print(json.dumps({
 
     try {
         # The first live invocation is identify. No state-changing case may precede this gate.
+        $detectedModel = ""
         try {
             $identity = Invoke-Cli -Stage "identify" -Command "identify"
             Assert-TargetModelMatch -Identity $identity -ResolvedTarget $script:Target
             $expected = $profile
+            $modelProperty = $identity.PSObject.Properties["idn"]
+            if ($null -ne $modelProperty -and $null -ne $modelProperty.Value) {
+                $detectedModelName = $modelProperty.Value.PSObject.Properties["model"]
+                if ($null -ne $detectedModelName) { $detectedModel = [string]$detectedModelName.Value }
+            }
+            if ([string]::IsNullOrWhiteSpace($detectedModel)) { $detectedModel = [string]$profile.model }
             Add-Case -Name "identify" -Status "PASS" -Detail "Tektronix $($expected.model), $($expected.channels) channels"
         } catch {
             Add-Case -Name "identify" -Status "FAIL" -Detail $_.Exception.Message
             $script:StopAfterIdentity = $true
+        }
+        if (-not $script:StopAfterIdentity) {
+            [void](Confirm-OperatorContinuation -DetectedModel $detectedModel)
         }
         if (-not $script:StopAfterIdentity) {
             Invoke-SimpleCase -Name "system-status-byte" -Command "system-status-byte" -Options @("--query")

@@ -2149,7 +2149,36 @@ $script:RunRoot = $runLayout.Private
 $script:ShareableRoot = $runLayout.Shareable
 if ($script:IsTektronix) {
     Invoke-TektronixCliValidation
-    if ($script:FunctionalFailed -or $script:ShareableGenerationFailed) { exit 1 }
+    Write-Host ""
+    Write-Host "--------------------------------------------------"
+    Write-Host "Summary"
+    $tektronixPassed = 0
+    $tektronixFailed = 0
+    $tektronixNotApplicable = 0
+    foreach ($entry in $script:CaseResults.GetEnumerator()) {
+        $status = [string]$entry.Value.Status
+        Write-Host ("{0,-5} [live][tektronix] {1}" -f $status, $entry.Key)
+        if ($status -eq "PASS") { $tektronixPassed += 1 }
+        elseif ($status -eq "FAIL") { $tektronixFailed += 1 }
+        elseif ($status -eq "N/A") { $tektronixNotApplicable += 1 }
+    }
+    Write-Host ""
+    Write-Host ("Totals: {0} PASS / {1} FAIL / {2} N/A" -f
+        $tektronixPassed, $tektronixFailed, $tektronixNotApplicable)
+    Write-Host ""
+    Write-Host "[live][tektronix] artifacts: $($script:RunDirectory)"
+
+    if ($script:FunctionalFailed -or $script:ShareableGenerationFailed) {
+        if ($script:FunctionalFailed -and -not $script:ShareableGenerationFailed) {
+            Write-Host "Functional validation did not complete successfully."
+        }
+        Write-Host "FAIL  [live][tektronix] baseline live validation"
+        if ($script:ShareableGenerationFailed) {
+            Write-Host "[live][tektronix] run failed; see private report for the shareable generation error"
+        }
+        exit 1
+    }
+    Write-Host "PASS  [live][tektronix] baseline live validation"
     exit 0
 }
 
