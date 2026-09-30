@@ -52,3 +52,11 @@ argument normalization to the private `_worker_commands_workflows.py`,
 client requests, response handling, output, and client exit-code mapping. The
 command and client modules remain CLI adapters and do not introduce new Core or
 Worker protocol abstractions.
+
+Within `src/scopes_tool_webui/`, request admission, live parameter shape
+validation, and capability gating stay in `command_validation.py`, which
+delegates per-domain parameter validation to the private
+`_validation_shared.py`, `_validation_controls.py`, `_validation_analysis.py`,
+and `_validation_advanced.py` modules. These modules remain WebUI adapters over
+Core-owned validation and do not introduce a command registry, schema framework,
+or second capability policy.
