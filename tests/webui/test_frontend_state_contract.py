@@ -912,20 +912,21 @@ def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None
 
 def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     html = read_static("index.html")
     editor_source = read_static("serial-editor.js")
     styles_source = read_static("styles.css")
 
-    assert 'import { SerialDecodeEditor, SerialTriggerEditor, SerialListerEditor, createSerialEditorController } from "/static/serial-editor.js";' in app_source
+    assert 'import { SerialDecodeEditor, SerialListerEditor, SerialTriggerEditor, createSerialEditorController } from "/static/serial-editor.js";' in bootstrap_source
     assert 'id="form-heading"' in html
     assert 'id="serial-decode-editor" class="serial-editor" hidden' in html
     assert 'id="serial-trigger-editor" class="serial-editor" hidden' in html
     assert 'id="serial-lister-editor" class="serial-editor" hidden' in html
     assert 'id="serial-editor"' not in html
-    routing = extract_function(app_source, "function editorKindFor(command)")
+    routing = extract_function(bootstrap_source, "function editorKindFor(command)")
     assert "command?.editor" in routing
-    assert "EDITOR_RENDERERS[kind]" in routing
-    renderer_map = app_source.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
+    assert "editorRenderers[kind]" in routing
+    renderer_map = bootstrap_source.split("const editorRenderers = {", 1)[1].split("};", 1)[0]
     assert '"serial-decode": () => serialDecodeEditor,' in renderer_map
     assert '"serial-trigger": () => serialTriggerEditor,' in renderer_map
     assert '"serial-lister": () => serialListerEditor,' in renderer_map
@@ -949,7 +950,7 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     assert "serialDecodeEditor?.rerender();" in app_source
     assert "serialTriggerEditor?.rerender();" in app_source
     assert "serialListerEditor?.rerender();" in app_source
-    assert "renderPcOutputNote: (note)" in app_source
+    assert "renderPcOutputNote: (note)" in bootstrap_source
     assert "serial-lister-row" in editor_source
     assert editor_source.count('className = "command-form";') >= 5
     assert ".serial-lister-row { display: grid; gap: 8px; width: 50%; }" in styles_source
@@ -4796,9 +4797,11 @@ def test_global_command_state_keeps_the_existing_execution_lifecycle() -> None:
 
 def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     html = read_static("index.html")
 
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 20
+    assert bootstrap_source.count("headerActions: elements.workspaceHeaderActions,") == 20
+    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 0
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
     styles = read_static("styles.css")
@@ -4809,11 +4812,11 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
     editor_path = STATIC_ROOT / "diagnostics-editor.js"
-    app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     html = read_static("index.html")
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
-    assert 'import { DiagnosticsEditor } from "/static/diagnostics-editor.js";' in app_source
+    assert 'import { DiagnosticsEditor } from "/static/diagnostics-editor.js";' in bootstrap_source
     assert 'id="diagnostics-editor" class="diagnostics-editor" hidden' in html
     assert '"diagnostics.saveArtifacts": "Save diagnostic artifacts"' in english
     assert '"diagnostics.saveArtifacts": "儲存診斷檔案"' in chinese

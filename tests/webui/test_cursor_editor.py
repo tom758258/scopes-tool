@@ -391,9 +391,10 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     index_source = read_static("index.html")
 
-    assert "cursor: () => cursorEditor," in app_source
+    assert "cursor: () => cursorEditor," in bootstrap_source
     assert "elements.cursorEditor.hidden = editorKind !== " in app_source
     assert 'if (editorKind === "cursor") cursorEditor?.schedulePresentation();' in app_source
     assert 'cursorEditor.refreshButton.hidden = editorKind !== "cursor";' in app_source

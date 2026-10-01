@@ -19,8 +19,9 @@ def test_channel_offset_editor_wiring() -> None:
     assert catalog["channel-offset"]["editor"] == "channel-offset"
 
     app = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
-    assert 'import { ChannelOffsetEditor } from "/static/channel-offset-editor.js";' in app
-    routing = app.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
+    bootstrap = (STATIC_ROOT / "editor-bootstrap.js").read_text(encoding="utf-8")
+    assert 'import { ChannelOffsetEditor } from "/static/channel-offset-editor.js";' in bootstrap
+    routing = bootstrap.split("const editorRenderers = {", 1)[1].split("};", 1)[0]
     assert '"channel-offset": () => channelOffsetEditor,' in routing
     assert 'elements.channelOffsetEditor.hidden = editorKind !== "channel-offset";' in app
 

@@ -19,19 +19,20 @@ def read_static(name: str) -> str:
 
 def test_reference_editor_wiring_and_localization() -> None:
     app = read_static("app.js")
+    bootstrap = read_static("editor-bootstrap.js")
     html = read_static("index.html")
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
 
-    assert 'import { ReferenceEditor } from "/static/reference-editor.js";' in app
-    assert 'import { ReferenceDisplayEditor } from "/static/reference-display-editor.js";' in app
-    assert 'import { ReferenceLabelsEditor } from "/static/reference-labels-editor.js";' in app
+    assert 'import { ReferenceEditor } from "/static/reference-editor.js";' in bootstrap
+    assert 'import { ReferenceDisplayEditor } from "/static/reference-display-editor.js";' in bootstrap
+    assert 'import { ReferenceLabelsEditor } from "/static/reference-labels-editor.js";' in bootstrap
     assert 'id="reference-editor" class="reference-editor trigger-editor" hidden' in html
     assert 'id="reference-display-editor" class="reference-display-editor workflow-editor" hidden' in html
     assert 'id="reference-labels-editor" class="reference-editor trigger-editor" hidden' in html
-    assert 'reference: () => referenceEditor,' in app
-    assert '"reference-display": () => referenceDisplayEditor,' in app
-    assert '"reference-labels": () => referenceLabelsEditor,' in app
+    assert 'reference: () => referenceEditor,' in bootstrap
+    assert '"reference-display": () => referenceDisplayEditor,' in bootstrap
+    assert '"reference-labels": () => referenceLabelsEditor,' in bootstrap
     assert 'elements.referenceEditor.hidden = editorKind !== "reference";' in app
     assert 'elements.referenceDisplayEditor.hidden = editorKind !== "reference-display";' in app
     assert 'elements.referenceLabelsEditor.hidden = editorKind !== "reference-labels";' in app

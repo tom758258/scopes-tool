@@ -46,6 +46,10 @@ def test_webui_assets_prevent_stale_browser_caching() -> None:
     assert module.status_code == 200
     assert module.headers["Cache-Control"] == "no-store"
 
+    editor_bootstrap = client.get("/static/editor-bootstrap.js")
+    assert editor_bootstrap.status_code == 200
+    assert editor_bootstrap.headers["Cache-Control"] == "no-store"
+
 
 def test_standalone_server_uses_fixed_loopback_default(monkeypatch) -> None:
     calls = []

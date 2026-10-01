@@ -64,8 +64,8 @@ def test_app_routes_segmented_editor_and_localizes_its_controls() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
 
-    assert 'import { SegmentedEditor } from "/static/segmented-editor.js";' in app
-    assert 'segmented: () => segmentedEditor,' in app
+    assert 'import { SegmentedEditor } from "/static/segmented-editor.js";' in read_static("editor-bootstrap.js")
+    assert 'segmented: () => segmentedEditor,' in read_static("editor-bootstrap.js")
     assert 'id="segmented-editor" class="segmented-editor" hidden' in html
     assert 'elements.segmentedEditor.hidden = editorKind !== "segmented";' in app
     assert '"segmented-memory": ["segmented-memory"]' not in app

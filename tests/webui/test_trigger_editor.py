@@ -264,21 +264,22 @@ def test_trigger_channel_fields_follow_the_existing_model_projection() -> None:
 
 def test_app_routes_editors_by_command_metadata() -> None:
     app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     html = read_static("index.html")
 
-    assert 'import { TriggerEditor } from "/static/trigger-editor.js";' in app_source
+    assert 'import { TriggerEditor } from "/static/trigger-editor.js";' in bootstrap_source
     assert 'id="trigger-editor" class="trigger-editor" hidden' in html
     assert (
-        "triggerEditor = new TriggerEditor(elements.triggerEditor, catalog, {"
-        in app_source
+        "const triggerEditor = new TriggerEditor(elements.triggerEditor, catalog, {"
+        in bootstrap_source
     )
-    routing_map = app_source.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
+    routing_map = bootstrap_source.split("const editorRenderers = {", 1)[1].split("};", 1)[0]
     assert '"serial-decode": () => serialDecodeEditor,' in routing_map
     assert '"serial-trigger": () => serialTriggerEditor,' in routing_map
     assert '"serial-lister": () => serialListerEditor,' in routing_map
     assert 'trigger: () => triggerEditor,' in routing_map
-    routing = extract_function(app_source, "function editorKindFor(command)")
-    assert "EDITOR_RENDERERS[kind]" in routing
+    routing = extract_function(bootstrap_source, "function editorKindFor(command)")
+    assert "editorRenderers[kind]" in routing
     assert 'elements.triggerEditor.hidden = editorKind !== "trigger";' in app_source
     assert 'translate(`${editorKind}.editor.title`)' in app_source
     assert 'translate(`${editorKind}.editor.description`)' in app_source
@@ -458,15 +459,16 @@ TRIGGER_EDITOR_HARNESS = r'''
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_external_trigger_editor_routing() -> None:
     app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     html = read_static("index.html")
 
-    assert 'import { ExternalTriggerEditor } from "/static/external-trigger-editor.js";' in app_source
+    assert 'import { ExternalTriggerEditor } from "/static/external-trigger-editor.js";' in bootstrap_source
     assert 'id="external-trigger-editor" class="external-trigger-editor" hidden' in html
     assert (
-        "externalTriggerEditor = new ExternalTriggerEditor(elements.externalTriggerEditor, catalog, {"
-        in app_source
+        "const externalTriggerEditor = new ExternalTriggerEditor(elements.externalTriggerEditor, catalog, {"
+        in bootstrap_source
     )
-    routing_map = app_source.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
+    routing_map = bootstrap_source.split("const editorRenderers = {", 1)[1].split("};", 1)[0]
     assert '"external-trigger": () => externalTriggerEditor,' in routing_map
     assert 'elements.externalTriggerEditor.hidden = editorKind !== "external-trigger";' in app_source
     assert 'if (editorKind === "external-trigger") externalTriggerEditor?.schedulePresentation();' in app_source

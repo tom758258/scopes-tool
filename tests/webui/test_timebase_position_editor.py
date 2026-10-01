@@ -19,8 +19,9 @@ def test_timebase_position_editor_wiring() -> None:
     assert catalog["timebase-position"]["editor"] == "timebase-position"
 
     app = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
-    assert 'import { TimebasePositionEditor } from "/static/timebase-position-editor.js";' in app
-    routing = app.split("const EDITOR_RENDERERS = {", 1)[1].split("};", 1)[0]
+    bootstrap = (STATIC_ROOT / "editor-bootstrap.js").read_text(encoding="utf-8")
+    assert 'import { TimebasePositionEditor } from "/static/timebase-position-editor.js";' in bootstrap
+    routing = bootstrap.split("const editorRenderers = {", 1)[1].split("};", 1)[0]
     assert '"timebase-position": () => timebasePositionEditor,' in routing
     assert 'elements.timebasePositionEditor.hidden = editorKind !== "timebase-position";' in app
 

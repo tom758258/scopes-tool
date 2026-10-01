@@ -213,9 +213,10 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     index_source = read_static("index.html")
 
-    assert "wgen: () => wgenEditor," in app_source
+    assert "wgen: () => wgenEditor," in bootstrap_source
     assert "elements.wgenEditor.hidden = editorKind !== " in app_source
     assert 'if (editorKind === "wgen") wgenEditor?.schedulePresentation();' in app_source
     assert 'wgenEditor.refreshButton.hidden = editorKind !== "wgen";' in app_source

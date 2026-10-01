@@ -59,8 +59,9 @@ def test_app_routes_workflow_editor_without_generic_header_actions() -> None:
     html = read_static("index.html")
     editor = read_static("workflow-editor.js")
 
-    assert 'import { WorkflowEditor } from "/static/workflow-editor.js";' in app
-    assert 'workflow: () => workflowEditor,' in app
+    bootstrap = read_static("editor-bootstrap.js")
+    assert 'import { WorkflowEditor } from "/static/workflow-editor.js";' in bootstrap
+    assert 'workflow: () => workflowEditor,' in bootstrap
     assert 'id="workflow-editor" class="workflow-editor" hidden' in html
     assert 'elements.workflowEditor.hidden = editorKind !== "workflow";' in app
     assert 'workflowEditor?.schedulePresentation();' in app

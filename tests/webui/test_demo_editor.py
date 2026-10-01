@@ -239,9 +239,10 @@ def test_demo_editor_selected_command_presentation(tmp_path: Path) -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     index_source = read_static("index.html")
 
-    assert "demo: () => demoEditor," in app_source
+    assert "demo: () => demoEditor," in bootstrap_source
     assert "elements.demoEditor.hidden = editorKind !== " in app_source
     assert 'if (editorKind === "demo") demoEditor?.schedulePresentation();' in app_source
     assert "demoEditor.refreshButton.hidden = editorKind !== \"demo\";" in app_source

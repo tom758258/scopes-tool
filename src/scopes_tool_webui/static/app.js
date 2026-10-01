@@ -1,9 +1,10 @@
-import { getCommands, getHealth, openPcOutputFolder, selectPcOutputFolder, validateSequence, validateSequenceText } from "/static/api.js";
+import { getCommands, getHealth, openPcOutputFolder, selectPcOutputFolder } from "/static/api.js";
 import { bindBasicControls } from "/static/basic-controls.js";
 import { CommandCatalog } from "/static/command-catalog.js";
 import { CommandForm } from "/static/command-form.js";
 import { LabelVisibility } from "/static/label-visibility.js";
 import { DeviceResource } from "/static/device-resource.js";
+import { createEditorBootstrap } from "/static/editor-bootstrap.js";
 import {
   buildWorkspaceContext,
   findWorkspaceResult,
@@ -14,35 +15,13 @@ import {
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { liveStateText, renderInstrumentSummary } from "/static/live-data.js";
-import { AcquisitionEditor } from "/static/acquisition-editor.js";
-import { AnnotationEditor } from "/static/annotation-editor.js";
-import { CursorEditor } from "/static/cursor-editor.js";
-import { DemoEditor } from "/static/demo-editor.js";
-import { DiagnosticsEditor } from "/static/diagnostics-editor.js";
-import { MeasurementEditor } from "/static/measurement-editor.js";
-import { WgenEditor } from "/static/wgen-editor.js";
 import {
   pcOutputContext,
   pcOutputDirectory,
   renderPcOutputCommandNote,
 } from "/static/pc-output.js";
 import { renderEmpty, renderError, renderJob, renderWorkspaceResult } from "/static/results.js";
-import { ReferenceEditor } from "/static/reference-editor.js";
-import { ReferenceDisplayEditor } from "/static/reference-display-editor.js";
-import { ReferenceLabelsEditor } from "/static/reference-labels-editor.js";
-import { SaveExportEditor } from "/static/save-export-editor.js";
-import { SearchEditor } from "/static/search-editor.js";
-import { SegmentedEditor } from "/static/segmented-editor.js";
-import { SerialDecodeEditor, SerialTriggerEditor, SerialListerEditor, createSerialEditorController } from "/static/serial-editor.js";
 import { createInitialState } from "/static/state.js";
-import { TriggerEditor } from "/static/trigger-editor.js";
-import { WorkflowEditor } from "/static/workflow-editor.js";
-import { ChannelDisplayEditor } from "/static/channel-display-editor.js";
-import { ChannelScaleRangeEditor } from "/static/channel-scale-range-editor.js";
-import { ExternalTriggerEditor } from "/static/external-trigger-editor.js";
-import { TimebasePositionEditor } from "/static/timebase-position-editor.js";
-import { ChannelOffsetEditor } from "/static/channel-offset-editor.js";
-import { SequenceEditor } from "/static/sequence-editor.js";
 
 const SERVICE_NAME = "scopes-tool-webui";
 const elements = {
@@ -182,6 +161,7 @@ let annotationEditor;
 let wgenEditor;
 let demoEditor;
 let diagnosticsEditor;
+let editorKindFor;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
@@ -193,38 +173,6 @@ let updateBasicAvailability = () => {};
 let pcOutputSelectionStatus = null;
 let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false, updatedAt: null };
 let previousEditorKind = null;
-
-const EDITOR_RENDERERS = {
-  acquisition: () => acquisitionEditor,
-  reference: () => referenceEditor,
-  "reference-display": () => referenceDisplayEditor,
-  "reference-labels": () => referenceLabelsEditor,
-  "save-export": () => saveExportEditor,
-  "serial-decode": () => serialDecodeEditor,
-  "serial-trigger": () => serialTriggerEditor,
-  "serial-lister": () => serialListerEditor,
-  trigger: () => triggerEditor,
-  search: () => searchEditor,
-  segmented: () => segmentedEditor,
-  workflow: () => workflowEditor,
-  sequence: () => sequenceEditor,
-  measurement: () => measurementEditor,
-  cursor: () => cursorEditor,
-  annotation: () => annotationEditor,
-  wgen: () => wgenEditor,
-  demo: () => demoEditor,
-  diagnostics: () => diagnosticsEditor,
-  "channel-display": () => channelDisplayEditor,
-  "channel-scale-range": () => channelScaleRangeEditor,
-  "external-trigger": () => externalTriggerEditor,
-  "timebase-position": () => timebasePositionEditor,
-  "channel-offset": () => channelOffsetEditor,
-};
-
-function editorKindFor(command) {
-  const kind = command?.editor;
-  return kind && EDITOR_RENDERERS[kind] ? kind : null;
-}
 
 initializeI18n();
 renderLocaleToggle();
@@ -257,262 +205,47 @@ async function initialize() {
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}|${genericFormRevision}`,
   });
   buildChannelLabelActions();
-  acquisitionEditor = new AcquisitionEditor(elements.acquisitionEditor, catalog, {
-    executeCommand,
-    isExecutionBusy,
-    isCommandAvailable: commandAvailable,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  referenceEditor = new ReferenceEditor(elements.referenceEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  referenceLabelsEditor = new ReferenceLabelsEditor(elements.referenceLabelsEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  referenceDisplayEditor = new ReferenceDisplayEditor(elements.referenceDisplayEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  saveExportEditor = new SaveExportEditor(elements.saveExportEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  const serialWorkspaceHooks = {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    modelInfo: serialEditorModelInfo,
-    renderPcOutputNote: (note) => renderPcOutputCommandNote(
-      note,
-      commands?.find((command) => command.id === "serial-lister-export"),
-      elements.pcOutput,
-    ),
-  };
-  serialController = createSerialEditorController({
-    execute: (command, parameters, options) => executeCommand(command, parameters, options),
-    confirmDiscard: () => window.confirm(translate("serial.editor.discardConfirm")),
-    available: () => serialWorkspaceHooks.isAvailable() && !isExecutionBusy?.(),
-  });
-  serialDecodeEditor = new SerialDecodeEditor(elements.serialDecodeEditor, catalog, serialWorkspaceHooks, serialController);
-  serialTriggerEditor = new SerialTriggerEditor(elements.serialTriggerEditor, catalog, serialWorkspaceHooks, serialController);
-  serialListerEditor = new SerialListerEditor(elements.serialListerEditor, catalog, serialWorkspaceHooks, serialController);
-  triggerEditor = new TriggerEditor(elements.triggerEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  searchEditor = new SearchEditor(elements.searchEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  segmentedEditor = new SegmentedEditor(elements.segmentedEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  workflowEditor = new WorkflowEditor(elements.workflowEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  sequenceEditor = new SequenceEditor(elements.sequenceEditor, catalog, {
-    executeCommand,
-    validateSequence,
-    validateSequenceText,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    modelId: currentModelId,
-    selectedCommand: () => catalog.selected(),
-  });
-  measurementEditor = new MeasurementEditor(elements.measurementEditor, catalog, {
+  const editors = createEditorBootstrap({
+    elements,
+    catalog,
     executeCommand,
     isExecutionBusy,
     isCommandAvailable: commandAvailable,
     contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
     mode: () => context.mode,
+    currentModelId,
     selectedCommand: () => catalog.selected(),
+    commandList: () => commands,
+    serialEditorModelInfo,
+    renderPcOutputCommandNote,
+    translate,
   });
-  channelDisplayEditor = new ChannelDisplayEditor(elements.channelDisplayEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  channelScaleRangeEditor = new ChannelScaleRangeEditor(elements.channelScaleRangeEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  externalTriggerEditor = new ExternalTriggerEditor(elements.externalTriggerEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  timebasePositionEditor = new TimebasePositionEditor(elements.timebasePositionEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-    modelId: currentModelId,
-  });
-  channelOffsetEditor = new ChannelOffsetEditor(elements.channelOffsetEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  cursorEditor = new CursorEditor(elements.cursorEditor, catalog, {
-    executeCommand,
-    modelId: currentModelId,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  annotationEditor = new AnnotationEditor(elements.annotationEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
-  wgenEditor = new WgenEditor(elements.wgenEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    mode: () => context.mode,
-    selectedCommand: () => catalog.selected(),
-  });
-  demoEditor = new DemoEditor(elements.demoEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: () => {
-      const selected = catalog.selected();
-      return Boolean(selected && commandAvailable(selected.id));
-    },
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    mode: () => context.mode,
-    selectedCommand: () => catalog.selected(),
-  });
-  diagnosticsEditor = new DiagnosticsEditor(elements.diagnosticsEditor, catalog, {
-    executeCommand,
-    headerActions: elements.workspaceHeaderActions,
-    isExecutionBusy,
-    isAvailable: (command) => commandAvailable(command),
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
-    selectedCommand: () => catalog.selected(),
-  });
+  acquisitionEditor = editors.acquisitionEditor;
+  referenceEditor = editors.referenceEditor;
+  referenceDisplayEditor = editors.referenceDisplayEditor;
+  referenceLabelsEditor = editors.referenceLabelsEditor;
+  saveExportEditor = editors.saveExportEditor;
+  serialController = editors.serialController;
+  serialDecodeEditor = editors.serialDecodeEditor;
+  serialTriggerEditor = editors.serialTriggerEditor;
+  serialListerEditor = editors.serialListerEditor;
+  triggerEditor = editors.triggerEditor;
+  searchEditor = editors.searchEditor;
+  segmentedEditor = editors.segmentedEditor;
+  workflowEditor = editors.workflowEditor;
+  sequenceEditor = editors.sequenceEditor;
+  measurementEditor = editors.measurementEditor;
+  channelDisplayEditor = editors.channelDisplayEditor;
+  channelScaleRangeEditor = editors.channelScaleRangeEditor;
+  externalTriggerEditor = editors.externalTriggerEditor;
+  timebasePositionEditor = editors.timebasePositionEditor;
+  channelOffsetEditor = editors.channelOffsetEditor;
+  cursorEditor = editors.cursorEditor;
+  annotationEditor = editors.annotationEditor;
+  wgenEditor = editors.wgenEditor;
+  demoEditor = editors.demoEditor;
+  diagnosticsEditor = editors.diagnosticsEditor;
+  editorKindFor = editors.editorKindFor;
   catalog.render();
 
   deviceResource = new DeviceResource({

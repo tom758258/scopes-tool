@@ -359,9 +359,10 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     index_source = read_static("index.html")
 
-    assert "annotation: () => annotationEditor," in app_source
+    assert "annotation: () => annotationEditor," in bootstrap_source
     assert "elements.annotationEditor.hidden = editorKind !== " in app_source
     assert 'if (editorKind === "annotation") annotationEditor?.schedulePresentation();' in app_source
     assert 'annotationEditor.refreshButton.hidden = editorKind !== "annotation";' in app_source

@@ -26,10 +26,10 @@ def test_acquisition_control_composite_dispatch_and_wiring(tmp_path: Path) -> No
     catalog_json = json.dumps(commands_module.command_catalog())
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
-    app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
     index_source = read_static("index.html")
 
-    assert "acquisition: () => acquisitionEditor," in app_source
+    assert "acquisition: () => acquisitionEditor," in bootstrap_source
     assert 'id="acquisition-editor"' in index_source
     for key in (
         '"command.acquisition-control": "Acquisition Control"',
