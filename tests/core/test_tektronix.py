@@ -233,13 +233,17 @@ def test_tbs2000_channel_and_trigger_mappings():
     scope.configure_trigger_sweep("normal")
     scope.configure_trigger_edge_coupling("lf-reject")
     scope.configure_trigger_edge_level(source_channel=1, level_volts=0.5)
-    scope.set_trigger_holdoff(40e-9)
+    scope.set_trigger_holdoff(20e-9)
     assert backend.history[1:] == [
         "CH1:PRObe:GAIN 0.1", "CH1:BANdwidth TWEnty", "CH1:BANdwidth FULl",
         'CH1:LABel "A"', "CH1:DESKew 1e-07", "TRIGger:A:TYPe EDGE",
         "TRIGger:A:MODe NORMal", "TRIGger:A:EDGE:COUPling LFRej",
-        "TRIGger:A:LEVel:CH1 0.5", "TRIGger:A:HOLDOff:TIMe 4e-08",
+        "TRIGger:A:LEVel:CH1 0.5", "TRIGger:A:HOLDOff:TIMe 2e-08",
     ]
+    start = len(backend.history)
+    with pytest.raises(ParameterValidationError):
+        scope.set_trigger_holdoff(19e-9)
+    assert len(backend.history) == start
 
 
 @pytest.mark.parametrize("mode,percent,seconds,requested,written", [
@@ -683,13 +687,24 @@ def test_simulator_roundtrips_and_slot_safety(model_id, _, __):
         with pytest.raises(SimulatorBackendError):
             scope.backend.write("CH1:YUNit V")
         assert scope.query_channel_units(1) == "amp"
-        if model_id != "tektronix-tbs2074":
+        if model_id == "tektronix-tbs2074":
+            start = len(scope.backend.history)
+            with pytest.raises(ParameterValidationError, match="display-persistence"):
+                scope.set_display_persistence(2)
+            with pytest.raises(ParameterValidationError, match="display-persistence"):
+                scope.query_display_persistence()
+            assert len(scope.backend.history) == start
+            with pytest.raises(SimulatorBackendError):
+                scope.backend.write("DISPlay:PERSistence:STATe ON")
+            with pytest.raises(SimulatorBackendError):
+                scope.backend.query("DISPlay:PERSistence:STATe?")
+        else:
             scope.set_display_persistence("minimum")
             assert scope.query_display_persistence().raw_value == "0"
             scope.set_display_persistence("infinite")
             assert scope.query_display_persistence().raw_value == "99"
-        scope.set_display_persistence(2)
-        assert scope.query_display_persistence().seconds == 2
+            scope.set_display_persistence(2)
+            assert scope.query_display_persistence().seconds == 2
         scope.configure_math_operator(1, "subtract", "channel2", "channel1")
         assert scope.query_math_operator(1).source1 == "channel2"
         assert scope.query_math_operation(1).operation == "subtract"
@@ -708,9 +723,9 @@ def test_simulator_roundtrips_and_slot_safety(model_id, _, __):
         scope.clear_measurements()
         scope.install_measurement(1, "vpp")
         if model_id == "tektronix-tbs2074":
-            scope.configure_runt_trigger(channel=2, polarity="negative", qualifier="less-than", time_seconds=1e-6, low_level_volts=-0.1, high_level_volts=0.1)
+            scope.configure_runt_trigger(channel=4, polarity="negative", qualifier="less-than", time_seconds=1e-6, low_level_volts=-0.1, high_level_volts=0.1)
             state = scope.query_runt_trigger()
-            assert (state.channel, state.polarity, state.qualifier) == (2, "negative", "less-than")
+            assert (state.channel, state.polarity, state.qualifier) == (4, "negative", "less-than")
             scope.configure_save_image_format("bmp")
             assert scope.query_save_image_format().format == "bmp"
             scope.configure_save_waveform_format("csv")
@@ -739,8 +754,8 @@ def test_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
         assert not any(":RANGE?" in command or ":IMPEDANCE?" in command or ":VERNIER?" in command for command in history)
         assert "ACQUIRE:MODE?" in history
         if model_id == "tektronix-tbs2074":
-            assert channels[2].units is None and channels[3].units is None
-            assert "CH3:YUNIT?" not in history and "CH4:YUNIT?" not in history
+            assert channels[2].units == "volt" and channels[3].units == "volt"
+            assert "CH3:YUNIT?" in history and "CH4:YUNIT?" in history
             assert snapshot["timebase"]["position"] == 0.0
             assert "HORIZONTAL:POSITION?" in history
             assert "HORIZONTAL:RECORDLENGTH?" in history and "HORIZONTAL:SAMPLERATE?" in history
@@ -1015,3 +1030,29 @@ def test_tbs_native_png_sequence_and_restoration(failure, monkeypatch):
         with pytest.raises(ParameterValidationError):
             scope.capture_screenshot_png(background="white")
         assert not scope.backend.history
+
+
+@pytest.mark.parametrize(("channel", "units"), [(3, "volt"), (4, "amp")])
+def test_tbs2074_channel_units_cover_upper_channels(channel, units):
+    with simulated_scope("tektronix-tbs2074") as scope:
+        scope.backend.history.clear()
+        scope.set_channel_units(channel, units)
+        assert scope.query_channel_units(channel) == units
+        assert f"CH{channel}:YUNit?" in scope.backend.history
+
+
+@pytest.mark.parametrize(
+    ("operation", "source1", "source2", "expression"),
+    [
+        ("add", "channel3", "channel4", "CH3+CH4"),
+        ("subtract", "channel3", "channel4", "CH3-CH4"),
+        ("subtract", "channel4", "channel3", "CH4-CH3"),
+        ("multiply", "channel3", "channel4", "CH3*CH4"),
+    ],
+)
+def test_tbs2074_math_accepts_documented_ch3_ch4_pairs(operation, source1, source2, expression):
+    with simulated_scope("tektronix-tbs2074") as scope:
+        scope.configure_math_operator(1, operation, source1, source2)
+        assert scope.backend.tek_settings["MATH:DEFINE"].strip('"').upper() == expression
+        state = scope.query_math_operator(1)
+        assert (state.operation, state.source1, state.source2) == (operation, source1, source2)

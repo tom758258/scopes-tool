@@ -1,0 +1,74 @@
+name: TBS2074 pre-PR validation
+
+on:
+  push:
+    branches:
+      - fix/tbs2074-first-gen-capabilities
+
+permissions:
+  contents: read
+
+jobs:
+  focused-linux:
+    name: Focused Linux validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: python -m pip install --upgrade uv
+      - name: Install packages
+        run: uv sync --python 3.12 --all-extras --locked --link-mode=copy
+      - name: Prepare temp root
+        run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
+      - name: Check text and diff hygiene
+        run: |
+          ./.venv/bin/python scripts/check_text_hygiene.py
+          git diff --check origin/main...HEAD
+      - name: Run focused Core CLI WebUI tests
+        run: |
+          ./.venv/bin/python -m pytest -q \
+            tests/core/test_tektronix.py \
+            tests/core/test_tektronix_cursor_set.py \
+            tests/core/test_trigger_holdoff.py \
+            tests/cli/test_cursor_cli.py \
+            tests/cli/test_tektronix_workflows_cli.py \
+            tests/webui/test_cursor_editor.py \
+            tests/webui/test_tektronix_gating.py \
+            --basetemp .tmp_tests/focused-linux
+          ./.venv/bin/python -m pytest -q tests/cli/test_worker_cli.py -k trigger_holdoff \
+            --basetemp .tmp_tests/focused-worker
+
+  focused-windows:
+    name: Focused Windows live-tooling validation
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: python -m pip install --upgrade uv
+      - name: Install packages
+        run: uv sync --python 3.12 --all-extras --locked --link-mode=copy
+      - name: Prepare temp root
+        run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
+      - name: Run focused Tektronix live-tooling tests
+        run: .\.venv\Scripts\python.exe -m pytest -q tests\tooling\test_live_tektronix_script.py -k "tbs2074 or cursor or persistence or runt or holdoff or math" --basetemp .tmp_tests\focused-tooling
+      - name: Parse changed PowerShell
+        shell: powershell
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "scripts/_live_tektronix_helpers.ps1"),
+            [ref]$null,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }

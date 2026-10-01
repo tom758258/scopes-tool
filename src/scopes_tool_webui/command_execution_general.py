@@ -595,14 +595,15 @@ def _execute_general_scope_command(
     if command == "cursor":
         action = parameters["action"]
         if action == "set":
-            scope.configure_cursor(
-                parameters.get("source_channel"),
-                x1_seconds=parameters.get("x1"),
-                x2_seconds=parameters.get("x2"),
-                y1_volts=parameters.get("y1"),
-                y2_volts=parameters.get("y2"),
-                function=parameters.get("function"),
-            )
+            cursor_kwargs = {
+                "x1_seconds": parameters.get("x1"),
+                "x2_seconds": parameters.get("x2"),
+                "y1_volts": parameters.get("y1"),
+                "y2_volts": parameters.get("y2"),
+            }
+            if parameters.get("function") is not None:
+                cursor_kwargs["function"] = parameters["function"]
+            scope.configure_cursor(parameters.get("source_channel"), **cursor_kwargs)
         elif action == "off":
             scope.cursor_off()
         return _state_scope_result("cursor", scope.query_cursor())
@@ -611,14 +612,15 @@ def _execute_general_scope_command(
         return _state_scope_result("cursor", scope.query_cursor())
 
     if command == "cursor-set":
-        scope.configure_cursor(
-            parameters.get("source_channel"),
-            x1_seconds=parameters.get("x1"),
-            x2_seconds=parameters.get("x2"),
-            y1_volts=parameters.get("y1"),
-            y2_volts=parameters.get("y2"),
-            function=parameters.get("function"),
-        )
+        cursor_kwargs = {
+            "x1_seconds": parameters.get("x1"),
+            "x2_seconds": parameters.get("x2"),
+            "y1_volts": parameters.get("y1"),
+            "y2_volts": parameters.get("y2"),
+        }
+        if parameters.get("function") is not None:
+            cursor_kwargs["function"] = parameters["function"]
+        scope.configure_cursor(parameters.get("source_channel"), **cursor_kwargs)
         return _state_scope_result("cursor", scope.query_cursor())
 
     if command == "cursor-off":

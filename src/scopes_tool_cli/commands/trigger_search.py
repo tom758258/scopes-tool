@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from scopes_tool_core.trigger_holdoff import (
-    trigger_holdoff_commands,
-    trigger_holdoff_query,
-    validate_trigger_holdoff,
-)
+from scopes_tool_core.trigger_holdoff import trigger_holdoff_query
 from scopes_tool_core.capabilities import ScopeCapabilities
 from scopes_tool_core.channel import validate_analog_channel
 from scopes_tool_core.errors import OscilloscopeError
@@ -1527,12 +1523,10 @@ def _cmd_trigger_holdoff(args: argparse.Namespace) -> int:
             print(f"Command: {command}")
             print(f"Holdoff seconds: {seconds:.12g}")
         else:
-            seconds = validate_trigger_holdoff(args.holdoff_seconds)
+            seconds = args.holdoff_seconds
+            history_start = len(scope.backend.history)
             scope.set_trigger_holdoff(seconds)
-            commands = trigger_holdoff_commands(
-                seconds, series=scope.capabilities.series
-            )
-            commands = runtime._driver_business_commands(scope, args, commands)
+            commands = scope.backend.history[history_start:]
             runtime._json_update_result(operation="set", command=commands[-1], commands=commands, seconds=seconds)
             for command in commands:
                 print(f"Command: {command}")

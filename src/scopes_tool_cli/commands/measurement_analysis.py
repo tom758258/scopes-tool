@@ -869,6 +869,7 @@ def _cmd_cursor(args: argparse.Namespace) -> int:
             runtime._json_update_result(operation="off", command=command)
             print(f"Command: {command}")
         elif function == "off":
+            validate_cursor_request(scope.capabilities, function=function)
             scope.configure_cursor(function="off")
             commands = scope.backend.history[history_start:]
             runtime._json_update_result(operation="set", commands=commands,

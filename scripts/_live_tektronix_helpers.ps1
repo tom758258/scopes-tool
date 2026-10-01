@@ -264,7 +264,7 @@ print(json.dumps({
                 $status = "N/A"
                 $detail = "current label is outside the public setter's accepted characters"
             } elseif ($Name -eq "trigger-holdoff" -and
-                      ([double]$original -lt $(if ($script:Target -eq "tektronix-tbs2074") { 4e-8 } else { 5e-7 }) -or
+                      ([double]$original -lt $(if ($script:Target -eq "tektronix-tbs2074") { 2e-8 } else { 5e-7 }) -or
                        [double]$original -gt $(if ($script:Target -eq "tektronix-tbs2074") { 8 } else { 10 }))) {
                 $status = "N/A"
                 $detail = "current holdoff is outside the model's supported setter range"
@@ -660,7 +660,7 @@ print(json.dumps({
                     Add-Case $specialTrigger "N/A" "Current trigger type is not $specialMode; no setter executed"
                 } elseif ($specialMode -eq "runt") {
                     $state = $before.result
-                    if ($state.channel -notin @(1, 2) -or $state.polarity -notin @("positive", "negative") -or
+                    if ($state.channel -notin @(1, 2, 3, 4) -or $state.polarity -notin @("positive", "negative") -or
                         $state.qualifier -notin @("none", "less-than", "greater-than") -or
                         $null -eq $state.low_level_volts -or $null -eq $state.high_level_volts -or
                         $state.low_level_volts -ge $state.high_level_volts -or
@@ -870,7 +870,7 @@ print(json.dumps({
                         Add-Case "cursor-set-screen" "N/A" "Skipped after cursor-set failure"
                     } else {
                     try {
-                        foreach ($candidate in @(1, 2)) {
+                        foreach ($candidate in @(1, 2, 3, 4)) {
                             $units = Invoke-Cli -Stage "cursor-voltage-units-$candidate" -Command "channel-units" -Options @("--channel", "$candidate", "--query")
                             if ([string](Get-Readback $units "units") -ceq "volt") {
                                 $voltageChannel = $candidate
@@ -882,8 +882,8 @@ print(json.dumps({
                         Add-Case "cursor-set-screen" "N/A" "Skipped because the voltage-source precondition could not be checked"
                     }
                     if ($null -eq $voltageChannel -and -not $script:CaseResults.Contains("cursor-set-y")) {
-                        Add-Case "cursor-set-y" "N/A" "CH1/CH2 are not currently in physical volt units"
-                        Add-Case "cursor-set-screen" "N/A" "CH1/CH2 are not currently in physical volt units"
+                        Add-Case "cursor-set-y" "N/A" "CH1-CH4 are not currently in physical volt units"
+                        Add-Case "cursor-set-screen" "N/A" "CH1-CH4 are not currently in physical volt units"
                     } elseif ($null -ne $voltageChannel) {
                         $y = $null
                         $cursorYPassed = $false
