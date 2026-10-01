@@ -11,6 +11,10 @@ class FakeNode {
     this.className = "";
     this.disabled = false;
     this.value = "";
+    this.type = "";
+    this.multiple = false;
+    this.options = [];
+    this.selectedOptions = [];
   }
   append(...nodes) {
     for (const n of nodes) {
@@ -22,6 +26,7 @@ class FakeNode {
         };
       }
       this.children.push(n);
+      if (n?.tagName === "OPTION") this.options.push(n);
     }
   }
   replaceChildren(...nodes) { this.children = [...nodes]; }
@@ -57,7 +62,18 @@ class FakeNode {
     if (sel === '[data-field="x"]') return out.filter((c) => c.dataset && c.dataset.field === "x");
     if (sel === '[data-field="y"]') return out.filter((c) => c.dataset && c.dataset.field === "y");
     if (sel === '[data-field]') return out;
-    // Unknown selectors (e.g. preset/multi controls absent from this harness)
+    if (sel === "[data-multi-for]") {
+      const multi = [];
+      const findMulti = (list) => {
+        for (const c of list || []) {
+          if (c.dataset && c.dataset.multiFor) multi.push(c);
+          if (c.children) findMulti(c.children);
+        }
+      };
+      findMulti(this.children);
+      return multi;
+    }
+    // Unknown selectors (e.g. preset controls absent from this harness)
     // must not match data-field inputs; production setDisabled() would
     // otherwise write disabled state onto unrelated fields.
     return [];
@@ -72,6 +88,14 @@ class FakeNode {
 }
 
 globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+globalThis.Option = class Option extends FakeNode {
+  constructor(text, value) {
+    super("option");
+    this.textContent = String(text);
+    this.value = String(value);
+    this.selected = false;
+  }
+};
 globalThis.queueMicrotask = (fn) => fn();
 globalThis.translate = (key) => String(key || "");
 globalThis.hasTranslation = () => false;
@@ -89,7 +113,7 @@ globalThis.CommandForm = CommandForm;
 // C1: disabled field renders disabled=true + capabilityDisabled=true.
 const stubCatalog = (fieldsArray) => ({
   fieldsFor: () => fieldsArray || [],
-  optionsFor: () => [],
+  optionsFor: (field) => field?.options || [],
 });
 
 const c1 = new FakeNode("div");
@@ -146,5 +170,24 @@ const normalInp = yInputs.length ? yInputs[0] : null;
 if (normalInp) normalInp.value = "0";
 const vNormal = form4.values();
 assert.strictEqual(vNormal && vNormal.y, 0, "C4: 0 preserved");
+
+// C5: capability-disabled multi-enum keeps its visible checkboxes disabled,
+// including after a busy -> idle transition.
+const c5 = new FakeNode("div");
+const form5 = new CommandForm(c5, stubCatalog([
+  { name: "x", type: "multi-enum", options: ["a", "b"], disabled: true, required: false },
+]));
+form5.render({ id: "test" });
+const multiBoxes = c5.querySelectorAll("[data-multi-for]");
+assert.strictEqual(multiBoxes.length, 2, "C5: visible multi-enum choices render");
+multiBoxes.forEach((box) => {
+  assert.strictEqual(box.disabled, true, "C5a: capability-disabled multi choice renders disabled");
+  assert.strictEqual(box.dataset.capabilityDisabled, "true", "C5b: multi choice capability marker");
+});
+form5.setDisabled(true);
+form5.setDisabled(false);
+multiBoxes.forEach((box) => {
+  assert.strictEqual(box.disabled, true, "C5c: idle transition preserves capability-disabled multi choice");
+});
 
 console.log(JSON.stringify({ ok: true }));
