@@ -51,15 +51,21 @@ def test_catalog_admits_only_registered_tek_operations():
     with pytest.raises(WebUIRequestError, match="background is unsupported"):
         _validate_parameters("screenshot", {"background": "white"}, "simulate", tbs2074)
 
+    tek_models = (tbs2074, tds2024b, "tektronix-tbs1052b")
     autoscale = catalog["autoscale"]["presentation"]["models"]
-    for model in (tbs2074, tds2024b):
+    for model in tek_models:
         for field in ("channels", "acquire_mode", "channels_mode"):
-            assert autoscale[model]["fields"][field]["hidden"] is True
+            projected = autoscale[model]["fields"][field]
+            assert projected["disabled"] is True
+            assert projected.get("hidden") is not True
 
     setup = catalog["setup-save"]["presentation"]["models"]
-    assert setup[tbs2074]["fields"]["target"]["options"] == ["slot"]
-    assert setup[tbs2074]["fields"]["slot"]["options"] == list(range(1, 10))
-    assert setup[tbs2074]["fields"]["file"]["hidden"] is True
+    for model in tek_models:
+        assert setup[model]["fields"]["target"]["options"] == ["slot"]
+        assert setup[model]["fields"]["slot"]["options"] == list(range(1, 10))
+        projected_file = setup[model]["fields"]["file"]
+        assert projected_file["disabled"] is True
+        assert projected_file.get("hidden") is not True
 
     trigger_mode = catalog["trigger-mode"]["presentation"]["models"]
     assert trigger_mode[tbs2074]["fields"]["mode"]["options"] == ["edge", "glitch", "runt"]

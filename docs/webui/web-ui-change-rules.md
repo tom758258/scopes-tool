@@ -51,8 +51,19 @@ it is not an operator guide.
   capabilities.
 - UI constraints improve admission and clarity, but Core and backend
   validation remain authoritative.
-- Unsupported commands or controls should be disabled with a short reason
-  where practical. Do not maintain a frontend model database.
+- Unsupported commands should remain visible and disabled with a short reason
+  where practical.
+- A control that is part of a shared command form must not be removed solely
+  because the selected model cannot use it. Preserve its normal field slot and
+  disable it when practical so model changes do not reflow otherwise-shared
+  form layout.
+- Conditional visibility that is part of command interaction semantics, such
+  as `visible_if`, and genuinely different model-specific command schemas may
+  still hide controls.
+- Nested editors should preserve established paired or shared layout slots for
+  unsupported controls when doing so is safe. Unsupported nested controls must
+  not be read or submitted.
+- Do not maintain a frontend model database.
 
 ## Results
 

@@ -253,6 +253,56 @@ def test_save_export_editor_shows_only_the_selected_mode() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_save_export_editor_preserves_unsupported_setting_slots_without_execution() -> None:
+    script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
+        r'''
+        const supportedIds = new Set(["save-pwd", "save-image", "save-image-format"]);
+        const { editor, submitted, selectCommand } = buildEditor(
+          null,
+          (command) => supportedIds.has(command.id),
+        );
+        selectCommand("save-image");
+        editor.rebuildSections("ctx|save-export:image");
+        editor.applyBusyState();
+
+        assert.deepEqual(editor.entries.map((entry) => entry.id), [
+          "save-image-format",
+          "save-image-palette",
+          "save-image-ink-saver",
+          "save-image-factors",
+        ]);
+        assert.equal(editor.entries.find((entry) => entry.id === "save-image-format").supported, true);
+        for (const id of ["save-image-palette", "save-image-ink-saver", "save-image-factors"]) {
+          const entry = editor.entries.find((candidate) => candidate.id === id);
+          assert.equal(entry.supported, false);
+          assert.equal(entry.form.disabled, true);
+        }
+        assert.ok(editor.advancedEntry);
+        assert.equal(editor.advancedEntry.supported, false);
+        assert.equal(editor.advancedEntry.form.disabled, true);
+        assert.ok(
+          [...editor.sectionsHost.children]
+            .filter((node) => node.classList?.contains("save-export-pair"))
+            .every((node) => !node.classList.contains("save-export-pair-single")),
+        );
+
+        await editor.refresh(false, true);
+        assert.deepEqual(submitted.map((entry) => entry.command), [
+          "save-pwd",
+          "save-image-format",
+        ]);
+        assert.equal(editor.entries.find((entry) => entry.id === "save-image-format").form.disabled, false);
+        for (const id of ["save-image-palette", "save-image-ink-saver", "save-image-factors"]) {
+          assert.equal(editor.entries.find((entry) => entry.id === id).form.disabled, true);
+        }
+        assert.equal(editor.advancedEntry.form.disabled, true);
+        '''
+    )
+    completed = run_node(script)
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_save_export_editor_explicit_read_lifecycle_and_mode_change() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''

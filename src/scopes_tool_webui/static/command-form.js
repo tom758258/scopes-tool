@@ -207,7 +207,7 @@ export class CommandForm {
       button.disabled = disabled;
     });
     this.container.querySelectorAll("[data-multi-for]").forEach((box) => {
-      box.disabled = disabled;
+      box.disabled = disabled || box.dataset.capabilityDisabled === "true";
     });
   }
 
@@ -472,6 +472,10 @@ export class CommandForm {
         box.value = option.value;
         box.checked = option.selected;
         box.dataset.multiFor = field.name;
+        if (field.disabled === true) {
+          box.disabled = true;
+          box.dataset.capabilityDisabled = "true";
+        }
         const text = document.createElement("span");
         text.textContent = option.textContent;
         choice.append(box, text);
