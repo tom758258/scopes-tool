@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "scopes-tool"
 version = "0.1.0"
-description = "Vendor-neutral oscilloscope tooling with current support for Keysight InfiniiVision models."
+description = "Vendor-neutral oscilloscope tooling for supported registered oscilloscope models."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["pyvisa>=1.14"]
