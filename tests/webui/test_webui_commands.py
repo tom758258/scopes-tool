@@ -630,7 +630,9 @@ def test_setup_save_recall_catalog_and_slot_presentation() -> None:
                 continue
             assert model["fields"]["target"]["options"] == ["slot"]
             assert model["fields"]["slot"]["options"] == list(capabilities.setup_slots)
-            assert model["fields"]["file"]["hidden"] is True
+            projected_file = model["fields"]["file"]
+            assert projected_file["disabled"] is True
+            assert projected_file.get("hidden") is not True
 
     setup_recall = commands["setup-recall"]
     assert setup_recall["category"] == "Save / Export"
