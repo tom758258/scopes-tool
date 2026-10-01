@@ -357,7 +357,6 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
             "x2_seconds": None,
             "y1_volts": None,
             "y2_volts": None,
-            "function": None,
         },
     )
 

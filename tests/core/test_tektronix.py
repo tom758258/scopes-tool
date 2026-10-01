@@ -539,10 +539,10 @@ def test_high_risk_subsets_reject_before_scpi():
         scope.set_channel_units(channel, units)
         assert scope.query_channel_units(channel) == units
     for action in (
-        lambda: scope.set_channel_units(3, "volt"), lambda: scope.query_channel_units(4),
+        lambda: scope.set_channel_units(5, "volt"), lambda: scope.query_channel_units(5),
         lambda: scope.configure_save_image_format("bmp8"), lambda: scope.configure_save_image_format("jpg"),
         lambda: scope.configure_save_waveform_format("binary"), lambda: scope.configure_save_waveform_format("ascii-xy"),
-        lambda: scope.configure_runt_trigger(channel=3, polarity="positive", qualifier="none", low_level_volts=0, high_level_volts=1),
+        lambda: scope.configure_runt_trigger(channel=5, polarity="positive", qualifier="none", low_level_volts=0, high_level_volts=1),
         lambda: scope.configure_runt_trigger(channel=1, polarity="either", qualifier="none", low_level_volts=0, high_level_volts=1),
         lambda: scope.configure_math_operator(1, "add", "channel1", "channel3"),
         lambda: scope.configure_math_operator(1, "add", "channel1", "channel1"),
