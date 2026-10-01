@@ -1,7 +1,7 @@
 # Scopes Tool
 
 Scopes Tool is vendor-neutral oscilloscope tooling with current hardware
-support for the registered Keysight InfiniiVision models documented in
+support for the registered Keysight InfiniiVision and Tektronix models documented in
 [Supported Models](docs/core/supported-models.md). It provides one installable
 Python distribution, `scopes-tool`, while preserving three independent import
 packages: `scopes_tool_core`, `scopes_tool_cli`, and `scopes_tool_webui`.
@@ -20,7 +20,7 @@ backend.
 
 ## Features
 
-- Control supported Keysight InfiniiVision oscilloscopes over VISA
+- Control supported Keysight InfiniiVision and Tektronix oscilloscopes over VISA
 - Use Live, Simulate, or Dry-run execution as supported by each command
 - Operate through the CLI or localhost-only browser WebUI
 - Use the browser WebUI in English or Traditional Chinese
@@ -252,7 +252,7 @@ user-supplied VISA resource.
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 This project is an independent, unofficial project and is not affiliated with,
-endorsed by, or sponsored by Keysight Technologies.
+endorsed by, or sponsored by any supported instrument manufacturer.
 
-Users are responsible for complying with all applicable Keysight software,
+Users are responsible for complying with all applicable vendor software,
 driver, instrument, and documentation license terms.

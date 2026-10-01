@@ -53,7 +53,7 @@ planning, simple and surgical changes, and text-file hygiene.
   instrument-command behavior. They must not copy model-specific branches or
   create parallel SCPI, parsing, hardware, or safety implementations.
 - These rules constrain future changes. Do not pre-build abstractions for an
-  unsupported second vendor or refactor reasonable current model-specific code
+  unsupported additional vendor or refactor reasonable current model-specific code
   without a concrete requirement.
 
 ## 4. Instrument Safety
