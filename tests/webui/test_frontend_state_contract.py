@@ -1025,6 +1025,62 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
         assert f'"{key}":' not in english, key
         assert f'"{key}":' not in chinese, key
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_editor_routing_is_callable_before_editor_bootstrap_completes() -> None:
+    app_source = read_static("app.js")
+    bootstrap_source = read_static("editor-bootstrap.js")
+
+    # initialize() awaits health and command loading before it builds the editors, so the
+    # document-level localechange handler can run while routing is not wired up yet.
+    declaration = re.search(r"^let editorKindFor(?: = (.+))?;$", app_source, re.M)
+    assert declaration, "app.js must declare a module-level editorKindFor binding"
+    fallback = declaration.group(1) or "undefined"
+    renderer_map = (
+        "{"
+        + bootstrap_source.split("const editorRenderers = {", 1)[1].split("};", 1)[0]
+        + "}"
+    )
+    routing_body = extract_function(bootstrap_source, "function editorKindFor(command)")
+
+    script = textwrap.dedent(
+        r'''
+        import assert from "node:assert/strict";
+
+        const editorRenderers = RENDERER_MAP;
+
+        function bootstrappedEditorKindFor(command) ROUTING_BODY
+
+        let editorKindFor = FALLBACK;
+
+        assert.equal(typeof editorKindFor, "function", "routing must be callable before bootstrap");
+        assert.equal(editorKindFor(), null);
+        assert.equal(editorKindFor(undefined), null);
+        assert.equal(editorKindFor(null), null);
+        assert.equal(editorKindFor({}), null);
+        assert.equal(editorKindFor({ editor: "not-a-editor" }), null);
+        assert.equal(editorKindFor({ editor: "trigger" }), null);
+
+        editorKindFor = bootstrappedEditorKindFor;
+
+        assert.equal(editorKindFor({ editor: "trigger" }), "trigger");
+        assert.equal(editorKindFor({ editor: "serial-lister" }), "serial-lister");
+        assert.equal(editorKindFor({ editor: "not-a-editor" }), null);
+        assert.equal(editorKindFor(), null);
+        '''
+    ).replace("FALLBACK", fallback).replace("RENDERER_MAP", renderer_map).replace(
+        "ROUTING_BODY", routing_body
+    )
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+    # The fallback must not permanently shadow the real routing after bootstrap.
+    assert "editorKindFor = editors.editorKindFor;" in app_source
+
 def test_channel_display_editor_uses_workflow_editor_layout() -> None:
     html = read_static("index.html")
     assert (

@@ -161,7 +161,7 @@ let annotationEditor;
 let wgenEditor;
 let demoEditor;
 let diagnosticsEditor;
-let editorKindFor;
+let editorKindFor = () => null;
 let deviceResource;
 let executing = false;
 let advancedVisible = false;
