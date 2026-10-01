@@ -161,7 +161,7 @@ adapter aliases do not create additional hardware features.
 | `channel-probe` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074 derives attenuation from probe gain with probe-dependent limits. B1 ratios are 1, 10, 20, 50, 100, 500, 1000. |
 | `channel-bandwidth-limit`, `channel-invert` | SUPPORTED | SUPPORTED | SUPPORTED | Bandwidth means the documented 20 MHz limiter, not a numeric bandwidth setting; invert is native on all three. |
 | `channel-label`, `channel-probe-skew` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 label limit is 30 characters; probe skew uses the public -100 to +100 ns subset. B1 models lack writable labels/deskew. |
-| `channel-units` | SUPPORTED | SUPPORTED | SUPPORTED | Public volts/amps map to V/A. TBS2074 units are admitted only on CH1/CH2; CH3/CH4 remain excluded. B1 units apply to all model analog channels. |
+| `channel-units` | SUPPORTED | SUPPORTED | SUPPORTED | Public volts/amps map to V/A. TBS2074 supports CH1-CH4; B1 units apply to all model analog channels. |
 | `channel-range` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Volts/division and trace position do not establish the public full-scale acquisition-range semantic. |
 | `channel-impedance`, `channel-vernier` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Fixed impedance is not a selectable setting/readback, and no fine-scale enable contract is available. |
 | `channel-summary` | PARTIAL AGGREGATE | PARTIAL AGGREGATE | PARTIAL AGGREGATE | Projection is defined below; unavailable fields do not authorize unsupported atomic queries. |
@@ -187,13 +187,11 @@ adapter aliases do not create additional hardware features.
 | `measure-source`, `measure-menu`, `measure-show`, `measure-window`, `measurement-statistics`, `measure-stats` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Immediate/per-slot source is not a global default; Tek gating is not MAIN/ZOOM/AUTO/GATE; aggregate examples do not establish public statistics or marker-visibility controls. |
 | `annotation`, `annotation-on`, `annotation-off`, `annotation-set`, `annotation-clear`, `annotation-query` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Channel labels do not provide annotation-slot text/color/background/position/enable semantics. |
 
-For `math-operator`, TBS2074 admits exactly CH1+CH2, CH1-CH2, CH2-CH1,
-and CH1*CH2. TDS2024B additionally admits the documented CH3/CH4 pair forms
-CH3+CH4, CH3-CH4, CH4-CH3, and CH3*CH4. TBS1052B is limited to CH1/CH2.
-Readback is parsed into existing operation/source fields while preserving source
-order. Arbitrary cross-pairs, self-pairs, cascade sources, divide, and unlisted
-reverse orders are unsupported. The TBS2000 manual mentions CH3/CH4 but does
-not list their expressions, so none are inferred.
+For `math-operator`, TBS2074 and TDS2024B admit CH1+CH2, CH1-CH2, CH2-CH1,
+CH1*CH2, CH3+CH4, CH3-CH4, CH4-CH3, and CH3*CH4. TBS1052B is limited to
+CH1/CH2. Readback is parsed into existing operation/source fields while
+preserving source order. Arbitrary cross-pairs, self-pairs, cascade sources,
+divide, and unlisted reverse orders are unsupported.
 
 The admitted single-source measurement items are:
 
@@ -222,9 +220,9 @@ installation does not enable native result dumps or a global measurement source.
 | `trigger-edge-coupling` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074: dc/lf-reject. B1 models: ac/dc/lf-reject. HF/noise rejection does not create extra public coupling values. |
 | `trigger-edge` | SUPPORTED | SUPPORTED | SUPPORTED | Combined analog source/level/slope only, positive/negative. B1 combined configuration may select the source before MAIN:LEVEL. Line/external are excluded from this combined contract. |
 | `trigger-edge-level` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 has channel-qualified level access. B1 MAIN:LEVEL is selected-source state and cannot satisfy the standalone named-channel operation without source mutation. |
-| `trigger-holdoff` | SUPPORTED | SUPPORTED | SUPPORTED | Public intersection is 40 ns-8 s on TBS2074 and 500 ns-10 s on B1 models. |
+| `trigger-holdoff` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074 supports 20 ns-8 s; B1 models support 500 ns-10 s. |
 | `trigger-pulse-width` | SUPPORTED | SUPPORTED | SUPPORTED | Analog positive/negative, less-than/greater-than only. Only the active threshold is supplied; inactive/range thresholds are null and min+max/range requests are rejected before writes. |
-| `trigger-runt` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 CH1-CH2 only, positive/negative, occurs/less-than/greater-than. No either or undocumented CH3/CH4. |
+| `trigger-runt` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 CH1-CH4, positive/negative, occurs/less-than/greater-than. No either polarity. |
 | `trigger-tv` | UNSUPPORTED | SUPPORTED | SUPPORTED | B1 models: NTSC/PAL, analog source, positive/negative polarity, field1/field2/all-fields/all-lines. Line-field variants and SECAM/other standards remain unsupported. |
 | `trigger-noise-reject`, `trigger-hf-reject`, `trigger-edge-reject` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | A single mutually exclusive Tek coupling selector cannot supply independent rejection controls/readbacks. |
 | `external-trigger-range`, `external-trigger-probe`, `external-trigger-units`, `trigger-edge-external-level`, `external-trigger-settings` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Source selection or selected-source level does not establish independent external range/probe/units/level semantics, and there is no useful aggregate projection. |
@@ -275,8 +273,8 @@ measurement slots, trigger mode, or cursor units merely to discover support.
 
 | Aggregate | TBS2074 projection | TDS2024B projection | TBS1052B projection |
 | --- | --- | --- | --- |
-| `channel-summary` | display, scale, offset, coupling, probe ratio, bandwidth limit, invert, label, probe skew; V/A units on CH1/CH2. Range, impedance, vernier and CH3/CH4 units unavailable. | display, scale, offset, coupling, probe ratio, bandwidth limit, invert, units. Label, probe skew, range, impedance and vernier unavailable. | Same as TDS2024B, CH1/CH2 only. |
-| `live-data-snapshot` / `query_instrument_summary` | Channel display/scale/offset, CH1/CH2 units, timebase scale/position using the Delay-Mode conversion above, trigger type/sweep, edge source/slope, channel-qualified level and established source units. | Channel display/scale/offset/units, timebase scale/position, trigger type/sweep/source/slope. Current analog edge-source MAIN:LEVEL is valid snapshot data even though standalone named-channel level is unsupported. | Same as TDS2024B, bounded to two channels. |
+| `channel-summary` | display, scale, offset, coupling, probe ratio, bandwidth limit, invert, label, probe skew, and V/A units on CH1-CH4. Range, impedance, and vernier unavailable. | display, scale, offset, coupling, probe ratio, bandwidth limit, invert, units. Label, probe skew, range, impedance and vernier unavailable. | Same as TDS2024B, CH1/CH2 only. |
+| `live-data-snapshot` / `query_instrument_summary` | Channel display/scale/offset/units on CH1-CH4, timebase scale/position using the Delay-Mode conversion above, trigger type/sweep, edge source/slope, channel-qualified level and established source units. | Channel display/scale/offset/units, timebase scale/position, trigger type/sweep/source/slope. Current analog edge-source MAIN:LEVEL is valid snapshot data even though standalone named-channel level is unsupported. | Same as TDS2024B, bounded to two channels. |
 | `system-information-snapshot` / `query_acquisition_readouts` | Identity, sample rate, acquisition points and record length available: SUPPORTED. | Identity, acquisition points and record length available; sample rate unavailable: PARTIAL AGGREGATE. | Same as TDS2024B: PARTIAL AGGREGATE. |
 | `cursor-query` | Native X positions/delta only when time-based; Y positions/delta only when physical volts are established. Percent/Hz/dB/divisions/amps are not seconds/volts. Inactive/unestablished axes and dydx unavailable. | Active VBARS seconds positions/delta or active HBARS volts positions/delta. Other axis/dydx and FFT/amp/unknown-unit fields unavailable. | Same as TDS2024B. |
 
@@ -420,9 +418,6 @@ support incorrectly:
   `HARDCopy:FORMat?` is not treated as a readback of
   `SAVE:IMAGE:FILEFORMAT`; format-independent `save-image` and documented
   ink-saver control remain separate support decisions.
-- TBS2000 manual p. 64 restricts `CH<x>:YUNit` to CH1/CH2. The Math section
-  mentions CH3/CH4 but lists only CH1/CH2 expressions; missing subsets are not
-  inferred.
 - TBS2000 FFT documentation does not establish the full-span conversion or
   frequency reference needed by the public atomic result (pp. 93-97).
 - TBS2000 cursor documentation refers to a source without a corresponding

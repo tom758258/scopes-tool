@@ -84,10 +84,7 @@ def test_tbs2074_cursor_set_uses_only_requested_axes(
         for command in backend.history
         if ":POSITION" in command and not command.endswith("?")
     ] == position_commands
-    if mode in {"VBArs", "HBArs"}:
-        assert "CURSor:MODe INDependent" in backend.history
-    else:
-        assert "CURSor:MODe INDependent" not in backend.history
+    assert "CURSor:MODe INDependent" not in backend.history
     if mode == "VBArs":
         assert backend.tek_settings["CURSOR:VBARS:POSITION2"] == "0.001"
         assert not any("HBArs" in command for command in backend.history)
@@ -102,8 +99,8 @@ def test_tbs2074_cursor_set_uses_only_requested_axes(
         ("off", ["CURSor:FUNCtion OFF"]),
         ("screen", ["CURSor:FUNCtion SCREEN"]),
         ("waveform", ["CURSor:FUNCtion WAVEform"]),
-        ("vbars", ["CURSor:FUNCtion VBArs", "CURSor:MODe INDependent"]),
-        ("hbars", ["CURSor:FUNCtion HBArs", "CURSor:MODe INDependent"]),
+        ("vbars", ["CURSor:FUNCtion VBArs"]),
+        ("hbars", ["CURSor:FUNCtion HBArs"]),
     ],
 )
 def test_tbs2074_cursor_function_switches_without_positions(function, expected):
@@ -286,39 +283,20 @@ def test_tbs2074_rejects_current_units_before_source_selection():
     assert "SELect:CONTROl CH2" not in backend.history
 
 
-@pytest.mark.parametrize("units", ["volt", "amp"])
-def test_tbs2074_ch3_waveform_unit_check_restores_transfer_source(units):
+@pytest.mark.parametrize(("channel", "units"), [(3, "volt"), (3, "amp"), (4, "volt"), (4, "amp")])
+def test_tbs2074_upper_channel_cursor_uses_yunit_without_transfer_source(channel, units):
     scope, backend = simulated_scope()
-    backend.channel_units[3] = units
+    backend.channel_units[channel] = units
 
     if units == "volt":
-        scope.configure_cursor(3, y1_volts=0.0)
+        scope.configure_cursor(channel, y1_volts=0.0)
     else:
         with pytest.raises(ParameterValidationError, match="volt units"):
-            scope.configure_cursor(3, y1_volts=0.0)
+            scope.configure_cursor(channel, y1_volts=0.0)
 
-    transfer_commands = [
-        command
-        for command in backend.history
-        if command.startswith("DATa:SOUrce ")
-    ]
-    assert transfer_commands == ["DATa:SOUrce CH3", "DATa:SOUrce CH1"]
-    assert backend.waveform_source == 1
-
-
-def test_tbs2074_ch3_waveform_unit_query_failure_restores_transfer_source():
-    scope, backend = simulated_scope()
-    backend.query_failures["WFMOutpre:YUNit?"] = RuntimeError("preamble read failed")
-
-    with pytest.raises(RuntimeError, match="preamble read failed"):
-        scope.configure_cursor(3, y1_volts=0.0)
-
-    transfer_commands = [
-        command
-        for command in backend.history
-        if command.startswith("DATa:SOUrce ")
-    ]
-    assert transfer_commands == ["DATa:SOUrce CH3", "DATa:SOUrce CH1"]
+    assert f"CH{channel}:YUNit?" in backend.history
+    assert "WFMOutpre:YUNit?" not in backend.history
+    assert not any(command.startswith("DATa:SOUrce ") for command in backend.history)
     assert backend.waveform_source == 1
 
 

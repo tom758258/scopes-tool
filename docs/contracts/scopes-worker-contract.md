@@ -968,20 +968,14 @@ Configure mode accepts only this shape:
 {"command": "trigger-holdoff", "arguments": {"seconds": 0.000001}}
 ```
 
-Configure mode disables random holdoff and sets a fixed holdoff time by sending:
+Configure mode uses the model-specific fixed-holdoff path. Keysight 4000X
+disables random holdoff before setting `:TRIGger:HOLDoff <seconds>`;
+2000X/3000X sets that command directly. TBS2074 uses
+`TRIGger:A:HOLDOff:TIMe`, while TDS2024B/TBS1052B use
+`TRIGger:MAIn:HOLDOff:VALue`; queries use the matching model-specific header.
 
-```text
-:TRIGger:HOLDoff:RANDom OFF
-:TRIGger:HOLDoff <seconds>
-```
-
-Query mode sends:
-
-```text
-:TRIGger:HOLDoff?
-```
-
-`seconds` must be a finite JSON number from `40e-9` through `10.0`. Worker JSON
+The supported ranges are 20 ns-8 s on TBS2074, 500 ns-10 s on
+TDS2024B/TBS1052B, and 40 ns-10 s on Keysight profiles. Worker JSON
 accepts only `query` and `seconds`; `query` must be exactly JSON `true`. Empty
 arguments, `query: false`, query plus configure keys, string seconds, boolean
 seconds, null seconds, unknown keys, and aliases are rejected before enqueue,

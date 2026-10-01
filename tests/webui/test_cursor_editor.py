@@ -9,6 +9,8 @@ import pytest
 
 import scopes_tool_webui.command_execution as command_execution_module
 import scopes_tool_webui.commands as commands_module
+from scopes_tool_core.scope import Oscilloscope
+from scopes_tool_core.simulator_backend import SimulatorBackend
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 
 
@@ -332,7 +334,6 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
             "x2_seconds": 0.001,
             "y1_volts": 0.0,
             "y2_volts": 0.5,
-            "function": None,
         },
     )
     assert "auto_timebase" not in calls[0][2]
@@ -356,7 +357,6 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
             "x2_seconds": None,
             "y1_volts": None,
             "y2_volts": None,
-            "function": None,
         },
     )
 
@@ -641,3 +641,17 @@ def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout) == {"ok": True}
+
+
+def test_keysight_cursor_execution_uses_base_core_signature(tmp_path: Path) -> None:
+    scope = Oscilloscope(SimulatorBackend(physical_model_id=MODEL_ID))
+    scope.query_idn()
+    scope.backend.history.clear()
+
+    command_execution_module._execute_scope_command(
+        scope, "cursor-set", "SIM::INSTR",
+        {"source_channel": 1, "x1": 0.0}, tmp_path,
+    )
+
+    assert ":MARKer:MODE MANual" in scope.backend.history
+    assert not any("CURSor:FUNCtion" in command for command in scope.backend.history)

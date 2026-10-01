@@ -948,7 +948,7 @@ class TektronixOscilloscope(Oscilloscope):
         return EdgeTriggerState(source.source_channel, level, slope)
 
     def set_trigger_holdoff(self, seconds: float) -> None:
-        minimum, maximum = (40e-9, 8.0) if self._is_tbs2000 else (500e-9, 10.0)
+        minimum, maximum = (20e-9, 8.0) if self._is_tbs2000 else (500e-9, 10.0)
         if not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not minimum <= seconds <= maximum:
             raise ParameterValidationError("Unsupported Tek trigger holdoff")
         command = f"{self._trigger_root}:HOLDOff:TIMe" if self._is_tbs2000 else f"{self._trigger_root}:HOLDOff:VALue"
@@ -959,7 +959,10 @@ class TektronixOscilloscope(Oscilloscope):
         return self._float(command)
 
     def _units_available(self, channel: int) -> bool:
-        return not self._is_tbs2000 or channel in (1, 2)
+        if self.capabilities is None:
+            raise OscilloscopeError("Tek capabilities unavailable")
+        channels = self.capabilities.channel_units_channels
+        return channels is None or channel in channels
 
     def set_channel_units(self, channel: int, units: str) -> None:
         channel = self._channel(channel)
@@ -991,6 +994,8 @@ class TektronixOscilloscope(Oscilloscope):
         ) for channel in range(1, self.capabilities.analog_channels + 1))
 
     def set_display_persistence(self, value: str | float) -> None:
+        if self.capabilities is None or not operation_supported(self.capabilities, "display-persistence"):
+            raise ParameterValidationError("display-persistence is unsupported for this model")
         mode, seconds = validate_display_persistence(value, self.capabilities)
         token = "OFF" if mode == "minimum" else "INFInite" if mode == "infinite" else f"{seconds:g}"
         if self._is_tbs2000:
@@ -1001,6 +1006,8 @@ class TektronixOscilloscope(Oscilloscope):
             self.scpi.write(f"DISplay:PERSistence {token}")
 
     def query_display_persistence(self) -> DisplayPersistence:
+        if self.capabilities is None or not operation_supported(self.capabilities, "display-persistence"):
+            raise ParameterValidationError("display-persistence is unsupported for this model")
         if self._is_tbs2000:
             state, state_raw = self._query("DISplay:PERSistence:STATe?")
             value, raw = self._query("DISplay:PERSistence:VALUe?")
@@ -1197,8 +1204,6 @@ class TektronixOscilloscope(Oscilloscope):
             if y_axis and not self._units_available(channel) and not self._cursor_channel_is_voltage(channel):
                 raise ParameterValidationError("Y cursors require a channel with volt units")
         self.scpi.write(f"CURSor:FUNCtion {_TBS2000_CURSOR_FUNCTIONS[function]}")
-        if function != "screen":
-            self.scpi.write("CURSor:MODe INDependent")
         for axis, values, units in (("VBArs", x_values, "SECOnds"), ("HBArs", y_values, "BASe")):
             if any(value is not None for value in values):
                 self.scpi.write(f"CURSor:{axis}:UNIts {units}")
@@ -1599,8 +1604,11 @@ class TektronixOscilloscope(Oscilloscope):
         self._require_tbs2000("trigger-runt")
         mode = self.query_trigger_mode()
         source, source_raw = self._query("TRIGger:A:RUNT:SOUrce?")
-        match = re.fullmatch(r"CH([12])", source.upper())
+        match = re.fullmatch(r"CH([1-4])", source.upper())
         channel = int(match.group(1)) if match is not None else None
+        if (channel is not None and self.capabilities.runt_channels is not None
+                and channel not in self.capabilities.runt_channels):
+            channel = None
         commands = {"polarity": "TRIGger:A:RUNT:POLarity?", "qualifier": "TRIGger:A:RUNT:WHEn?",
                     "time": "TRIGger:A:RUNT:WIDth?"}
         values = {key: self._query(command) for key, command in commands.items()}

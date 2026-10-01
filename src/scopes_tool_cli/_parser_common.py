@@ -17,9 +17,6 @@ from scopes_tool_core.timebase import (
     validate_timebase_scale,
 )
 from scopes_tool_core.trigger import validate_trigger_level
-from scopes_tool_core.trigger_holdoff import (
-    validate_trigger_holdoff,
-)
 from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
 
 def _add_channel_arg(parser: argparse.ArgumentParser) -> None:
@@ -275,14 +272,8 @@ def _trigger_level_float(value: str) -> float:
 
 
 def _holdoff_seconds_arg(value: str) -> float:
-    try:
-        parsed = float(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a number") from exc
-    try:
-        return validate_trigger_holdoff(parsed)
-    except OscilloscopeError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
+    # The model-specific holdoff range is validated after model resolution.
+    return _positive_plain_float(value)
 
 
 def _strict_bool_arg(value: str) -> bool:

@@ -115,3 +115,32 @@ def test_worker_tbs2074_rejects_invalid_cursor_function():
 
     assert result["state"] == "failed"
     assert "does not accept Y positions" in result["error"]["message"]
+
+
+@pytest.mark.parametrize("mode", ["--dry-run", "--simulate"])
+def test_tbs2074_trigger_holdoff_accepts_20ns(mode, capsys):
+    assert cli.main([
+        "trigger-holdoff", mode, "--json", "--model", "tektronix-tbs2074",
+        "--seconds", "2e-8",
+    ]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    commands = payload["scpi"]["planned" if mode == "--dry-run" else "sent"]
+    assert "TRIGger:A:HOLDOff:TIMe 2e-08" in commands
+
+
+def test_keysight_trigger_holdoff_keeps_40ns_minimum(capsys):
+    assert cli.main([
+        "trigger-holdoff", "--dry-run", "--json", "--model", "keysight-dsox4024a",
+        "--seconds", "2e-8",
+    ]) == 1
+    assert "between 40e-9 and 10" in json.loads(capsys.readouterr().out)["error"]["message"]
+
+
+def test_worker_tbs2074_trigger_holdoff_accepts_20ns():
+    job, result = _execute_worker_job(
+        _runtime(model="tektronix-tbs2074"),
+        "trigger-holdoff",
+        {"seconds": 20e-9},
+    )
+    assert result["state"] == "succeeded"
+    assert "TRIGger:A:HOLDOff:TIMe 2e-08" in job.result["scpi"]["sent"]

@@ -162,7 +162,8 @@ def fake_run(
     native_status_command: str | None = None, native_status_value: int = 0,
     native_status_raw: str = "0",
     core_supported_operations: tuple[str, ...] | None = None,
-    confirmation: str = "enter",
+    confirmation: str = "enter", runt_channel: int = 1,
+    holdoff_seconds: float = 0.000001,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074", 4, "TBS2000"),
@@ -223,7 +224,7 @@ def fake_run(
         "acquisition": {"type": "normal", "count": 16},
         "trigger-sweep": {"mode": "auto"},
         "trigger-mode": {"mode": mode, "raw_mode": mode},
-        "trigger-runt": {"mode": mode, "channel": 1, "polarity": "positive",
+        "trigger-runt": {"mode": mode, "channel": runt_channel, "polarity": "positive",
                          "qualifier": "none", "low_level_volts": -0.1,
                          "high_level_volts": 0.1, "time_seconds": 1e-6},
         "trigger-tv": {"mode": mode, "source_channel": 1, "standard": "ntsc",
@@ -231,7 +232,7 @@ def fake_run(
         "trigger-edge-source": {"source": "analog-channel", "source_channel": 1},
         "trigger-edge-slope": {"slope": "positive"},
         "trigger-edge-coupling": {"coupling": "dc"},
-        "trigger-holdoff": {"seconds": 0.000001},
+        "trigger-holdoff": {"seconds": holdoff_seconds},
         "trigger-edge-level": {"level_volts": 0.0},
         "trigger-edge": {"source_channel": 1, "level_volts": 0.0, "slope": "positive"},
         "save-pwd": {"path": "C:/scope"},
@@ -1145,3 +1146,16 @@ def test_operator_confirmation_blocks_all_later_commands(
     assert "FAIL  [live][tektronix] baseline live validation" in result.stdout
     assert result.stdout.rstrip().endswith("FAIL  [live][tektronix] baseline live validation")
     assert "PASS  [live][tektronix] baseline live validation" not in result.stdout
+
+
+@requires_windows
+def test_tbs2074_first_gen_runt_channel_four_and_20ns_holdoff_are_accepted(tmp_path: Path) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[0], "-IncludeConfigurationActions", mode="runt",
+        runt_channel=4, holdoff_seconds=20e-9,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["trigger-runt"]["status"] == "PASS", cases["trigger-runt"]
+    assert cases["trigger-holdoff"]["status"] == "PASS", cases["trigger-holdoff"]
+    assert "foreach ($candidate in @(1, 2, 3, 4))" in TEXT

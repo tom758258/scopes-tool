@@ -728,9 +728,10 @@ directory:
 .\.venv\Scripts\scopes-tool.exe acquisition-check --resource "$env:SCOPES_TOOL_RESOURCE" --json --log-scpi
 ```
 
-`acquisition-check` runs the fixed validation sequence
+`acquisition-check` evaluates the validation sequence
 `query -> normal -> average count 16 -> query -> high_resolution -> peak ->
-final query`. It writes `report.json` and `scpi.log` under
+final query`; capability-unsupported modes are recorded as skipped rather than
+sent to the instrument. It writes `report.json` and `scpi.log` under
 `data/hardware_acquisition/YYYY-MM-DD-HH-mm-ss` unless `--output-dir` is
 supplied. Use `--average-count N` to override the default count of 16. The
 workflow intentionally leaves the instrument in `peak` acquisition mode after a
@@ -1206,9 +1207,11 @@ Set or query fixed trigger holdoff:
 `trigger-holdoff --seconds` is an explicit state-changing command. On 4000X
 profiles it disables random holdoff with `:TRIGger:HOLDoff:RANDom OFF`, then
 sends `:TRIGger:HOLDoff <seconds>`. On 2000X/3000X profiles it sends only
-`:TRIGger:HOLDoff <seconds>`. Query mode sends `:TRIGger:HOLDoff?`. The
-supported range is `40e-9` through `10.0` seconds. `doctor`, `smoke`, and
-`acquisition-check` never run `trigger-holdoff`.
+`:TRIGger:HOLDoff <seconds>`. TBS2074 uses `TRIGger:A:HOLDOff:TIMe`; the B1
+Tektronix models use `TRIGger:MAIn:HOLDOff:VALue`. The supported ranges are
+20 ns-8 s on TBS2074, 500 ns-10 s on TDS2024B/TBS1052B, and 40 ns-10 s on
+Keysight profiles. `doctor`, `smoke`, and `acquisition-check` never run
+`trigger-holdoff`.
 
 Worker JSON for `trigger-holdoff` accepts only `{"query": true}` or
 `{"seconds": 0.000001}`. Empty arguments, `query: false`, query combined with

@@ -508,8 +508,8 @@ Control and setup:
   source selected and displayed. Selecting/enabling it resets acquisition and
   may replace waveform data; no selection write is sent when already selected
   and displayed. Without an explicit `--function`, X-only uses VBArs, Y-only
-  HBArs, and combined X/Y SCREEN; single-axis sets disable tracking. An
-  explicit `function` of `off`, `screen`, `waveform`, `vbars`, or `hbars`
+  HBArs, and combined X/Y SCREEN. An explicit `function` of `off`, `screen`,
+  `waveform`, `vbars`, or `hbars`
   overrides that derivation, and the reported `function` field carries the
   effective value. `off` and `waveform` switch the function only, take no
   positions, and require no source channel; `vbars` accepts only X positions
@@ -517,12 +517,11 @@ Control and setup:
   and only supplied position registers are written. Changing source, mode or
   units can alter the presentation of omitted positions. Auto-timebase follows
   the model's horizontal span; auto-vertical remains unsupported on Tek.
-  CH3/CH4 voltage-unit verification temporarily selects the waveform transfer
-  source and restores it even on failure; it does not restore front-panel
-  selection. Hardware errors or a later unit-check failure can leave earlier
-  authorized selection/scale changes in place. Query/off do not select or
-  enable a front-panel source. A CH3/CH4 Y query uses the same temporary
-  transfer-source verification and restoration.
+  TBS2074 validates physical volts through `CH<x>:YUNit?` on CH1-CH4, so
+  CH3/CH4 cursor validation does not mutate the waveform transfer source.
+  Hardware errors or a later unit-check failure can leave earlier authorized
+  selection/scale changes in place. Query/off do not select or enable a
+  front-panel source.
 - `acquisition`: `operation`, `commands`, `type`, `scpi_type`, `count`.
 - `sample-rate`: `operation`, `sample_rate_hz` for current-rate queries,
   `query_kind` and `maximum_sample_rate_hz` for maximum-rate queries,

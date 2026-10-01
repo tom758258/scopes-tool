@@ -78,10 +78,15 @@ def test_catalog_admits_only_registered_tek_operations():
     assert trigger_coupling[tds2024b]["fields"]["coupling"]["options"] == ["ac", "dc", "lf-reject"]
 
     holdoff = catalog["trigger-holdoff"]["presentation"]["models"]
-    assert holdoff[tbs2074]["fields"]["seconds"]["minimum"] == pytest.approx(40e-9)
+    assert holdoff[tbs2074]["fields"]["seconds"]["minimum"] == pytest.approx(20e-9)
     assert holdoff[tbs2074]["fields"]["seconds"]["maximum"] == pytest.approx(8.0)
     assert holdoff[tds2024b]["fields"]["seconds"]["minimum"] == pytest.approx(500e-9)
     assert holdoff[tds2024b]["fields"]["seconds"]["maximum"] == pytest.approx(10.0)
+
+    channel_units = catalog["channel-units"]["presentation"]["models"][tbs2074]["fields"]["channel"]
+    assert channel_units["options"] == [1, 2, 3, 4]
+    runt_channel = catalog["trigger-runt"]["presentation"]["models"][tbs2074]["fields"]["channel"]
+    assert runt_channel["options"] == [1, 2, 3, 4]
 
 
 def test_webui_tds2024b_display_vectors_uses_style_command(monkeypatch, tmp_path):
@@ -109,7 +114,6 @@ def test_webui_tds2024b_display_vectors_uses_style_command(monkeypatch, tmp_path
     "command,parameters,message",
     [
         ("autoscale", {"channels": [1]}, "optional controls"),
-        ("channel-units", {"action": "set", "channel": 3, "units": "volt"}, "unsupported for this channel"),
         ("setup-save", {"target": "file", "file": "x.scp"}, "file target"),
         (
             "trigger-edge-source",
@@ -123,7 +127,7 @@ def test_webui_tds2024b_display_vectors_uses_style_command(monkeypatch, tmp_path
         ),
         (
             "trigger-holdoff",
-            {"action": "set", "seconds": 20e-9},
+            {"action": "set", "seconds": 19e-9},
             "at least",
         ),
     ],

@@ -174,10 +174,6 @@ class TektronixSimulatorBackend(SimulatorBackend):
             if token in {"OFF", "INFINITE"} or value in {"1", "2", "5"}:
                 self.tek_settings[header] = {"OFF": "0", "INFINITE": "99"}.get(token, value)
                 return True
-        if header == "DISPLAY:PERSISTENCE:VALUE" and is_tbs2000:
-            if token == "INFINITE" or 0.1 <= _parse_scpi_number(value) <= 60:
-                self.tek_settings[header] = value
-                return True
         if header == "CURSOR:FUNCTION" and token in ({"OFF", "SCREEN", "WAVEFORM", "VBARS", "HBARS"} if is_tbs2000 else {"OFF", "VBARS", "HBARS"}):
             self.tek_settings[header] = value
             return True
@@ -190,7 +186,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
             if is_tbs2000:
                 number = self._clip_cursor_position(header, number)
                 if (header.endswith("1") and self.tek_settings["CURSOR:MODE"].upper() == "TRACK"
-                        and self.tek_settings["CURSOR:FUNCTION"].upper() in {"WAVEFORM", "SCREEN"}):
+                        and self.tek_settings["CURSOR:FUNCTION"].upper() == "WAVEFORM"):
                     other = header[:-1] + "2"
                     shifted = float(self.tek_settings[other]) + number - float(self.tek_settings[header])
                     self.tek_settings[other] = str(self._clip_cursor_position(other, shifted))
@@ -200,18 +196,23 @@ class TektronixSimulatorBackend(SimulatorBackend):
         if header == "MATH:DEFINE" and value.strip('"').upper() in self._capabilities.math_expressions:
             self.tek_settings[header] = value
             return True
+        if header == "CURSOR:MODE" and is_tbs2000:
+            if (self.tek_settings["CURSOR:FUNCTION"].upper() == "WAVEFORM"
+                    and token in {"TRACK", "INDEPENDENT"}):
+                self.tek_settings[header] = value
+                return True
+            return False
         choices = {"SELECT:MATH": {"ON", "OFF"}}
         if is_tbs2000:
             choices.update({
-                "CURSOR:MODE": {"TRACK", "INDEPENDENT"},
                 "CURSOR:VBARS:UNITS": {"SECONDS", "HERTZ", "PERCENT", "DEGREES"},
                 "CURSOR:HBARS:UNITS": {"BASE", "PERCENT"},
-                "DISPLAY:PERSISTENCE:STATE": {"ON", "OFF"}, "SAVE:IMAGE:FILEFORMAT": {"PNG", "BMP", "JPG"},
+                "SAVE:IMAGE:FILEFORMAT": {"PNG", "BMP", "JPG"},
                 "SAVE:WAVEFORM:FILEFORMAT": {"SPREADSHEET"}, "TRIGGER:A:PULSE:CLASS": {"WIDTH", "RUNT"},
-                "TRIGGER:A:RUNT:SOURCE": {"CH1", "CH2"}, "TRIGGER:A:RUNT:POLARITY": {"POSITIVE", "NEGATIVE"},
+                "TRIGGER:A:RUNT:SOURCE": {f"CH{i}" for i in (self._capabilities.runt_channels or ())}, "TRIGGER:A:RUNT:POLARITY": {"POSITIVE", "NEGATIVE"},
                 "TRIGGER:A:RUNT:WHEN": {"OCCURS", "LESSTHAN", "MORETHAN"},
             })
-            if header == "TRIGGER:A:RUNT:WIDTH" or re.fullmatch(r"TRIGGER:A:(LOWERTHRESHOLD|UPPERTHRESHOLD):CH[12]", header):
+            if header == "TRIGGER:A:RUNT:WIDTH" or re.fullmatch(r"TRIGGER:A:(LOWERTHRESHOLD|UPPERTHRESHOLD):CH[1-4]", header):
                 _parse_scpi_number(value)
                 self.tek_settings[header] = value
                 return True
@@ -313,8 +314,11 @@ class TektronixSimulatorBackend(SimulatorBackend):
         common = {"CURSOR:FUNCTION", "CURSOR:VBARS:UNITS", "CURSOR:HBARS:UNITS",
                   "CURSOR:VBARS:POSITION1", "CURSOR:VBARS:POSITION2", "CURSOR:HBARS:POSITION1", "CURSOR:HBARS:POSITION2",
                   "SELECT:MATH", "MATH:DEFINE"}
+        if (header == "CURSOR:MODE" and is_tbs2000
+                and self.tek_settings["CURSOR:FUNCTION"].upper() == "WAVEFORM"):
+            return self.tek_settings[header]
         supported = common | ({
-            "SELECT:CONTROL", "CURSOR:MODE", "DISPLAY:PERSISTENCE:STATE", "DISPLAY:PERSISTENCE:VALUE", "SAVE:IMAGE:FILEFORMAT",
+            "SELECT:CONTROL", "SAVE:IMAGE:FILEFORMAT",
             "SAVE:WAVEFORM:FILEFORMAT", "HORIZONTAL:DELAY:MODE", "HORIZONTAL:DELAY:TIME", "TRIGGER:A:PULSE:CLASS",
             "TRIGGER:A:RUNT:SOURCE", "TRIGGER:A:RUNT:POLARITY", "TRIGGER:A:RUNT:WHEN", "TRIGGER:A:RUNT:WIDTH",
         } if is_tbs2000 else {
@@ -323,7 +327,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
             "TRIGGER:MAIN:VIDEO:LINE",
         })
         if header in supported: return self.tek_settings[header]
-        if is_tbs2000 and re.fullmatch(r"TRIGGER:A:(LOWERTHRESHOLD|UPPERTHRESHOLD):CH[12]", header):
+        if is_tbs2000 and re.fullmatch(r"TRIGGER:A:(LOWERTHRESHOLD|UPPERTHRESHOLD):CH[1-4]", header):
             return self.tek_settings.get(header, "0")
         if header == "HARDCOPY:INKSAVER" and not is_tbs2000: return "ON" if self.hardcopy_inksaver else "OFF"
         if self._capabilities.screenshot_formats:

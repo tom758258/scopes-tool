@@ -238,3 +238,13 @@ def test_tbs1052b_rejects_dual_axis_cursor_set_without_cursor_scpi(capsys):
     payload = json.loads(capsys.readouterr().out)
     assert "single axis only" in payload["error"]["message"]
     assert not any("CURSor:" in command for command in payload["scpi"]["sent"])
+
+
+def test_keysight_rejects_explicit_cursor_off_function_before_business_scpi(capsys):
+    assert cli.main([
+        "cursor", "--simulate", "--json", "--model", "keysight-dsox4024a",
+        "--function", "off",
+    ]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert "cursor function selection is unsupported for this model" in payload["error"]["message"]
+    assert not any(command.startswith(":MARKer:") for command in payload["scpi"]["sent"])
