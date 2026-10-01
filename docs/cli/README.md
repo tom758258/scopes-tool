@@ -2837,7 +2837,10 @@ registered Keysight target or one of the three Tektronix targets:
 
 The runner performs hardware-free preflight, verifies the detected model, and
 waits for Enter before acquisition actions. Prepare a visible, stable CH1
-Probe Comp waveform and a reliable existing trigger. The suite covers
+Probe Comp waveform and a reliable existing trigger. On TBS1052B and TDS2024B,
+also ensure Trigger View is off, display format is YT rather than XY, and the
+oscilloscope is not in Scan mode before pressing Enter. With AUTO trigger, use
+a timebase faster than 100 ms/div to avoid Scan mode. The suite covers
 `measure-sweep`, `measure-log`, `measure-until` (match and expected timeout),
 `capture-batch`, `capture-until`, `capture-monitor`, `triggered-measure-loop`,
 `triggered-capture-series`, and `sequence`. Measurement sweep items follow

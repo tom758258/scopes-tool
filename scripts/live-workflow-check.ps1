@@ -38,6 +38,10 @@ $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:ShareableGenerationFailed = $false
 $script:HardwareTouched = $false
 $script:SweepItems = "vpp,frequency,period,vrms"
+$script:LegacyTektronixImmediateMeasurementTargets = @(
+    "tektronix-tbs1052b",
+    "tektronix-tds2024b"
+)
 $script:WorkflowCommands = @(
     "measure-sweep", "measure-log", "measure-until", "capture-batch",
     "capture-until", "capture-monitor", "triggered-measure-loop",
@@ -317,6 +321,53 @@ function Get-InvocationFailureDetail {
             }
             $detail += "; ${systemErrorDetail}"
         }
+    }
+
+    $nativeEvents = @()
+    if ($script:IsTektronix) {
+        $resultProperty = $Invocation.Payload.PSObject.Properties["result"]
+        if ($null -ne $resultProperty -and $null -ne $resultProperty.Value) {
+            $statusProperty = $resultProperty.Value.PSObject.Properties["post_command_status"]
+            if ($null -ne $statusProperty -and $null -ne $statusProperty.Value) {
+                $status = $statusProperty.Value
+                $isErrorProperty = $status.PSObject.Properties["is_error"]
+                if ($null -ne $isErrorProperty -and $isErrorProperty.Value -eq $true) {
+                    $valueProperty = $status.PSObject.Properties["value"]
+                    if ($null -ne $valueProperty) {
+                        $detail += "; Tektronix native status $($valueProperty.Value)"
+                    }
+                    $eventsProperty = $status.PSObject.Properties["events"]
+                    if ($null -ne $eventsProperty -and $null -ne $eventsProperty.Value) {
+                        $nativeEvents = @($eventsProperty.Value)
+                        foreach ($event in $nativeEvents) {
+                            $eventCodeProperty = $event.PSObject.Properties["code"]
+                            if ($null -eq $eventCodeProperty) {
+                                continue
+                            }
+                            $eventDetail = "event $($eventCodeProperty.Value)"
+                            $eventMessageProperty = $event.PSObject.Properties["message"]
+                            if ($null -ne $eventMessageProperty -and
+                                -not [string]::IsNullOrWhiteSpace([string]$eventMessageProperty.Value)) {
+                                $eventDetail += ": $($eventMessageProperty.Value)"
+                            }
+                            $detail += "; ${eventDetail}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if ($Stage -eq "measure-sweep" -and
+        $script:Target -in $script:LegacyTektronixImmediateMeasurementTargets -and
+        @($nativeEvents | Where-Object {
+            $eventCodeProperty = $_.PSObject.Properties["code"]
+            $null -ne $eventCodeProperty -and [int]$eventCodeProperty.Value -eq 221
+        }).Count -gt 0) {
+        $detail += (
+            "; verify Trigger View is OFF, display format is YT, and the oscilloscope " +
+            "is not in Scan mode, then rerun validation"
+        )
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Invocation.Stderr)) {
@@ -854,6 +905,12 @@ Write-Host "  - Confirm the existing trigger setup reliably triggers from that C
 Write-Host "    an Edge trigger on CH1 with a level inside the waveform is recommended."
 Write-Host "  - The script does not reset, preset, autoscale, or reconfigure the trigger mode."
 if ($script:IsTektronix) {
+    if ($script:Target -in $script:LegacyTektronixImmediateMeasurementTargets) {
+        Write-Host "  - Trigger View must be OFF."
+        Write-Host "  - Display format must be YT, not XY."
+        Write-Host "  - The oscilloscope must not be in Scan mode."
+        Write-Host "    With AUTO trigger, use a timebase faster than 100 ms/div."
+    }
     Write-Host "  - The validator sends run before workflows and stop-acquisition during cleanup, including failure cleanup."
     Write-Host "    Original Running/Stopped state is not recorded or restored; final state is not independently read back."
 } else {
@@ -865,7 +922,7 @@ if (-not $script:IsTektronix) {
     Write-Host "    The original Running/Stopped acquisition state is restored at cleanup."
 }
 Write-Host ""
-Write-Host "Press Enter when ready."
+Write-Host "Press Enter only after the required setup above is ready."
 Write-Host "Ctrl+C to cancel."
 [void](Read-Host)
 

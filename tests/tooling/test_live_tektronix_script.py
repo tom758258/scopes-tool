@@ -748,6 +748,26 @@ def test_workflow_simulator_happy_path_uses_core_identity(tmp_path: Path, target
 
 
 @requires_windows
+@pytest.mark.parametrize("target", TARGETS[1:])
+def test_workflow_measurement_settings_conflict_is_actionable(
+    tmp_path: Path, target: str,
+) -> None:
+    result, report = fake_workflow_run(tmp_path, target, "measurement-settings-conflict")
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["measure-sweep"]["status"] == "FAIL"
+    detail = cases["measure-sweep"]["detail"]
+    assert "Tektronix native status 16" in detail
+    assert "event 221: Settings conflict" in detail
+    assert "Trigger View is OFF" in detail
+    assert "display format is YT" in detail
+    assert "not in Scan mode" in detail
+    assert cases["cleanup"]["status"] == "PASS"
+    stages = [inv["stage"] for inv in report["invocations"]]
+    assert stages.index("measure-sweep") < stages.index("cleanup-acquisition-stop-acquisition")
+
+
+@requires_windows
 def test_workflow_run_failure_still_stops_acquisition(tmp_path: Path) -> None:
     result, report = fake_workflow_run(tmp_path, TARGETS[0], "dirty-run")
     assert result.returncode != 0
