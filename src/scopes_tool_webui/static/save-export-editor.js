@@ -306,11 +306,11 @@ export class SaveExportEditor {
       let rendered = 0;
       for (const commandId of pair) {
         const command = this.commandForId(commandId);
-        if (!command || !this.catalog.supported(command)) continue;
-        this.entries.push(this.buildSettingEntry(command, settingsPair));
+        if (!command) continue;
+        const supported = this.catalog.supported(command);
+        this.entries.push(this.buildSettingEntry(command, settingsPair, supported));
         rendered += 1;
       }
-      if (rendered === 1) settingsPair.classList.add("save-export-pair-single");
       if (rendered > 0) this.sectionsHost.append(settingsPair);
     }
 
@@ -477,7 +477,7 @@ export class SaveExportEditor {
     }
   }
 
-  buildSettingEntry(command, container) {
+  buildSettingEntry(command, container, supported = true) {
     const section = document.createElement("section");
     section.className = "trigger-editor-section";
     const heading = document.createElement("strong");
@@ -489,13 +489,23 @@ export class SaveExportEditor {
     const form = new CommandForm(formHost, this.catalog);
     form.render(command, { onDirty: () => this.updateDestinationPreview() });
     section.append(formHost);
+    if (!supported) {
+      const reason = this.catalog.supportReason?.(command) || "";
+      if (reason) {
+        const note = document.createElement("small");
+        note.className = "command-support-reason";
+        note.textContent = reason;
+        section.append(note);
+      }
+    }
     container.append(section);
-    return { id: command.id, form, kind: "setting", section };
+    return { id: command.id, form, kind: "setting", section, supported };
   }
 
   buildAdvancedEntry() {
     const command = this.commandForId("save-filename");
-    if (!command || !this.catalog.supported(command)) return null;
+    if (!command) return null;
+    const supported = this.catalog.supported(command);
     const container = document.createElement("div");
     const note = document.createElement("p");
     note.className = "muted compact-note";
@@ -508,11 +518,21 @@ export class SaveExportEditor {
     button.className = "primary trigger-editor-action";
     button.textContent = translate("actions.apply");
     form.render(command, { onDirty: () => this.applyBusyState() });
-    const entry = { id: command.id, container, form, button, kind: "setting" };
+    const entry = { id: command.id, container, form, button, kind: "setting", supported };
     button.addEventListener("click", () => {
       void this.applyAdvancedFilename(entry);
     });
-    container.append(note, formHost, button);
+    container.append(note, formHost);
+    if (!supported) {
+      const reason = this.catalog.supportReason?.(command) || "";
+      if (reason) {
+        const supportNote = document.createElement("small");
+        supportNote.className = "command-support-reason";
+        supportNote.textContent = reason;
+        container.append(supportNote);
+      }
+    }
+    container.append(button);
     return entry;
   }
 
@@ -560,7 +580,7 @@ export class SaveExportEditor {
     const ids = ["save-pwd", "save-filename", ...this.modeConfig().settingPairs.flat()];
     const entries = ids
       .map((id) => ({ id, entry: this.entryForId(id) }))
-      .filter(({ entry }) => entry);
+      .filter(({ entry }) => entry && entry.supported !== false);
     let failed = 0;
     const total = entries.length;
     const epoch = this.epoch;
@@ -615,6 +635,7 @@ export class SaveExportEditor {
   }
 
   async applyAdvancedFilename(entry) {
+    if (entry?.supported === false) return null;
     if (this.mode !== "setup" && !this.hasCurrentSettings()) return null;
     if (
       this.busy
@@ -666,7 +687,7 @@ export class SaveExportEditor {
     const formatId = modeConfig?.formatSettingId;
     if (!formatId) return;
     const entry = this.entryForId(formatId);
-    if (!entry?.form) return;
+    if (!entry?.form || entry.supported === false) return;
     const values = entry.form.queryValues();
     const job = values === null
       ? null
@@ -702,7 +723,7 @@ export class SaveExportEditor {
       executionOrder.push({ id: "save-pwd", form: this.pathEntry.form, values: pathValues, intent: "apply" });
     }
     for (const entry of this.entries) {
-      if (!entry.form || entry.id === saveCommandId) continue;
+      if (!entry.form || entry.supported === false || entry.id === saveCommandId) continue;
       if (!this.isDirty(entry.form)) continue;
       const values = entry.form.values();
       if (values === null) return;
@@ -773,13 +794,19 @@ export class SaveExportEditor {
     if (this.setupEntry?.form) this.setupEntry.form.setDisabled(executionDisabled);
     if (this.setupSaveButton) this.setupSaveButton.disabled = executionDisabled;
     if (this.setupRecallButton) this.setupRecallButton.disabled = executionDisabled;
-    if (this.advancedEntry?.form) this.advancedEntry.form.setDisabled(editingDisabled);
+    if (this.advancedEntry?.form) {
+      this.advancedEntry.form.setDisabled(
+        editingDisabled || this.advancedEntry.supported === false,
+      );
+    }
     if (this.advancedEntry?.button) {
-      this.advancedEntry.button.disabled = editingDisabled || !this.isDirty(this.advancedEntry.form);
+      this.advancedEntry.button.disabled = editingDisabled
+        || this.advancedEntry.supported === false
+        || !this.isDirty(this.advancedEntry.form);
     }
     if (this.saveButton) this.saveButton.disabled = editingDisabled;
     for (const entry of this.entries) {
-      entry.form?.setDisabled(editingDisabled);
+      entry.form?.setDisabled(editingDisabled || entry.supported === false);
     }
     if (this.readSettingsPrompt) this.readSettingsPrompt.hidden = !settingsRequired;
     if (!this.busy && !executionBusy && available && this.pendingRefresh) {
