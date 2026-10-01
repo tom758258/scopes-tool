@@ -64,33 +64,18 @@ from scopes_tool_core.trigger import (
     operation_condition_query,
     single_command,
 )
+from tests.cli._worker_test_support import make_worker_runtime
 
 
 def _runtime(
     queue_max=32,
     model="keysight-dsox4024a",
 ):
-    return worker.WorkerRuntime(
-        host="127.0.0.1",
-        port=0,
-        mode="simulate",
-        model=model,
-        resource=None,
-        queue_max=queue_max,
-        output_format="jsonl",
-    )
+    return make_worker_runtime(model=model, queue_max=queue_max)
 
 
 def _live_runtime():
-    return worker.WorkerRuntime(
-        host="127.0.0.1",
-        port=0,
-        mode="live",
-        model="keysight-dsox4024a",
-        resource="USB0::FAKE::INSTR",
-        queue_max=32,
-        output_format="jsonl",
-    )
+    return make_worker_runtime(mode="live", resource="USB0::FAKE::INSTR", queue_max=32)
 
 
 def test_worker_maps_single_wait_arguments_to_domain_command():

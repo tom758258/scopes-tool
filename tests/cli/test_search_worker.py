@@ -3,18 +3,11 @@ import pytest
 from scopes_tool_cli import cli, worker
 from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS
 from scopes_tool_core.errors import OscilloscopeError
+from tests.cli._worker_test_support import make_worker_runtime
 
 
 def _runtime(tmp_path, model="keysight-dsox4034a"):
-    return worker.WorkerRuntime(
-        host="127.0.0.1",
-        port=0,
-        mode="simulate",
-        model=model,
-        resource=None,
-                queue_max=1,
-        output_format="jsonl",
-    )
+    return make_worker_runtime(model=model)
 
 
 @pytest.mark.parametrize(

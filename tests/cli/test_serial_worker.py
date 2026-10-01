@@ -3,6 +3,7 @@ import pytest
 from scopes_tool_cli import cli, worker
 from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS
 from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
+from tests.cli._worker_test_support import make_worker_runtime
 
 
 def _runtime(
@@ -12,15 +13,7 @@ def _runtime(
     mode="simulate",
     resource=None,
 ):
-    return worker.WorkerRuntime(
-        host="127.0.0.1",
-        port=0,
-        mode=mode,
-        model=model,
-        resource=resource,
-                queue_max=1,
-        output_format="jsonl",
-    )
+    return make_worker_runtime(mode=mode, model=model, resource=resource)
 
 
 def test_worker_serial_commands_are_allowlisted(tmp_path):

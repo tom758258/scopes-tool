@@ -2,18 +2,11 @@ import pytest
 
 from scopes_tool_cli import worker
 from scopes_tool_core.errors import ParameterValidationError
+from tests.cli._worker_test_support import make_worker_runtime
 
 
 def _runtime(tmp_path, model="keysight-dsox4024a"):
-    return worker.WorkerRuntime(
-        host="127.0.0.1",
-        port=0,
-        mode="simulate",
-        model=model,
-        resource=None,
-        queue_max=1,
-        output_format="jsonl",
-    )
+    return make_worker_runtime(model=model)
 
 
 def test_worker_cursor_accepts_partial_position_payload(tmp_path):

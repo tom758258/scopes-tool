@@ -4,18 +4,11 @@ import json
 from pathlib import Path
 
 from scopes_tool_cli import cli, worker
+from tests.cli._worker_test_support import make_worker_runtime
 
 
 def _runtime():
-    return worker.WorkerRuntime(
-        host="127.0.0.1",
-        port=0,
-        mode="simulate",
-        model="keysight-dsox4024a",
-        resource=None,
-        queue_max=4,
-        output_format="jsonl",
-    )
+    return make_worker_runtime(queue_max=4)
 
 
 def test_capture_until_dry_run_is_representative_and_uses_matching_count(

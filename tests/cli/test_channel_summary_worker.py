@@ -1,17 +1,9 @@
 from scopes_tool_cli import cli, worker
+from tests.cli._worker_test_support import make_worker_runtime
 
 
 def _runtime(tmp_path):
-    return worker.WorkerRuntime(
-        "127.0.0.1",
-        0,
-        "simulate",
-        "keysight-dsox4034a",
-        None,
-        tmp_path,
-        1,
-        "jsonl",
-    )
+    return make_worker_runtime(model="keysight-dsox4034a")
 
 
 def test_channel_summary_worker_reuses_query_only_cli_path(tmp_path):

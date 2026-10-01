@@ -15,13 +15,11 @@ from scopes_tool_cli._worker_commands_trigger import (
 )
 from scopes_tool_cli.worker_commands import arguments_to_argv
 from scopes_tool_core.errors import OscilloscopeError
+from tests.cli._worker_test_support import make_worker_runtime
 
 
 def _runtime():
-    return worker.WorkerRuntime(
-        host="127.0.0.1", port=0, mode="simulate", model="keysight-dsox4034a", resource=None,
-        queue_max=1, output_format="jsonl",
-    )
+    return make_worker_runtime(model="keysight-dsox4034a")
 
 
 @contextmanager

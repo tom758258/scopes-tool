@@ -2,10 +2,11 @@ import pytest
 
 from scopes_tool_cli import cli, worker
 from scopes_tool_core.errors import OscilloscopeError
+from tests.cli._worker_test_support import make_worker_runtime
 
 
 def _runtime(tmp_path):
-    return worker.WorkerRuntime("127.0.0.1", 0, "simulate", "keysight-dsox4024a", None, tmp_path, 1, "jsonl")
+    return make_worker_runtime()
 
 
 @pytest.mark.parametrize(
