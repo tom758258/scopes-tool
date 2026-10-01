@@ -17,7 +17,9 @@ from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.measure_until import MeasureUntilRequest, run_measure_until
 from scopes_tool_core.capture_until import CaptureUntilRequest, run_capture_until
 from scopes_tool_core.capture_monitor import CaptureMonitorRequest, run_capture_monitor
-from scopes_tool_core.operations import (
+from scopes_tool_core.capture_batch import run_capture_batch
+from scopes_tool_core.measure_log import run_measure_log
+from scopes_tool_core.operation_types import (
     AcquisitionCheckRequest,
     CaptureBatchRequest,
     CaptureRequest,
@@ -26,12 +28,12 @@ from scopes_tool_core.operations import (
     MeasureSweepRequest,
     SmokeRequest,
     _OperationError,
+)
+from scopes_tool_core.operations import (
     run_acquisition_check,
     run_capture,
-    run_capture_batch,
     run_doctor,
     run_measure,
-    run_measure_log,
     run_measure_sweep,
     run_smoke,
 )

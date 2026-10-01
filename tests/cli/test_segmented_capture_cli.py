@@ -6,7 +6,7 @@ import pytest
 
 from scopes_tool_cli import cli, dispatch
 from scopes_tool_cli.commands import workflows
-from scopes_tool_core.operations import OperationResult
+from scopes_tool_core.operation_types import OperationResult
 
 
 def test_segmented_capture_dispatch_forwards_stop_requested(monkeypatch) -> None:

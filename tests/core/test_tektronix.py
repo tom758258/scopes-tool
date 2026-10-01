@@ -905,7 +905,8 @@ def test_reference_query_returns_real_display_without_label():
 
 @pytest.mark.parametrize("model_id,_,__", MODELS)
 def test_primitive_runners_use_native_status_and_capture_wait(model_id, _, __, tmp_path):
-    from scopes_tool_core.operations import CaptureRequest, MeasureRequest, run_capture, run_measure
+    from scopes_tool_core.operation_types import CaptureRequest, MeasureRequest
+    from scopes_tool_core.operations import run_capture, run_measure
     from scopes_tool_core.trigger import TriggerWaitConfig
     with simulated_scope(model_id) as scope:
         measured = run_measure(scope, "SIM::SCOPE", MeasureRequest("vpp", channel=1))

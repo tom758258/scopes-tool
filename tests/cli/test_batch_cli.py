@@ -4,7 +4,7 @@ import pytest
 
 from scopes_tool_cli import cli, runtime
 from scopes_tool_cli.commands import workflows
-from scopes_tool_core import operations
+from scopes_tool_core import capture_batch, operation_types
 from scopes_tool_core import output_files
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.idn import parse_idn
@@ -152,7 +152,7 @@ def test_capture_batch_cli_maps_arguments_to_core_request(monkeypatch, tmp_path)
             request=request,
             stop_requested=stop_requested,
         )
-        return operations.OperationResult(
+        return operation_types.OperationResult(
             0,
             {
                 "status": "completed",
@@ -188,7 +188,7 @@ def test_capture_batch_cli_maps_arguments_to_core_request(monkeypatch, tmp_path)
     assert observed["scope"] is scope
     assert observed["resource"] == "USB0::FAKE::INSTR"
     assert observed["stop_requested"] is None
-    assert request == operations.CaptureBatchRequest(
+    assert request == capture_batch.CaptureBatchRequest(
         channels=[2],
         points=5000,
         waveform_format="word",
@@ -302,7 +302,7 @@ def test_capture_batch_cli_uses_interruptible_wait_between_captures(monkeypatch,
     install_scope(monkeypatch, _BatchDummyScope())
     waits = []
     monkeypatch.setattr(
-        operations,
+        capture_batch,
         "interruptible_wait",
         lambda seconds, *, stop_requested=None: waits.append(seconds) or True,
     )

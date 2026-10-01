@@ -25,7 +25,7 @@ from .capabilities import ScopeCapabilities
 from .channel import validate_analog_channel
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import measurement_query, validate_statistics_items
-from .operations import OperationResult
+from .operation_types import OperationResult
 from .planning import OperationPlan, MeasurePlanRequest, plan_measure
 from .scope import Oscilloscope
 from .workflow import (

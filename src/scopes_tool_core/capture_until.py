@@ -22,7 +22,8 @@ from .batch import (
 from .capabilities import ScopeCapabilities
 from .channel import validate_analog_channel
 from .errors import OscilloscopeError, ParameterValidationError
-from .operations import OperationResult, _capture_waveform
+from .operation_support import _capture_waveform
+from .operation_types import OperationResult
 from .output_files import write_capture_csv_file, write_capture_metadata_file
 from .planning import workflow_step_scpi, OperationPlan, planned_waveform_scpi, resolve_capture_channels
 from .scope import Oscilloscope

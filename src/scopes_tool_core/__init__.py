@@ -112,7 +112,9 @@ from .demo import (
     DemoPhaseState,
     DemoState,
 )
-from .operations import (
+from .capture_batch import run_capture_batch
+from .measure_log import run_measure_log
+from .operation_types import (
     AcquisitionCheckRequest,
     CaptureBatchRequest,
     CaptureRequest,
@@ -121,13 +123,13 @@ from .operations import (
     MeasureSweepRequest,
     OperationResult,
     SmokeRequest,
+)
+from .operations import (
     query_acquisition_readouts,
     query_instrument_summary,
     run_acquisition_check,
     run_capture,
-    run_capture_batch,
     run_doctor,
-    run_measure_log,
     run_measure,
     run_measure_sweep,
     run_smoke,

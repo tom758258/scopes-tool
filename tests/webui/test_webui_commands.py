@@ -32,7 +32,7 @@ from scopes_tool_core.measurements import (
     SUPPORTED_MEASUREMENT_ITEMS,
     validate_statistics_items,
 )
-from scopes_tool_core.operations import _OperationError
+from scopes_tool_core.operation_types import _OperationError
 from scopes_tool_core.trigger import TriggerWaitResult
 from scopes_tool_core import OperationResult
 import scopes_tool_webui.app as app_module

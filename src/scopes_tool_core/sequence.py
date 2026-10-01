@@ -18,14 +18,13 @@ from .capabilities import ScopeCapabilities
 from .cleanup import CLEANUP_PROFILES, execute_cleanup, plan_cleanup
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import is_pair_measurement_item, normalize_measurement_item
-from .operations import (
+from .operation_types import (
     CaptureRequest,
     MeasureRequest,
     OperationResult,
     _OperationError,
-    run_capture,
-    run_measure,
 )
+from .operations import run_capture, run_measure
 from .output_files import write_json_file, write_json_file_best_effort, write_screenshot_png_file
 from .planning import (
     CapturePlanRequest,

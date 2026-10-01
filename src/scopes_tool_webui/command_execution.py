@@ -27,7 +27,7 @@ from scopes_tool_core import (
     run_smoke,
 )
 from scopes_tool_core.discovery import discover_visa_resources
-from scopes_tool_core.operations import _OperationError
+from scopes_tool_core.operation_types import _OperationError
 from scopes_tool_core.simulator_backend import SimulatorInstrumentState
 from scopes_tool_core.planning import (
     AcquisitionCheckPlanRequest,

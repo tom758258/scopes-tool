@@ -21,7 +21,8 @@ from .batch import (
 )
 from .capabilities import ScopeCapabilities
 from .errors import OscilloscopeError, ParameterValidationError
-from .operations import OperationResult, _capture_waveform
+from .operation_support import _capture_waveform
+from .operation_types import OperationResult
 from .planning import workflow_step_scpi, OperationPlan, planned_waveform_scpi, resolve_capture_channels
 from .scope import Oscilloscope
 from .waveform import (

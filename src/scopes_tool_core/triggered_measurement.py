@@ -24,7 +24,7 @@ from .batch import (
 from .capabilities import ScopeCapabilities
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import pair_measurement_query
-from .operations import OperationResult
+from .operation_types import OperationResult
 from .planning import (
     OperationPlan, MeasurePlanRequest, plan_measure, workflow_step_scpi,
     parse_measurement_item_list,

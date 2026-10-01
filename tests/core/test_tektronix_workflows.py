@@ -42,11 +42,12 @@ def test_wait_current_does_not_rearm(model):
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("workflow", ("batch", "until", "monitor", "sweep", "log", "measure-until", "triggered-capture", "triggered-measure", "acquisition", "sequence", "cleanup"))
 def test_workflow_matrix(model, workflow, tmp_path):
+    from scopes_tool_core import capture_batch, measure_log
     from scopes_tool_core import operations as op, capture_until, capture_monitor, measure_until, triggered_capture, triggered_measurement, sequence
     from scopes_tool_core.cleanup import execute_cleanup
     with scope_for(model) as scope:
         if workflow == "batch":
-            result = op.run_capture_batch(scope, "SIM::INSTR", op.CaptureBatchRequest([1], requested_count=1, output_dir=tmp_path))
+            result = capture_batch.run_capture_batch(scope, "SIM::INSTR", capture_batch.CaptureBatchRequest([1], requested_count=1, output_dir=tmp_path))
         elif workflow == "until":
             result = capture_until.run_capture_until(scope, "SIM::INSTR", capture_until.CaptureUntilRequest([1], 1, "max", "gt", -100, 1, interval_seconds=0, output_dir=tmp_path))
         elif workflow == "monitor":
@@ -54,7 +55,7 @@ def test_workflow_matrix(model, workflow, tmp_path):
         elif workflow == "sweep":
             result = op.run_measure_sweep(scope, "SIM::INSTR", op.MeasureSweepRequest([1], items="vpp,frequency"))
         elif workflow == "log":
-            result = op.run_measure_log(scope, "SIM::INSTR", op.MeasureLogRequest([1], requested_count=1, interval_seconds=0, output_dir=tmp_path))
+            result = measure_log.run_measure_log(scope, "SIM::INSTR", measure_log.MeasureLogRequest([1], requested_count=1, interval_seconds=0, output_dir=tmp_path))
         elif workflow == "measure-until":
             result = measure_until.run_measure_until(scope, "SIM::INSTR", measure_until.MeasureUntilRequest(1, "vpp", "gt", -100, 1, interval_seconds=0, output_dir=tmp_path))
         elif workflow == "triggered-capture":
@@ -170,7 +171,8 @@ def test_inconsistent_status_cannot_pass(value, events):
 
 
 def test_stale_events_are_reported_then_measurement_proceeds():
-    from scopes_tool_core.operations import run_measure_sweep, MeasureSweepRequest
+    from scopes_tool_core.operation_types import MeasureSweepRequest
+    from scopes_tool_core.operations import run_measure_sweep
     with scope_for(MODELS[0]) as scope:
         scope.backend.inject_event(100, "stale command failure")
         result = run_measure_sweep(scope, "SIM::INSTR", MeasureSweepRequest([1], items="vpp"))
@@ -181,7 +183,9 @@ def test_stale_events_are_reported_then_measurement_proceeds():
 
 @pytest.mark.parametrize("workflow", ["sweep", "log"])
 def test_unsupported_measurement_request_fails_before_mutation(workflow, tmp_path):
-    from scopes_tool_core.operations import run_measure_sweep, run_measure_log, MeasureSweepRequest, MeasureLogRequest
+    from scopes_tool_core.measure_log import run_measure_log
+    from scopes_tool_core.operation_types import MeasureLogRequest, MeasureSweepRequest
+    from scopes_tool_core.operations import run_measure_sweep
     from scopes_tool_core.errors import OscilloscopeError
     with scope_for(MODELS[1]) as scope:
         scope.backend.history.clear()
@@ -194,7 +198,8 @@ def test_unsupported_measurement_request_fails_before_mutation(workflow, tmp_pat
 
 
 def test_bad_checkpoint_does_not_retry_or_continue_sweep(monkeypatch):
-    from scopes_tool_core.operations import run_measure_sweep, MeasureSweepRequest
+    from scopes_tool_core.operation_types import MeasureSweepRequest
+    from scopes_tool_core.operations import run_measure_sweep
     with scope_for(MODELS[0]) as scope:
         original = scope.backend.query
         reads = 0
@@ -272,7 +277,8 @@ def test_planning_rejects_mismatched_profile():
 
 @pytest.mark.parametrize("checkpoint", [2, 3, 5])
 def test_acquisition_incomplete_checkpoint_stops_remaining_steps(checkpoint, monkeypatch, tmp_path):
-    from scopes_tool_core.operations import run_acquisition_check, AcquisitionCheckRequest
+    from scopes_tool_core.operation_types import AcquisitionCheckRequest
+    from scopes_tool_core.operations import run_acquisition_check
     with scope_for(MODELS[0]) as scope:
         original = scope.backend.query
         reads = 0
@@ -296,7 +302,8 @@ def test_acquisition_incomplete_checkpoint_stops_remaining_steps(checkpoint, mon
 
 
 def test_acquisition_restore_checks_native_status(monkeypatch, tmp_path):
-    from scopes_tool_core.operations import run_acquisition_check, AcquisitionCheckRequest
+    from scopes_tool_core.operation_types import AcquisitionCheckRequest
+    from scopes_tool_core.operations import run_acquisition_check
     from scopes_tool_core.errors import OscilloscopeError
     with scope_for(MODELS[0]) as scope:
         original = scope.set_acquisition_type

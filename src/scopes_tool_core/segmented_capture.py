@@ -19,7 +19,7 @@ from .acquisition import acquisition_type_query, parse_acquisition_type
 from .capabilities import ScopeCapabilities
 from .channel import channel_units_query, validate_analog_channel
 from .errors import OscilloscopeError, ParameterValidationError, WaveformResponseError
-from .operations import OperationResult
+from .operation_types import OperationResult
 from .status import parse_system_error
 from .trigger import (
     OPERATION_CONDITION_RUI_ENAB_MASK,

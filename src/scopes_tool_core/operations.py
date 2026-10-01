@@ -4,30 +4,16 @@ from __future__ import annotations
 
 from .status import status_payload, status_fields
 
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-import json
-import math
 from pathlib import Path
-import time
-from typing import Callable, Mapping, Sequence
+from typing import Sequence
 
 from .acquisition import (
     AcquisitionResponseError,
     normalize_acquisition_type,
     validate_acquisition_count,
 )
-from .batch import (
-    BatchManifest,
-    batch_capture_paths,
-    batch_iso_timestamp,
-    capture_actual_points,
-    idn_manifest_dict,
-    prepare_batch_output_dir,
-    relative_manifest_path,
-    system_error_manifest_dict,
-    write_batch_manifest,
-)
+from .batch import batch_iso_timestamp, idn_manifest_dict
 from .capabilities import operation_supported
 from .errors import OscilloscopeError, VisaBackendError
 from .measurements import (
@@ -36,11 +22,22 @@ from .measurements import (
     normalize_measurement_item,
     pair_measurement_query,
 )
-from .measure_logger import (
-    MeasureLogManifest,
-    log_measurements_workflow,
-    measure_log_paths,
-    prepare_measure_log_output_dir,
+from .operation_support import (
+    _append_session_header,
+    _capture_waveform,
+    _format_actual_points,
+    _format_channel_list,
+    _scope_backend_json,
+    _waveform_capture_commands,
+)
+from .operation_types import (
+    AcquisitionCheckRequest,
+    CaptureRequest,
+    MeasureRequest,
+    MeasureSweepRequest,
+    OperationResult,
+    SmokeRequest,
+    _OperationError,
 )
 from .output_files import (
     capture_output_paths,
@@ -66,7 +63,6 @@ from .segmented import (
     segmented_mode_query,
 )
 from .trigger import (
-    TriggerWaitConfig,
     parse_trigger_mode,
     trigger_mode_query,
     wait_for_trigger_completion,
@@ -80,116 +76,12 @@ from .waveform import (
     waveform_time_axis_tolerance_summary,
 )
 from .workflow import (
-    ProgressReporter,
     StopRequested,
-    WorkflowProgress,
     drain_preexisting_system_errors,
-    interruptible_wait,
     workflow_scpi_logging,
 )
 
 _DEFAULT_TIMEZONE = timezone(timedelta(hours=8), name="UTC+8")
-
-
-@dataclass(frozen=True)
-class OperationResult:
-    exit_code: int
-    result: dict[str, object]
-    files: list[dict[str, str]] = field(default_factory=list)
-    system_error: dict[str, object] | None = None
-    human_lines: list[str] = field(default_factory=list)
-    idn: object | None = None
-    backend: str | None = None
-    timeout_ms: int | None = None
-
-    @classmethod
-    def from_status(cls, exit_code, result, files=None, system_error=None,
-                    human_lines=None, idn=None, backend=None, timeout_ms=None):
-        fields = status_fields(system_error)
-        if "post_command_status" in fields:
-            result = {**result, "post_command_status": fields["post_command_status"]}
-        return cls(exit_code, result, [] if files is None else files,
-                   fields["system_error"], [] if human_lines is None else human_lines,
-                   idn, backend, timeout_ms)
-
-
-@dataclass(frozen=True)
-class CaptureRequest:
-    channels: Sequence[int | str]
-    points: int
-    waveform_format: str = "byte"
-    csv_path: str | Path | None = None
-    meta_path: str | Path | None = None
-    plot_path: str | Path | None = None
-    allow_time_axis_tolerance: bool = False
-    trigger_wait: TriggerWaitConfig | None = None
-
-
-@dataclass(frozen=True)
-class CaptureBatchRequest:
-    """Normalized request for one finite waveform capture batch."""
-
-    channels: Sequence[int | str]
-    points: int = 1000
-    waveform_format: str = "byte"
-    requested_count: int = 1
-    interval_seconds: float = 0.0
-    output_dir: str | Path | None = None
-    log_scpi: bool = False
-
-
-@dataclass(frozen=True)
-class MeasureRequest:
-    item: str
-    channel: int | None = None
-    source_channel: int | None = None
-    reference_channel: int | None = None
-    time_s: float | None = None
-    level: float | None = None
-    slope: str | None = None
-    occurrence: int | None = None
-
-
-@dataclass(frozen=True)
-class MeasureSweepRequest:
-    channels: Sequence[int | str] | None = None
-    items: str = "vpp,frequency,period,vrms"
-    pairs: Sequence[str] = ()
-    pair_items: str = "phase,delay"
-
-
-@dataclass(frozen=True)
-class MeasureLogRequest:
-    """Normalized request for one finite measurement logging run."""
-
-    channels: Sequence[int | str] | None = None
-    items: str = "vpp,frequency"
-    pairs: Sequence[str] = ()
-    pair_items: str = "phase,delay"
-    interval_seconds: float = 1.0
-    requested_count: int | None = None
-    requested_duration_seconds: float | None = None
-    output_dir: str | Path | None = None
-    save_results: bool = True
-    stop_on_error: bool = False
-    log_scpi: bool = False
-
-
-@dataclass(frozen=True)
-class SmokeRequest:
-    output_dir: str | Path | None = None
-    log_scpi: bool = False
-    save_artifacts: bool = True
-
-
-@dataclass(frozen=True)
-class AcquisitionCheckRequest:
-    output_dir: str | Path | None = None
-    average_count: int = 16
-    check_only: bool = False
-    stop_on_error: bool = False
-    restore_type: bool = False
-    log_scpi: bool = False
 
 
 def run_capture(
@@ -325,322 +217,6 @@ def run_capture(
         idn=idn,
         **_scope_backend_json(scope),
     )
-
-
-def run_capture_batch(
-    scope: Oscilloscope,
-    resource: str,
-    request: CaptureBatchRequest,
-    *,
-    stop_requested: StopRequested | None = None,
-    progress_reporter: ProgressReporter | None = None,
-    sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
-) -> OperationResult:
-    """Run a finite waveform capture batch and write its artifacts."""
-
-    if request.requested_count < 1:
-        raise OscilloscopeError("capture-batch count must be at least 1")
-    if not math.isfinite(request.interval_seconds) or request.interval_seconds < 0:
-        raise OscilloscopeError(
-            "capture-batch interval seconds must be a non-negative finite number"
-        )
-
-    output_dir = prepare_batch_output_dir(request.output_dir)
-    manifest_path = output_dir / "manifest.json"
-    scpi_log_path = output_dir / "scpi.log"
-    manifest = BatchManifest(
-        start_time=batch_iso_timestamp(),
-        end_time=None,
-        status="running",
-        resource=resource,
-        backend=None,
-        timeout_ms=None,
-        idn=None,
-        channels=[],
-        points=request.points,
-        format=request.waveform_format.upper(),
-        requested_count=request.requested_count,
-        interval_seconds=request.interval_seconds,
-    )
-    files = [
-        {"kind": "manifest", "path": str(manifest_path)},
-        {"kind": "scpi_log", "path": str(scpi_log_path)},
-    ]
-    human: list[str] = []
-    idn = None
-    last_system_error: dict[str, object] | None = None
-    reporter_failed = False
-
-    try:
-        with workflow_scpi_logging(
-            scpi_log_path,
-            echo_to_stderr=request.log_scpi,
-        ):
-            idn = scope.query_idn()
-            manifest.backend = getattr(scope.backend, "backend", None)
-            manifest.timeout_ms = getattr(scope.backend, "timeout", None)
-            manifest.idn = idn_manifest_dict(idn)
-            _append_session_header(human, scope, resource)
-            human.extend([f"Model: {idn.model}", f"Series: {idn.series or 'unknown'}"])
-
-            if scope.capabilities is None:
-                human.append("Capabilities: unavailable for this model")
-                manifest.status = "error"
-                manifest.error = "Capabilities unavailable for this model"
-                manifest.end_time = batch_iso_timestamp()
-                _write_batch_manifest(manifest, manifest_path)
-                human.extend(
-                    [
-                        f"Output directory: {output_dir}",
-                        f"SCPI log: {scpi_log_path}",
-                        f"Manifest: {manifest_path}",
-                    ]
-                )
-                return _capture_batch_operation_result(
-                    1,
-                    manifest,
-                    manifest_path,
-                    scpi_log_path,
-                    files,
-                    human,
-                    idn,
-                    last_system_error,
-                    scope,
-                )
-
-            channels = resolve_capture_channels(request.channels, scope.capabilities)
-            points = validate_waveform_points(request.points, scope.capabilities)
-            waveform_format = request.waveform_format.upper()
-            if request.waveform_format.lower() == "word":
-                validate_word_format_supported(scope.capabilities)
-            for _entry in drain_preexisting_system_errors(scope):
-                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
-            manifest.channels = list(channels)
-            manifest.points = points
-            manifest.format = waveform_format
-            _write_batch_manifest(manifest, manifest_path)
-
-            human.extend(
-                [
-                    f"Planned batch capture: {_format_channel_list(channels)}, "
-                    f"{points} points, {waveform_format} format, "
-                    f"{request.requested_count} captures",
-                    f"Interval seconds: {request.interval_seconds}",
-                    f"Output directory: {output_dir}",
-                    *_waveform_capture_commands(
-                        channels,
-                        request.waveform_format,
-                        points,
-                    ),
-                ]
-            )
-            start_perf = time.perf_counter()
-
-            for index in range(1, request.requested_count + 1):
-                if stop_requested is not None and stop_requested():
-                    return _cancel_capture_batch(
-                        manifest,
-                        manifest_path,
-                        scpi_log_path,
-                        files,
-                        human,
-                        idn,
-                        last_system_error,
-                        scope,
-                    )
-
-                capture = _capture_waveform(
-                    scope,
-                    channels,
-                    request.waveform_format,
-                    points,
-                )
-                csv_path, meta_path = batch_capture_paths(
-                    output_dir,
-                    index,
-                    request.requested_count,
-                )
-                written_csv = write_capture_csv_file(capture, csv_path)
-                written_meta = write_capture_metadata_file(
-                    capture,
-                    meta_path,
-                    idn=idn,
-                    resource=resource,
-                )
-                entry = scope.workflow_status()
-                last_system_error = system_error_manifest_dict(entry)
-                capture_entry = {
-                    "index": index,
-                    "csv": relative_manifest_path(written_csv, output_dir),
-                    "metadata": relative_manifest_path(written_meta, output_dir),
-                    "actual_points": capture_actual_points(capture),
-                    **status_fields(dict(last_system_error)),
-                }
-                manifest.captures.append(capture_entry)
-                files.extend(
-                    [
-                        {"kind": "csv", "path": str(written_csv)},
-                        {"kind": "metadata", "path": str(written_meta)},
-                    ]
-                )
-                _write_batch_manifest(manifest, manifest_path)
-                human.extend(
-                    [
-                        f"Capture {index}/{request.requested_count}:",
-                        _format_actual_points(capture),
-                        f"CSV: {written_csv}",
-                        f"Metadata: {written_meta}",
-                        f"System error: {entry.format()}",
-                    ]
-                )
-
-                try:
-                    if sample_reporter is not None:
-                        sample_reporter(dict(capture_entry))
-                    if progress_reporter is not None:
-                        progress_reporter(
-                            WorkflowProgress(
-                                completed_count=index,
-                                total_count=request.requested_count,
-                                elapsed_seconds=time.perf_counter() - start_perf,
-                            )
-                        )
-                except Exception:
-                    reporter_failed = True
-                    raise
-
-                if entry.is_error:
-                    manifest.status = "instrument_error"
-                    manifest.end_time = batch_iso_timestamp()
-                    _write_batch_manifest(manifest, manifest_path)
-                    human.extend(
-                        [
-                            f"SCPI log: {scpi_log_path}",
-                            f"Manifest: {manifest_path}",
-                        ]
-                    )
-                    return _capture_batch_operation_result(
-                        1,
-                        manifest,
-                        manifest_path,
-                        scpi_log_path,
-                        files,
-                        human,
-                        idn,
-                        last_system_error,
-                        scope,
-                    )
-
-                if index >= request.requested_count:
-                    break
-
-                if stop_requested is not None and stop_requested():
-                    return _cancel_capture_batch(
-                        manifest,
-                        manifest_path,
-                        scpi_log_path,
-                        files,
-                        human,
-                        idn,
-                        last_system_error,
-                        scope,
-                    )
-                if (
-                    index < request.requested_count
-                    and request.interval_seconds > 0
-                    and not interruptible_wait(
-                        request.interval_seconds,
-                        stop_requested=stop_requested,
-                    )
-                ):
-                    return _cancel_capture_batch(
-                        manifest,
-                        manifest_path,
-                        scpi_log_path,
-                        files,
-                        human,
-                        idn,
-                        last_system_error,
-                        scope,
-                    )
-
-            manifest.status = "completed"
-            manifest.end_time = batch_iso_timestamp()
-            _write_batch_manifest(manifest, manifest_path)
-            human.extend(
-                [f"SCPI log: {scpi_log_path}", f"Manifest: {manifest_path}"]
-            )
-            return _capture_batch_operation_result(
-                0,
-                manifest,
-                manifest_path,
-                scpi_log_path,
-                files,
-                human,
-                idn,
-                last_system_error,
-                scope,
-            )
-    except KeyboardInterrupt:
-        manifest.status = "interrupted"
-        manifest.end_time = batch_iso_timestamp()
-        manifest.error = "KeyboardInterrupt"
-        _write_batch_manifest_best_effort(manifest, manifest_path)
-        return _capture_batch_operation_result(
-            130,
-            manifest,
-            manifest_path,
-            scpi_log_path,
-            files,
-            human,
-            idn,
-            last_system_error,
-            scope,
-        )
-    except OscilloscopeError as exc:
-        if reporter_failed:
-            raise
-        if manifest.status == "running":
-            manifest.status = "error"
-            manifest.end_time = batch_iso_timestamp()
-            manifest.error = str(exc)
-            _write_batch_manifest_best_effort(manifest, manifest_path)
-        raise _OperationError(
-            exc,
-            _capture_batch_operation_result(
-                1,
-                manifest,
-                manifest_path,
-                scpi_log_path,
-                files,
-                human,
-                idn,
-                last_system_error,
-                scope,
-            ),
-        ) from exc
-    except OSError as exc:
-        if reporter_failed:
-            raise
-        manifest.status = "error"
-        manifest.end_time = batch_iso_timestamp()
-        manifest.error = str(exc)
-        _write_batch_manifest_best_effort(manifest, manifest_path)
-        error = OscilloscopeError(f"could not write SCPI log file {scpi_log_path}: {exc}")
-        raise _OperationError(
-            error,
-            _capture_batch_operation_result(
-                1,
-                manifest,
-                manifest_path,
-                scpi_log_path,
-                files,
-                human,
-                idn,
-                last_system_error,
-                scope,
-            ),
-        ) from exc
 
 
 def run_doctor(scope: Oscilloscope, resource: str) -> OperationResult:
@@ -886,186 +462,6 @@ def run_measure_sweep(
         idn=idn,
         **_scope_backend_json(scope),
     )
-
-
-def run_measure_log(
-    scope: Oscilloscope,
-    resource: str,
-    request: MeasureLogRequest,
-    *,
-    stop_requested: StopRequested | None = None,
-    progress_reporter: ProgressReporter | None = None,
-    sample_reporter: Callable[[Mapping[str, object]], None] | None = None,
-) -> OperationResult:
-    """Run a finite measurement logger and return its structured outcome."""
-
-    if request.requested_count is None and request.requested_duration_seconds is None:
-        raise OscilloscopeError(
-            "measure-log requires --count or --duration-seconds so the run is finite"
-        )
-    if not isinstance(request.save_results, bool):
-        raise OscilloscopeError("measure-log save_results must be a boolean")
-    output_dir = (
-        prepare_measure_log_output_dir(request.output_dir)
-        if request.save_results
-        else None
-    )
-    csv_path, manifest_path, scpi_log_path = (
-        measure_log_paths(output_dir)
-        if output_dir is not None
-        else (None, None, None)
-    )
-    files = [
-        {"kind": kind, "path": str(path)}
-        for kind, path in (("csv", csv_path), ("manifest", manifest_path), ("scpi_log", scpi_log_path))
-        if path is not None
-    ]
-    human: list[str] = []
-    idn = None
-    channels: tuple[int, ...] = ()
-    items: tuple[str, ...] = ()
-    pairs: tuple[tuple[int, int], ...] = ()
-    pair_items: tuple[str, ...] = ()
-    reporter_failed = False
-    completed_rows = 0
-    last_measurement: dict[str, object] | None = None
-
-    def report_progress(progress: WorkflowProgress) -> None:
-        nonlocal reporter_failed
-        if progress_reporter is None:
-            return
-        try:
-            progress_reporter(progress)
-        except Exception:
-            reporter_failed = True
-            raise
-
-    def report_sample(sample: Mapping[str, object]) -> None:
-        nonlocal completed_rows, last_measurement, reporter_failed
-        completed_rows = int(sample["index"])
-        last_measurement = dict(sample)
-        if sample_reporter is None:
-            return
-        try:
-            sample_reporter(sample)
-        except Exception:
-            reporter_failed = True
-            raise
-
-    try:
-        with workflow_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
-            idn = scope.query_idn()
-            _append_session_header(human, scope, resource)
-            human.extend([f"Model: {idn.model}", f"Series: {idn.series or 'unknown'}"])
-            if scope.capabilities is None:
-                raise OscilloscopeError("Capabilities unavailable for this model")
-            channels = resolve_capture_channels(
-                request.channels or ("all",),
-                scope.capabilities,
-            )
-            items = parse_measurement_item_list(request.items, allow_pair=False)
-            pairs = parse_pair_specs(request.pairs, scope.capabilities)
-            pair_items = parse_measurement_item_list(request.pair_items, allow_pair=True)
-            for channel in channels:
-                for item in items:
-                    measurement_query(item, channel, capabilities=scope.capabilities)
-            for _entry in drain_preexisting_system_errors(scope):
-                human.append(f"Pre-operation stale system error drained: {_entry.format()}")
-            workflow = log_measurements_workflow(
-                scope=scope,
-                resource=resource,
-                output_dir=output_dir,
-                csv_path=csv_path,
-                manifest_path=manifest_path,
-                scpi_log_path=scpi_log_path,
-                channels=list(channels),
-                items=list(items),
-                pairs=list(pairs),
-                pair_items=list(pair_items),
-                interval_seconds=request.interval_seconds,
-                requested_count=request.requested_count,
-                requested_duration_seconds=request.requested_duration_seconds,
-                stop_on_error=request.stop_on_error,
-                stop_requested=stop_requested,
-                progress_reporter=report_progress if progress_reporter is not None else None,
-                sample_reporter=report_sample,
-            )
-        human.extend(workflow.human_lines)
-        if scpi_log_path is not None:
-            human.append(f"SCPI log: {scpi_log_path}")
-        return OperationResult.from_status(
-            workflow.exit_code,
-            _measure_log_result_json(
-                workflow.manifest,
-                csv_path,
-                manifest_path,
-                scpi_log_path,
-            ),
-            files,
-            workflow.system_error,
-            human,
-            idn=idn,
-            **_scope_backend_json(scope),
-        )
-    except OscilloscopeError as exc:
-        if reporter_failed:
-            raise
-        result, system_error = _measure_log_failure_result(
-            manifest_path=manifest_path,
-            csv_path=csv_path,
-            scpi_log_path=scpi_log_path,
-            channels=channels,
-            items=items,
-            pairs=pairs,
-            pair_items=pair_items,
-            request=request,
-            error=str(exc),
-            completed_rows=completed_rows,
-            last_measurement=last_measurement,
-        )
-        raise _OperationError(
-            exc,
-            OperationResult.from_status(
-                1,
-                result,
-                files,
-                system_error,
-                human,
-                idn=idn,
-                **_scope_backend_json(scope),
-            ),
-        ) from exc
-    except OSError as exc:
-        if reporter_failed:
-            raise
-        error = OscilloscopeError(
-            f"could not write SCPI log file {scpi_log_path}: {exc}"
-        )
-        result, system_error = _measure_log_failure_result(
-            manifest_path=manifest_path,
-            csv_path=csv_path,
-            scpi_log_path=scpi_log_path,
-            channels=channels,
-            items=items,
-            pairs=pairs,
-            pair_items=pair_items,
-            request=request,
-            error=str(error),
-            completed_rows=completed_rows,
-            last_measurement=last_measurement,
-        )
-        raise _OperationError(
-            error,
-            OperationResult.from_status(
-                1,
-                result,
-                files,
-                system_error,
-                human,
-                idn=idn,
-                **_scope_backend_json(scope),
-            ),
-        ) from exc
 
 
 def _is_visa_timeout(exc: BaseException) -> bool:
@@ -1444,189 +840,6 @@ def run_acquisition_check(
         )) from exc
 
 
-def _capture_batch_operation_result(
-    exit_code: int,
-    manifest: BatchManifest,
-    manifest_path: Path,
-    scpi_log_path: Path,
-    files: list[dict[str, str]],
-    human: list[str],
-    idn: object | None,
-    system_error: dict[str, object] | None,
-    scope: Oscilloscope,
-) -> OperationResult:
-    captures = []
-    for entry in manifest.captures:
-        item = dict(entry)
-        actual_points = item.get("actual_points")
-        if isinstance(actual_points, int) and len(manifest.channels) == 1:
-            item["actual_points"] = {
-                f"CH{manifest.channels[0]}": actual_points,
-            }
-        captures.append(item)
-    result = {
-        "status": manifest.status,
-        "channels": list(manifest.channels),
-        "format": manifest.format,
-        "points": manifest.points,
-        "requested_count": manifest.requested_count,
-        "completed_count": len(manifest.captures),
-        "manifest_path": str(manifest_path),
-        "scpi_log_path": str(scpi_log_path),
-        "captures": captures,
-        "error": manifest.error,
-    }
-    return OperationResult.from_status(
-        exit_code,
-        result,
-        list(files),
-        system_error,
-        list(human),
-        idn=idn,
-        **_scope_backend_json(scope),
-    )
-
-
-def _cancel_capture_batch(
-    manifest: BatchManifest,
-    manifest_path: Path,
-    scpi_log_path: Path,
-    files: list[dict[str, str]],
-    human: list[str],
-    idn: object | None,
-    system_error: dict[str, object] | None,
-    scope: Oscilloscope,
-) -> OperationResult:
-    manifest.status = "cancelled"
-    manifest.error = None
-    manifest.end_time = batch_iso_timestamp()
-    _write_batch_manifest(manifest, manifest_path)
-    human.extend([f"SCPI log: {scpi_log_path}", f"Manifest: {manifest_path}"])
-    return _capture_batch_operation_result(
-        130,
-        manifest,
-        manifest_path,
-        scpi_log_path,
-        files,
-        human,
-        idn,
-        system_error,
-        scope,
-    )
-
-
-def _write_batch_manifest_best_effort(
-    manifest: BatchManifest,
-    manifest_path: Path,
-) -> None:
-    try:
-        write_batch_manifest(manifest, manifest_path)
-    except OSError:
-        pass
-
-
-def _write_batch_manifest(
-    manifest: BatchManifest,
-    manifest_path: Path,
-) -> None:
-    try:
-        write_batch_manifest(manifest, manifest_path)
-    except OSError as exc:
-        reason = exc.strerror or str(exc)
-        raise OscilloscopeError(
-            f"could not write batch manifest JSON file {manifest_path}: {reason}"
-        ) from exc
-
-
-class _OperationError(OscilloscopeError):
-    def __init__(self, original: OscilloscopeError, result: OperationResult) -> None:
-        super().__init__(str(original))
-        self.result = result
-
-
-def _measure_log_result_json(
-    manifest: MeasureLogManifest,
-    csv_path: Path | None,
-    manifest_path: Path | None,
-    scpi_log_path: Path | None,
-) -> dict[str, object]:
-    data = manifest.to_json_dict()
-    return {
-        "status": data["status"],
-        "channels": data["channels"],
-        "items": data["items"],
-        "pairs": data["pairs"],
-        "pair_items": data["pair_items"],
-        "interval_seconds": data["interval_seconds"],
-        "requested_count": data["requested_count"],
-        "requested_duration_seconds": data["requested_duration_seconds"],
-        "completed_rows": data["completed_rows"],
-        "manifest_path": str(manifest_path) if manifest_path is not None else None,
-        "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
-        "csv_path": str(csv_path) if csv_path is not None else None,
-        "error": data["error"],
-        "last_measurement": data["last_measurement"],
-    }
-
-
-def _measure_log_failure_result(
-    *,
-    manifest_path: Path | None,
-    csv_path: Path | None,
-    scpi_log_path: Path | None,
-    channels: Sequence[int],
-    items: Sequence[str],
-    pairs: Sequence[tuple[int, int]],
-    pair_items: Sequence[str],
-    request: MeasureLogRequest,
-    error: str,
-    completed_rows: int,
-    last_measurement: Mapping[str, object] | None,
-) -> tuple[dict[str, object], dict[str, object] | None]:
-    data: dict[str, object] = {}
-    try:
-        loaded = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path is not None else {}
-        if isinstance(loaded, dict):
-            data = loaded
-    except (OSError, json.JSONDecodeError):
-        pass
-    rows = data.get("rows")
-    if not isinstance(rows, list):
-        rows = []
-    system_error = None
-    if rows and isinstance(rows[-1], dict):
-        candidate = rows[-1].get("system_error")
-        if isinstance(candidate, dict):
-            system_error = candidate
-    elif last_measurement is not None:
-        candidate = last_measurement.get("system_error")
-        if isinstance(candidate, dict):
-            system_error = candidate
-    result = {
-        "status": data.get("status", "error"),
-        "channels": data.get("channels", list(channels)),
-        "items": data.get("items", list(items)),
-        "pairs": data.get(
-            "pairs",
-            [f"{source}:{reference}" for source, reference in pairs],
-        ),
-        "pair_items": data.get("pair_items", list(pair_items)),
-        "interval_seconds": data.get("interval_seconds", request.interval_seconds),
-        "requested_count": data.get("requested_count", request.requested_count),
-        "requested_duration_seconds": data.get(
-            "requested_duration_seconds",
-            request.requested_duration_seconds,
-        ),
-        "completed_rows": data.get("completed_rows", completed_rows),
-        "manifest_path": str(manifest_path) if manifest_path is not None else None,
-        "scpi_log_path": str(scpi_log_path) if scpi_log_path is not None else None,
-        "csv_path": str(csv_path) if csv_path is not None else None,
-        "error": data.get("error", error),
-        "last_measurement": data.get("last_measurement", last_measurement),
-    }
-    return result, system_error
-
-
 def doctor_snapshot(scope: Oscilloscope) -> dict[str, object]:
     if scope.capabilities is None:
         raise OscilloscopeError("Capabilities unavailable for this model")
@@ -1785,21 +998,6 @@ def measure_sweep_summary(measurements: Sequence[dict[str, object]]) -> dict[str
         "invalid_count": invalid_count,
         "error_count": error_count,
     }
-
-
-def _capture_waveform(
-    scope: Oscilloscope,
-    channels: Sequence[int],
-    waveform_format: str,
-    points: int,
-) -> WaveformCapture | MultiChannelWaveformCapture:
-    if len(channels) == 1:
-        if waveform_format.lower() == "word":
-            return scope.capture_waveform_word(channels[0], points=points)
-        return scope.capture_waveform_byte(channels[0], points=points)
-    if waveform_format.lower() == "word":
-        return scope.capture_waveforms_word(channels, points=points)
-    return scope.capture_waveforms_byte(channels, points=points)
 
 
 def _run_sweep_measurement(
@@ -2095,13 +1293,6 @@ def _acquisition_check_file_list(output_dir: Path) -> list[dict[str, str]]:
     ]
 
 
-def _scope_backend_json(scope: Oscilloscope) -> dict[str, object]:
-    return {
-        "backend": getattr(scope.backend, "backend", None),
-        "timeout_ms": getattr(scope.backend, "timeout", None),
-    }
-
-
 def _trigger_wait_classifier_profile(scope: Oscilloscope) -> str:
     if getattr(scope.backend, "backend", None) == "Keysight simulator":
         return "simulator"
@@ -2176,20 +1367,6 @@ def _single_waveform_capture_summary(capture: WaveformCapture) -> dict[str, obje
     }
 
 
-def _append_session_header(human: list[str], scope: Oscilloscope, resource: str) -> None:
-    human.append(f"Resource: {resource}")
-    backend = getattr(scope.backend, "backend", None)
-    if backend is not None:
-        human.append(f"PyVISA backend: {backend}")
-    timeout = getattr(scope.backend, "timeout", None)
-    if timeout is not None:
-        human.append(f"Timeout ms: {timeout}")
-
-
-def _format_channel_list(channels: Sequence[int]) -> str:
-    return ", ".join(f"CH{channel}" for channel in channels)
-
-
 def _format_measurement_parameters(values: dict[str, object]) -> str:
     if not values:
         return ""
@@ -2205,22 +1382,3 @@ def _format_measurement_parameters(values: dict[str, object]) -> str:
 
 def _format_optional_number(value: float | None) -> str:
     return "unavailable" if value is None else f"{value:.12g}"
-
-
-def _format_actual_points(capture: WaveformCapture | MultiChannelWaveformCapture) -> str:
-    if isinstance(capture, MultiChannelWaveformCapture):
-        per_channel = ", ".join(
-            f"CH{item.channel}={len(item.raw_samples)}" for item in capture.captures
-        )
-        return f"Actual points: {per_channel}"
-    return f"Actual points: {len(capture.raw_samples)}"
-
-
-def _waveform_capture_commands(
-    channels: Sequence[int],
-    waveform_format: str,
-    points: int,
-) -> list[str]:
-    from .planning import planned_waveform_scpi
-
-    return [f"Command: {command}" for command in planned_waveform_scpi(channels, waveform_format, points)]
