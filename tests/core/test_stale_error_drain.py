@@ -1,9 +1,12 @@
 import pytest
 
 from scopes_tool_core.errors import OscilloscopeError
-from scopes_tool_core.operations import (
+from scopes_tool_core.operation_types import (
     CaptureRequest,
+    CaptureBatchRequest,
     MeasureRequest,
+)
+from scopes_tool_core.operations import (
     run_capture,
     run_measure,
 )
@@ -12,7 +15,7 @@ from scopes_tool_core.triggered_measurement import (
     TriggeredMeasureLoopRequest,
     run_triggered_measure_loop,
 )
-from scopes_tool_core.capture_batch import CaptureBatchRequest, run_capture_batch
+from scopes_tool_core.capture_batch import run_capture_batch
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
 from scopes_tool_core.workflow import drain_preexisting_system_errors
@@ -201,7 +204,8 @@ def test_run_measure_log_validation_before_drain(tmp_path):
 
 def test_run_measure_sweep_single_capability_before_drain(tmp_path):
     from scopes_tool_core.errors import ParameterValidationError
-    from scopes_tool_core.operations import MeasureSweepRequest, run_measure_sweep
+    from scopes_tool_core.operation_types import MeasureSweepRequest
+    from scopes_tool_core.operations import run_measure_sweep
 
     def _sweep_scope(**kwargs):
         return Oscilloscope(

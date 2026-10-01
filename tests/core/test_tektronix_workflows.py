@@ -45,17 +45,23 @@ def test_workflow_matrix(model, workflow, tmp_path):
     from scopes_tool_core import capture_batch, measure_log
     from scopes_tool_core import operations as op, capture_until, capture_monitor, measure_until, triggered_capture, triggered_measurement, sequence
     from scopes_tool_core.cleanup import execute_cleanup
+    from scopes_tool_core.operation_types import (
+        AcquisitionCheckRequest,
+        CaptureBatchRequest,
+        MeasureLogRequest,
+        MeasureSweepRequest,
+    )
     with scope_for(model) as scope:
         if workflow == "batch":
-            result = capture_batch.run_capture_batch(scope, "SIM::INSTR", capture_batch.CaptureBatchRequest([1], requested_count=1, output_dir=tmp_path))
+            result = capture_batch.run_capture_batch(scope, "SIM::INSTR", CaptureBatchRequest([1], requested_count=1, output_dir=tmp_path))
         elif workflow == "until":
             result = capture_until.run_capture_until(scope, "SIM::INSTR", capture_until.CaptureUntilRequest([1], 1, "max", "gt", -100, 1, interval_seconds=0, output_dir=tmp_path))
         elif workflow == "monitor":
             result = capture_monitor.run_capture_monitor(scope, "SIM::INSTR", capture_monitor.CaptureMonitorRequest([1], count=1, output_dir=tmp_path))
         elif workflow == "sweep":
-            result = op.run_measure_sweep(scope, "SIM::INSTR", op.MeasureSweepRequest([1], items="vpp,frequency"))
+            result = op.run_measure_sweep(scope, "SIM::INSTR", MeasureSweepRequest([1], items="vpp,frequency"))
         elif workflow == "log":
-            result = measure_log.run_measure_log(scope, "SIM::INSTR", measure_log.MeasureLogRequest([1], requested_count=1, interval_seconds=0, output_dir=tmp_path))
+            result = measure_log.run_measure_log(scope, "SIM::INSTR", MeasureLogRequest([1], requested_count=1, interval_seconds=0, output_dir=tmp_path))
         elif workflow == "measure-until":
             result = measure_until.run_measure_until(scope, "SIM::INSTR", measure_until.MeasureUntilRequest(1, "vpp", "gt", -100, 1, interval_seconds=0, output_dir=tmp_path))
         elif workflow == "triggered-capture":
@@ -63,7 +69,7 @@ def test_workflow_matrix(model, workflow, tmp_path):
         elif workflow == "triggered-measure":
             result = triggered_measurement.run_triggered_measure_loop(scope, "SIM::INSTR", triggered_measurement.TriggeredMeasureLoopRequest(1, 1, channels=[1], output_dir=tmp_path))
         elif workflow == "acquisition":
-            result = op.run_acquisition_check(scope, "SIM::INSTR", op.AcquisitionCheckRequest(output_dir=tmp_path))
+            result = op.run_acquisition_check(scope, "SIM::INSTR", AcquisitionCheckRequest(output_dir=tmp_path))
             skipped = [step for step in result.result["steps"] if step["status"] == "skipped"]
             assert bool(skipped)
             # No registered Tektronix profile declares high-resolution acquisition.

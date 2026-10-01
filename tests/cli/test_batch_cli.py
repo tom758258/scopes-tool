@@ -4,9 +4,10 @@ import pytest
 
 from scopes_tool_cli import cli, runtime
 from scopes_tool_cli.commands import workflows
-from scopes_tool_core import capture_batch, operation_types
+from scopes_tool_core import capture_batch
 from scopes_tool_core import output_files
 from scopes_tool_core.capabilities import capabilities_for_model
+from scopes_tool_core.operation_types import CaptureBatchRequest, OperationResult
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.status import SystemErrorEntry
 from tests.cli.support import (
@@ -152,7 +153,7 @@ def test_capture_batch_cli_maps_arguments_to_core_request(monkeypatch, tmp_path)
             request=request,
             stop_requested=stop_requested,
         )
-        return operation_types.OperationResult(
+        return OperationResult(
             0,
             {
                 "status": "completed",
@@ -188,7 +189,7 @@ def test_capture_batch_cli_maps_arguments_to_core_request(monkeypatch, tmp_path)
     assert observed["scope"] is scope
     assert observed["resource"] == "USB0::FAKE::INSTR"
     assert observed["stop_requested"] is None
-    assert request == capture_batch.CaptureBatchRequest(
+    assert request == CaptureBatchRequest(
         channels=[2],
         points=5000,
         waveform_format="word",

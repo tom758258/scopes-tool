@@ -6,6 +6,7 @@ import pytest
 
 from scopes_tool_core import batch
 from scopes_tool_core import capture_batch, workflow
+from scopes_tool_core.operation_types import CaptureBatchRequest
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.scope import Oscilloscope
@@ -151,7 +152,7 @@ def test_run_capture_batch_completes_and_writes_representative_artifacts(tmp_pat
     result = capture_batch.run_capture_batch(
         scope,
         "SIM::keysight-dsox4024a::INSTR",
-        capture_batch.CaptureBatchRequest(
+        CaptureBatchRequest(
             channels=[1, 2],
             requested_count=2,
             output_dir=output_dir,
@@ -186,7 +187,7 @@ def test_run_capture_batch_cancels_before_next_capture_and_reports_sample(tmp_pa
     result = capture_batch.run_capture_batch(
         scope,
         "SIM::keysight-dsox4024a::INSTR",
-        capture_batch.CaptureBatchRequest(
+        CaptureBatchRequest(
             channels=[1],
             requested_count=3,
             output_dir=tmp_path / "cancelled",
@@ -227,7 +228,7 @@ def test_run_capture_batch_completion_precedes_late_cancellation(tmp_path):
     result = capture_batch.run_capture_batch(
         scope,
         "SIM::keysight-dsox4024a::INSTR",
-        capture_batch.CaptureBatchRequest(
+        CaptureBatchRequest(
             channels=[1],
             requested_count=1,
             output_dir=output_dir,
@@ -264,7 +265,7 @@ def test_run_capture_batch_uses_interruptible_wait_between_captures(
     result = capture_batch.run_capture_batch(
         scope,
         "SIM::keysight-dsox4024a::INSTR",
-        capture_batch.CaptureBatchRequest(
+        CaptureBatchRequest(
             channels=[1],
             requested_count=2,
             interval_seconds=1.25,

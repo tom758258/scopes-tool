@@ -5,13 +5,16 @@ import pytest
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.errors import OscilloscopeError, VisaBackendError
 from scopes_tool_core.measure_log import run_measure_log
-from scopes_tool_core.operation_types import MeasureLogRequest, _OperationError
-from scopes_tool_core.operations import (
+from scopes_tool_core.operation_types import (
     AcquisitionCheckRequest,
     CaptureRequest,
+    MeasureLogRequest,
     MeasureRequest,
     MeasureSweepRequest,
     SmokeRequest,
+    _OperationError,
+)
+from scopes_tool_core.operations import (
     _prepare_output_dir,
     _trigger_wait_classifier_profile,
     doctor_snapshot,
