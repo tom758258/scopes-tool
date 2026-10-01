@@ -57,6 +57,46 @@ if ($runMutation) {
     })
 }
 
+if ($Scenario -eq 'measurement-settings-conflict') {
+    $invokeCli = $ast.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq 'Invoke-Cli'
+    }, $true)
+    if ($null -eq $invokeCli) { throw "Invoke-Cli was not found" }
+    $invocationAssignment = $invokeCli.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $node.Left.Extent.Text -eq '$invocation' -and
+            $node.Right.Extent.Text -like 'Invoke-CliRaw*'
+    }, $true)
+    if ($null -eq $invocationAssignment) { throw "Invoke-Cli invocation assignment was not found" }
+    $measurementMutation = @'
+    if ($Stage -eq 'measure-sweep') {
+        $invocation.ExitCode = 1
+        $invocation.Payload.ok = $false
+        $status = $invocation.Payload.result.post_command_status
+        $status.value = 16
+        $status.raw = '16'
+        $status.event_raw = '221,"Settings conflict; "'
+        $status.events = @([pscustomobject]@{
+            code = 221
+            message = 'Settings conflict; '
+            category = 'error'
+        })
+        $status.is_error = $true
+        $lastInvocation = $script:Invocations[$script:Invocations.Count - 1]
+        $lastInvocation.exit_code = 1
+        $lastInvocation.success = $false
+    }
+'@
+    $replacements.Add(@{
+        Start = $invocationAssignment.Extent.EndOffset
+        Length = 0
+        Text = "`n$measurementMutation"
+    })
+}
+
 if ($Scenario -eq 'dirty-timeout') {
     $timeoutAssignment = $ast.Find({
         param($node)

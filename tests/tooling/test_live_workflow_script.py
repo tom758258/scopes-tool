@@ -55,8 +55,32 @@ def test_live_workflow_script_preserves_fixture_and_trigger_boundary() -> None:
     assert "existing trigger setup reliably triggers" in text
     assert "does not reset, preset, autoscale, or reconfigure the trigger mode" in text
     assert "If acquisition is initially stopped, the validator starts it for workflow validation and restores the original Running/Stopped state during cleanup." in text
+    legacy_targets = text[
+        text.index("$script:LegacyTektronixImmediateMeasurementTargets"):
+        text.index("$script:WorkflowCommands")
+    ]
+    assert '"tektronix-tbs1052b"' in legacy_targets
+    assert '"tektronix-tds2024b"' in legacy_targets
+    assert "tektronix-tbs2074" not in legacy_targets
+    assert "Trigger View must be OFF." in text
+    assert "Display format must be YT, not XY." in text
+    assert "must not be in Scan mode." in text
+    assert "faster than 100 ms/div." in text
+    assert "Press Enter only after the required setup above is ready." in text
     assert '-Command "trigger-edge"' not in text
     assert '-Command "trigger-sweep"' not in text
+
+
+def test_live_workflow_script_surfaces_legacy_tek_measurement_settings_conflict() -> None:
+    text = _script_text()
+
+    assert 'PSObject.Properties["post_command_status"]' in text
+    assert 'PSObject.Properties["is_error"]' in text
+    assert "Tektronix native status" in text
+    assert '"event $($eventCodeProperty.Value)"' in text
+    assert "[int]$eventCodeProperty.Value -eq 221" in text
+    assert "verify Trigger View is OFF, display format is YT" in text
+    assert "is not in Scan mode, then rerun validation" in text
 
 
 def test_live_workflow_script_validates_artifacts_and_expected_timeout() -> None:
