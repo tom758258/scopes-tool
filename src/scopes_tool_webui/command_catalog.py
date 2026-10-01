@@ -475,7 +475,7 @@ def _model_command_presentation(
             override["minimum"] = min(capabilities.average_counts)
             override["maximum"] = max(capabilities.average_counts)
         if entry["id"] == "autoscale" and not capabilities.autoscale_supports_optional_controls:
-            override["hidden"] = True
+            override["disabled"] = True
         if entry["id"] in {"setup-save", "setup-recall"}:
             if name == "target" and not capabilities.supports_setup_file_target:
                 override["options"] = ("slot",)
@@ -484,7 +484,7 @@ def _model_command_presentation(
                 override["minimum"] = min(capabilities.setup_slots)
                 override["maximum"] = max(capabilities.setup_slots)
             elif name == "file" and not capabilities.supports_setup_file_target:
-                override["hidden"] = True
+                override["disabled"] = True
         subset = {
             ("channel-units", "channel"): capabilities.channel_units_channels,
             ("measure-install", "item"): capabilities.measurement_install_items,
