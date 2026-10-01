@@ -65,6 +65,45 @@ _SERIAL_SOURCE_HELP = (
 )
 
 
+def _add_worker_client_endpoint_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Worker host; defaults to 127.0.0.1",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        required=True,
+        help="Worker HTTP port",
+    )
+
+
+def _add_worker_client_response_args(
+    parser: argparse.ArgumentParser,
+    *,
+    timeout_ms: int,
+) -> None:
+    parser.add_argument(
+        "--timeout-ms",
+        type=_positive_int,
+        default=timeout_ms,
+        help="Worker request timeout in milliseconds; defaults to %(default)s",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="output format; defaults to text",
+    )
+    parser.add_argument(
+        "--json",
+        dest="client_json",
+        action="store_true",
+        help="write worker client output as JSON",
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="scopes-tool")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -85,41 +124,29 @@ def _build_parser() -> argparse.ArgumentParser:
         "send-command", help="enqueue a command in a running Scopes worker"
     )
     send_parser.set_defaults(lifecycle_command=True)
-    send_parser.add_argument("--host", default="127.0.0.1")
-    send_parser.add_argument("--port", type=int, required=True)
+    _add_worker_client_endpoint_args(send_parser)
     send_parser.add_argument("--command", dest="worker_command", required=True)
     send_parser.add_argument("--arguments-json", default="{}")
     send_parser.add_argument("--job-id", default=None)
-    send_parser.add_argument("--timeout-ms", type=_positive_int, default=5000)
-    send_parser.add_argument("--format", choices=("text", "json"), default="text")
-    send_parser.add_argument("--json", dest="client_json", action="store_true")
+    _add_worker_client_response_args(send_parser, timeout_ms=5000)
     send_parser.add_argument("--dry-run", action="store_true")
 
     status_parser = subparsers.add_parser("status", help="query worker runtime status")
     status_parser.set_defaults(lifecycle_command=True)
-    status_parser.add_argument("--host", default="127.0.0.1")
-    status_parser.add_argument("--port", type=int, required=True)
-    status_parser.add_argument("--timeout-ms", type=_positive_int, default=5000)
-    status_parser.add_argument("--format", choices=("text", "json"), default="text")
-    status_parser.add_argument("--json", dest="client_json", action="store_true")
+    _add_worker_client_endpoint_args(status_parser)
+    _add_worker_client_response_args(status_parser, timeout_ms=5000)
 
     stop_parser = subparsers.add_parser("stop", help="request cooperative worker stop")
     stop_parser.set_defaults(lifecycle_command=True)
-    stop_parser.add_argument("--host", default="127.0.0.1")
-    stop_parser.add_argument("--port", type=int, required=True)
-    stop_parser.add_argument("--timeout-ms", type=_positive_int, default=5000)
-    stop_parser.add_argument("--format", choices=("text", "json"), default="text")
-    stop_parser.add_argument("--json", dest="client_json", action="store_true")
+    _add_worker_client_endpoint_args(stop_parser)
+    _add_worker_client_response_args(stop_parser, timeout_ms=5000)
 
     wait_parser = subparsers.add_parser(
         "wait-ready", help="wait until worker status is reachable"
     )
     wait_parser.set_defaults(lifecycle_command=True)
-    wait_parser.add_argument("--host", default="127.0.0.1")
-    wait_parser.add_argument("--port", type=int, required=True)
-    wait_parser.add_argument("--timeout-ms", type=_positive_int, default=10000)
-    wait_parser.add_argument("--format", choices=("text", "json"), default="text")
-    wait_parser.add_argument("--json", dest="client_json", action="store_true")
+    _add_worker_client_endpoint_args(wait_parser)
+    _add_worker_client_response_args(wait_parser, timeout_ms=10000)
 
     manifest_parser = subparsers.add_parser(
         "manifest",

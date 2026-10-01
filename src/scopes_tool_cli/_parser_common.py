@@ -327,3 +327,32 @@ def _waveform_points_arg(value: str) -> int:
             f"waveform capture supports only these point counts: {supported}"
         )
     return parsed
+
+
+def _add_capture_channels_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--channel",
+        type=_capture_channel_arg,
+        action="append",
+        required=True,
+        help=(
+            "analog channel number; repeat for aligned multi-channel CSV output, "
+            "or use all for every analog channel on the detected model"
+        ),
+    )
+
+
+def _add_waveform_transfer_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--points",
+        type=_waveform_points_arg,
+        default=1000,
+        help="waveform point count; supported values: 1000, 5000, 10000",
+    )
+    parser.add_argument(
+        "--format",
+        dest="waveform_format",
+        choices=("byte", "word"),
+        default="byte",
+        help="waveform transfer format; defaults to byte",
+    )
