@@ -22,6 +22,17 @@ when present. This document lists only the Scopes-specific event fields,
 command result fields, client fields, and artifact fields currently emitted by
 `scopes-tool`.
 
+## Contents
+
+- [Worker JSONL Events](#worker-jsonl-events)
+- [Worker Client JSON](#worker-client-json)
+- [Single-Response JSON](#single-response-json)
+- [Offline Tool Introspection](#offline-tool-introspection)
+- [One-Shot Live Selection](#one-shot-live-selection)
+- [Command Result Fields](#command-result-fields)
+- [Artifact JSON](#artifact-json)
+- [Compatibility Rules](#compatibility-rules)
+
 ## Worker JSONL Events
 
 `scopes-tool worker --format jsonl` writes one JSON object per stdout line.
