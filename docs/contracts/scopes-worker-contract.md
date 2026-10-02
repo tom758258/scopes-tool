@@ -15,6 +15,40 @@ use schema 2. Scopes execution context remains
 startup-bound; top-level `/command` `context` is forbidden, and the Worker does
 not provide v1 fallback or version negotiation.
 
+## Contents
+
+- [Cross-Instrument Compatibility](#cross-instrument-compatibility)
+- [Runtime](#runtime)
+- [Startup-Bound Execution Context](#startup-bound-execution-context)
+- [Endpoints](#endpoints)
+- [Command Inventory](#command-inventory)
+  - [Advanced Channel Commands](#advanced-channel-commands)
+  - [Common Display Commands](#common-display-commands)
+  - [Measurement Control And Reference Waveform Commands](#measurement-control-and-reference-waveform-commands)
+  - [DVM Commands](#dvm-commands)
+  - [Demo Output Commands](#demo-output-commands)
+  - [Waveform Generator Commands](#waveform-generator-commands)
+  - [Math Display And Vertical Commands](#math-display-and-vertical-commands)
+  - [Math Dual-Source Operator Command](#math-dual-source-operator-command)
+  - [Math Single-Source Transform Command](#math-single-source-transform-command)
+  - [Math Composite And Cascade Sources](#math-composite-and-cascade-sources)
+  - [Math Filter And Clear Commands](#math-filter-and-clear-commands)
+  - [Math Visualization And Trend Command](#math-visualization-and-trend-command)
+  - [Math FFT Command](#math-fft-command)
+  - [Math Command Rules](#math-command-rules)
+  - [Serial Query And Display Commands](#serial-query-and-display-commands)
+  - [Serial Protocol Configuration Commands](#serial-protocol-configuration-commands)
+  - [Serial UART Trigger Command](#serial-uart-trigger-command)
+  - [Serial I2C, SPI, And CAN Trigger Commands](#serial-i2c-spi-and-can-trigger-commands)
+  - [Serial Lister Commands](#serial-lister-commands)
+  - [Waveform Search Commands](#waveform-search-commands)
+  - [Serial Search Commands](#serial-search-commands)
+  - [Instrument-Side Save Commands](#instrument-side-save-commands)
+  - [Label And Annotation Commands](#label-and-annotation-commands)
+- [Artifacts](#artifacts)
+- [Client Commands](#client-commands)
+- [Safety](#safety)
+
 ## Cross-Instrument Compatibility
 
 Scopes uses Common `POST /command` as the shared worker command envelope.

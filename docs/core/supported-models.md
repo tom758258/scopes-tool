@@ -8,6 +8,26 @@ Capability profiles describe the runtime-supported and guarded feature surface.
 They do not detect instrument options or licenses, and live instrument errors
 remain authoritative for unavailable hardware or options.
 
+## Contents
+
+- [Canonical Physical Model Identity](#canonical-physical-model-identity)
+- [VISA Backend Boundary](#visa-backend-boundary)
+- [Runtime Profiles](#runtime-profiles)
+- [Capability Summary](#capability-summary)
+- [Tektronix Model Support](#tektronix-model-support)
+  - [Acquisition, timebase, and channels](#acquisition-timebase-and-channels)
+  - [Display, cursors, Math, and measurements](#display-cursors-math-and-measurements)
+  - [Trigger operations](#trigger-operations)
+  - [Waveforms, screenshots, reference memory, and storage](#waveforms-screenshots-reference-memory-and-storage)
+  - [Aggregate projections](#aggregate-projections)
+  - [System, diagnostics, workflows, and host functions](#system-diagnostics-workflows-and-host-functions)
+  - [Other unsupported feature families](#other-unsupported-feature-families)
+  - [Tek post-command status boundary](#tek-post-command-status-boundary)
+  - [Native workflow status](#native-workflow-status)
+  - [Manual ambiguities and excluded interpretations](#manual-ambiguities-and-excluded-interpretations)
+- [Keysight InfiniiVision Model Support](#keysight-infiniivision-model-support)
+  - [Instrument-Side Math Matrix](#instrument-side-math-matrix)
+
 ## Canonical Physical Model Identity
 
 Scopes Tool exposes a vendor-neutral product API for the registered Keysight
