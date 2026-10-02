@@ -60,6 +60,7 @@ from ._worker_commands_trigger import (
     _normalize_trigger_tv_worker_arguments,
 )
 from ._worker_commands_workflows import (
+    _OPTIONAL_PERSISTENCE_COMMANDS,
     _normalize_capture_batch_worker_arguments,
     _normalize_capture_monitor_worker_arguments,
     _normalize_capture_until_worker_arguments,
@@ -310,12 +311,7 @@ def _validate_required_worker_outputs(
         return
     if command == "screenshot" and arguments.get("query_hardcopy") is True:
         return
-    if command in {
-        "measure-log",
-        "measure-until",
-        "triggered-measure-loop",
-        "capture-monitor",
-    }:
+    if command in _OPTIONAL_PERSISTENCE_COMMANDS:
         if arguments.get("save_results", True) is False:
             return
     for key in required:

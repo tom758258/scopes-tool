@@ -14,16 +14,21 @@ from scopes_tool_core.segmented_capture import (
 from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
 
 
-def _normalize_optional_persistence_worker_arguments(
-    command: str,
-    arguments: dict[str, Any],
-) -> dict[str, Any]:
-    if command not in {
+_OPTIONAL_PERSISTENCE_COMMANDS = frozenset(
+    {
         "measure-log",
         "measure-until",
         "triggered-measure-loop",
         "capture-monitor",
-    }:
+    }
+)
+
+
+def _normalize_optional_persistence_worker_arguments(
+    command: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    if command not in _OPTIONAL_PERSISTENCE_COMMANDS:
         return arguments
     values = dict(arguments)
     if "save_results" in values and not isinstance(values["save_results"], bool):

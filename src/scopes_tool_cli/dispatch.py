@@ -16,6 +16,151 @@ from .commands import (
 )
 
 
+_SYSTEM_STATUS_COMMANDS = frozenset(
+    {
+        "system-clear-status",
+        "system-opc",
+        "system-status-byte",
+        "system-standard-event",
+        "system-operation-status",
+        "system-options",
+    }
+)
+_CHANNEL_ADVANCED_SETTING_COMMANDS = frozenset(
+    {
+        "channel-impedance",
+        "channel-invert",
+        "channel-range",
+        "channel-units",
+        "channel-vernier",
+        "channel-probe-skew",
+    }
+)
+_DISPLAY_COMMON_COMMANDS = frozenset(
+    {
+        "display-clear",
+        "display-persistence",
+        "display-intensity",
+        "display-vectors",
+    }
+)
+_MEASUREMENT_CONTROL_COMMANDS = frozenset(
+    {
+        "measure-clear",
+        "measure-menu",
+        "measure-install",
+        "measure-show",
+        "measure-source",
+        "measure-window",
+    }
+)
+_DVM_COMMANDS = frozenset(
+    {
+        "dvm-enable",
+        "dvm-source",
+        "dvm-mode",
+        "dvm-auto-range",
+        "dvm-current",
+        "dvm-query",
+    }
+)
+_DEMO_COMMANDS = frozenset(
+    {"demo-query", "demo-output", "demo-function", "demo-phase"}
+)
+_WGEN_COMMANDS = frozenset(
+    {
+        "wgen-query",
+        "wgen-output",
+        "wgen-function",
+        "wgen-frequency",
+        "wgen-voltage",
+        "wgen-offset",
+        "wgen-load",
+    }
+)
+_SERIAL_COMMANDS = frozenset(
+    {
+        "serial-status",
+        "serial-mode",
+        "serial-enable",
+        "serial-disable",
+        "serial-uart-set",
+        "serial-uart-show",
+        "serial-trigger-uart-set",
+        "serial-trigger-uart-show",
+        "serial-trigger-i2c-set",
+        "serial-trigger-i2c-show",
+        "serial-trigger-spi-set",
+        "serial-trigger-spi-show",
+        "serial-trigger-can-set",
+        "serial-trigger-can-show",
+        "serial-i2c-set",
+        "serial-i2c-show",
+        "serial-spi-set",
+        "serial-spi-show",
+        "serial-can-set",
+        "serial-can-show",
+        "serial-lister-status",
+        "serial-lister-display",
+        "serial-lister-reference",
+        "serial-data",
+    }
+)
+_SEARCH_COMMANDS = frozenset(
+    {
+        "search-state",
+        "search-mode",
+        "search-count",
+        "search-event",
+        "serial-search-uart",
+        "serial-search-i2c",
+        "serial-search-spi",
+        "serial-search-can",
+    }
+)
+_SAVE_EXPORT_COMMANDS = frozenset(
+    {
+        "save-pwd",
+        "save-filename",
+        "save-image-format",
+        "save-image-palette",
+        "save-image-ink-saver",
+        "save-image-factors",
+        "save-image",
+        "save-waveform-format",
+        "save-waveform-length",
+        "save-waveform-length-max",
+        "save-waveform",
+    }
+)
+_REFERENCE_WAVEFORM_COMMANDS = frozenset(
+    {
+        "reference-save",
+        "reference-display",
+        "reference-label",
+        "reference-clear",
+        "reference-query",
+    }
+)
+_EXTERNAL_TRIGGER_INPUT_COMMANDS = frozenset(
+    {
+        "external-trigger-probe",
+        "external-trigger-units",
+        "external-trigger-settings",
+    }
+)
+_TRIGGER_COMMON_COMMANDS = frozenset(
+    {
+        "trigger-mode",
+        "trigger-sweep",
+        "trigger-noise-reject",
+        "trigger-hf-reject",
+        "trigger-edge-coupling",
+        "trigger-edge-reject",
+    }
+)
+
+
 def _dispatch_command(
     args: argparse.Namespace,
     *,
@@ -25,14 +170,7 @@ def _dispatch_command(
         return system._cmd_verify(args)
     if args.command == "check-error":
         return system._cmd_check_error(args)
-    if args.command in {
-        "system-clear-status",
-        "system-opc",
-        "system-status-byte",
-        "system-standard-event",
-        "system-operation-status",
-        "system-options",
-    }:
+    if args.command in _SYSTEM_STATUS_COMMANDS:
         return system._cmd_system_status(args)
     if args.command == "cleanup":
         return system._cmd_cleanup(args)
@@ -58,116 +196,27 @@ def _dispatch_command(
         return channel_display._cmd_channel_probe(args)
     if args.command == "channel-bandwidth-limit":
         return channel_display._cmd_channel_bandwidth_limit(args)
-    if args.command == "channel-impedance":
-        return channel_display._cmd_channel_advanced_setting(args)
-    if args.command == "channel-invert":
-        return channel_display._cmd_channel_advanced_setting(args)
-    if args.command == "channel-range":
-        return channel_display._cmd_channel_advanced_setting(args)
-    if args.command == "channel-units":
-        return channel_display._cmd_channel_advanced_setting(args)
-    if args.command == "channel-vernier":
-        return channel_display._cmd_channel_advanced_setting(args)
-    if args.command == "channel-probe-skew":
+    if args.command in _CHANNEL_ADVANCED_SETTING_COMMANDS:
         return channel_display._cmd_channel_advanced_setting(args)
     if args.command == "display-label":
         return channel_display._cmd_display_label(args)
-    if args.command in {
-        "display-clear",
-        "display-persistence",
-        "display-intensity",
-        "display-vectors",
-    }:
+    if args.command in _DISPLAY_COMMON_COMMANDS:
         return channel_display._cmd_display_common(args)
-    if args.command in {
-        "measure-clear",
-        "measure-menu",
-        "measure-install",
-        "measure-show",
-        "measure-source",
-        "measure-window",
-    }:
+    if args.command in _MEASUREMENT_CONTROL_COMMANDS:
         return measurement_analysis._cmd_measurement_control(args)
-    if args.command in {
-        "dvm-enable",
-        "dvm-source",
-        "dvm-mode",
-        "dvm-auto-range",
-        "dvm-current",
-        "dvm-query",
-    }:
+    if args.command in _DVM_COMMANDS:
         return measurement_analysis._cmd_dvm(args)
-    if args.command in {"demo-query", "demo-output", "demo-function", "demo-phase"}:
+    if args.command in _DEMO_COMMANDS:
         return measurement_analysis._cmd_demo(args)
-    if args.command in {
-        "wgen-query",
-        "wgen-output",
-        "wgen-function",
-        "wgen-frequency",
-        "wgen-voltage",
-        "wgen-offset",
-        "wgen-load",
-    }:
+    if args.command in _WGEN_COMMANDS:
         return measurement_analysis._cmd_wgen(args)
-    if args.command in {
-        "serial-status",
-        "serial-mode",
-        "serial-enable",
-        "serial-disable",
-        "serial-uart-set",
-        "serial-uart-show",
-        "serial-trigger-uart-set",
-        "serial-trigger-uart-show",
-        "serial-trigger-i2c-set",
-        "serial-trigger-i2c-show",
-        "serial-trigger-spi-set",
-        "serial-trigger-spi-show",
-        "serial-trigger-can-set",
-        "serial-trigger-can-show",
-        "serial-i2c-set",
-        "serial-i2c-show",
-        "serial-spi-set",
-        "serial-spi-show",
-        "serial-can-set",
-        "serial-can-show",
-        "serial-lister-status",
-        "serial-lister-display",
-        "serial-lister-reference",
-        "serial-data",
-    }:
+    if args.command in _SERIAL_COMMANDS:
         return serial._cmd_serial(args)
-    if args.command in {
-        "search-state",
-        "search-mode",
-        "search-count",
-        "search-event",
-        "serial-search-uart",
-        "serial-search-i2c",
-        "serial-search-spi",
-        "serial-search-can",
-    }:
+    if args.command in _SEARCH_COMMANDS:
         return trigger_search._cmd_search(args)
-    if args.command in {
-        "save-pwd",
-        "save-filename",
-        "save-image-format",
-        "save-image-palette",
-        "save-image-ink-saver",
-        "save-image-factors",
-        "save-image",
-        "save-waveform-format",
-        "save-waveform-length",
-        "save-waveform-length-max",
-        "save-waveform",
-    }:
+    if args.command in _SAVE_EXPORT_COMMANDS:
         return workflows._cmd_save_export(args)
-    if args.command in {
-        "reference-save",
-        "reference-display",
-        "reference-label",
-        "reference-clear",
-        "reference-query",
-    }:
+    if args.command in _REFERENCE_WAVEFORM_COMMANDS:
         return measurement_analysis._cmd_reference_waveform(args)
     if args.command == "annotation":
         return channel_display._cmd_annotation(args)
@@ -189,20 +238,9 @@ def _dispatch_command(
         return trigger_search._cmd_external_trigger_range(args)
     if args.command == "trigger-edge-external-level":
         return trigger_search._cmd_trigger_edge_external_level(args)
-    if args.command in {
-        "external-trigger-probe",
-        "external-trigger-units",
-        "external-trigger-settings",
-    }:
+    if args.command in _EXTERNAL_TRIGGER_INPUT_COMMANDS:
         return trigger_search._cmd_external_trigger_input(args)
-    if args.command in {
-        "trigger-mode",
-        "trigger-sweep",
-        "trigger-noise-reject",
-        "trigger-hf-reject",
-        "trigger-edge-coupling",
-        "trigger-edge-reject",
-    }:
+    if args.command in _TRIGGER_COMMON_COMMANDS:
         return trigger_search._cmd_trigger_common(args)
     if args.command == "trigger-pulse-width":
         return trigger_search._cmd_trigger_glitch(args)
