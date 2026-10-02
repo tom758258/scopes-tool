@@ -5,7 +5,9 @@ from __future__ import annotations
 from scopes_tool_core.measurements import MEASUREMENT_ITEM_CHOICES
 
 from ._parser_common import (
+    _add_capture_channels_arg,
     _add_scope_connection_args,
+    _add_waveform_transfer_args,
     _capture_channel_arg,
     _capture_until_count,
     _measurement_finite_float,
@@ -13,7 +15,6 @@ from ._parser_common import (
     _positive_int,
     _positive_plain_float,
     _strict_bool_arg,
-    _waveform_points_arg,
 )
 
 
@@ -140,29 +141,8 @@ def _register_workflow_parsers(subparsers) -> None:
         help="capture one or more analog channel waveforms to CSV and metadata JSON",
     )
     _add_scope_connection_args(capture_parser)
-    capture_parser.add_argument(
-        "--channel",
-        type=_capture_channel_arg,
-        action="append",
-        required=True,
-        help=(
-            "analog channel number; repeat for aligned multi-channel CSV output, "
-            "or use all for every analog channel on the detected model"
-        ),
-    )
-    capture_parser.add_argument(
-        "--points",
-        type=_waveform_points_arg,
-        default=1000,
-        help="waveform point count; supported values: 1000, 5000, 10000",
-    )
-    capture_parser.add_argument(
-        "--format",
-        dest="waveform_format",
-        choices=("byte", "word"),
-        default="byte",
-        help="waveform transfer format; defaults to byte",
-    )
+    _add_capture_channels_arg(capture_parser)
+    _add_waveform_transfer_args(capture_parser)
     capture_parser.add_argument(
         "--csv",
         dest="csv_path",
@@ -217,29 +197,8 @@ def _register_workflow_parsers(subparsers) -> None:
         help="capture a finite batch of analog waveforms into one output directory",
     )
     _add_scope_connection_args(capture_batch_parser)
-    capture_batch_parser.add_argument(
-        "--channel",
-        type=_capture_channel_arg,
-        action="append",
-        required=True,
-        help=(
-            "analog channel number; repeat for aligned multi-channel CSV output, "
-            "or use all for every analog channel on the detected model"
-        ),
-    )
-    capture_batch_parser.add_argument(
-        "--points",
-        type=_waveform_points_arg,
-        default=1000,
-        help="waveform point count; supported values: 1000, 5000, 10000",
-    )
-    capture_batch_parser.add_argument(
-        "--format",
-        dest="waveform_format",
-        choices=("byte", "word"),
-        default="byte",
-        help="waveform transfer format; defaults to byte",
-    )
+    _add_capture_channels_arg(capture_batch_parser)
+    _add_waveform_transfer_args(capture_batch_parser)
     capture_batch_parser.add_argument(
         "--count",
         type=_positive_int,
@@ -267,21 +226,11 @@ def _register_workflow_parsers(subparsers) -> None:
         help="capture matching waveform acquisitions until a finite count or timeout",
     )
     _add_scope_connection_args(capture_until_parser)
-    capture_until_parser.add_argument(
-        "--channel", type=_capture_channel_arg, action="append", required=True
-    )
+    _add_capture_channels_arg(capture_until_parser)
     capture_until_parser.add_argument(
         "--condition-channel", type=_positive_int, required=True
     )
-    capture_until_parser.add_argument(
-        "--points", type=_waveform_points_arg, default=1000
-    )
-    capture_until_parser.add_argument(
-        "--format",
-        dest="waveform_format",
-        choices=("byte", "word"),
-        default="byte",
-    )
+    _add_waveform_transfer_args(capture_until_parser)
     capture_until_parser.add_argument(
         "--metric",
         choices=("max", "min", "peak-to-peak", "abs-max"),
@@ -313,18 +262,8 @@ def _register_workflow_parsers(subparsers) -> None:
         help="monitor a finite waveform series with bounded retained history",
     )
     _add_scope_connection_args(capture_monitor_parser)
-    capture_monitor_parser.add_argument(
-        "--channel", type=_capture_channel_arg, action="append", required=True
-    )
-    capture_monitor_parser.add_argument(
-        "--points", type=_waveform_points_arg, default=1000
-    )
-    capture_monitor_parser.add_argument(
-        "--format",
-        dest="waveform_format",
-        choices=("byte", "word"),
-        default="byte",
-    )
+    _add_capture_channels_arg(capture_monitor_parser)
+    _add_waveform_transfer_args(capture_monitor_parser)
     capture_monitor_parser.add_argument("--count", type=_positive_int, required=True)
     capture_monitor_parser.add_argument(
         "--interval-seconds", type=_nonnegative_finite_float, default=0.0
@@ -527,29 +466,8 @@ def _register_workflow_parsers(subparsers) -> None:
         help="run a finite Single, trigger-wait, and waveform capture series",
     )
     _add_scope_connection_args(triggered_capture_series_parser)
-    triggered_capture_series_parser.add_argument(
-        "--channel",
-        type=_capture_channel_arg,
-        action="append",
-        required=True,
-        help=(
-            "analog channel number; repeat for aligned multi-channel CSV output, "
-            "or use all for every analog channel on the detected model"
-        ),
-    )
-    triggered_capture_series_parser.add_argument(
-        "--points",
-        type=_waveform_points_arg,
-        default=1000,
-        help="waveform point count; supported values: 1000, 5000, 10000",
-    )
-    triggered_capture_series_parser.add_argument(
-        "--format",
-        dest="waveform_format",
-        choices=("byte", "word"),
-        default="byte",
-        help="waveform transfer format; defaults to byte",
-    )
+    _add_capture_channels_arg(triggered_capture_series_parser)
+    _add_waveform_transfer_args(triggered_capture_series_parser)
     triggered_capture_series_parser.add_argument(
         "--count",
         type=_positive_int,

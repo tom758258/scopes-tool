@@ -22,12 +22,12 @@ from scopes_tool_core.math import (
 from ._parser_common import (
     _add_function_arg,
     _add_scope_connection_args,
+    _add_waveform_transfer_args,
     _measurement_finite_float,
     _nonnegative_finite_float,
     _positive_int,
     _positive_plain_float,
     _setup_slot_arg,
-    _waveform_points_arg,
 )
 
 
@@ -126,19 +126,7 @@ def _register_acquisition_math_parsers(subparsers) -> None:
         required=True,
         help="requested segmented acquisition count",
     )
-    segmented_capture_parser.add_argument(
-        "--points",
-        type=_waveform_points_arg,
-        default=1000,
-        help="waveform point count; supported values: 1000, 5000, 10000",
-    )
-    segmented_capture_parser.add_argument(
-        "--format",
-        dest="waveform_format",
-        choices=("byte", "word"),
-        default="byte",
-        help="waveform transfer format; defaults to byte",
-    )
+    _add_waveform_transfer_args(segmented_capture_parser)
     segmented_capture_parser.add_argument(
         "--timeout-ms",
         type=_positive_int,
