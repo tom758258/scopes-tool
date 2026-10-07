@@ -338,6 +338,8 @@ def test_acquisition_restore_checks_native_status(monkeypatch, tmp_path):
 @pytest.mark.parametrize("trigger_state", ["non-edge", "line"])
 def test_doctor_unavailable_trigger_details_are_read_only(model, trigger_state, monkeypatch):
     with scope_for(model) as scope:
+        if model == "tektronix-tbs2074":
+            scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
         original = scope.backend.query
 
         def query(command):

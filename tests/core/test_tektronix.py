@@ -769,8 +769,8 @@ def test_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
             assert channels[2].units == "volt" and channels[3].units == "volt"
             assert "CH3:YUNIT?" in history and "CH4:YUNIT?" in history
             assert snapshot["timebase"]["position"] == 0.0
-            assert "HORIZONTAL:DELAY:MODE?" in history
-            assert "HORIZONTAL:DELAY:TIME?" in history
+            assert "HORIZONTAL:MAIN:DELAY:MODE?" in history
+            assert "HORIZONTAL:MAIN:DELAY:TIME?" in history
             assert "HORIZONTAL:POSITION?" not in history
             assert "HORIZONTAL:RECORDLENGTH?" in history and "HORIZONTAL:SAMPLERATE?" in history
             assert "HORIZONTAL:MAIN:POSITION?" not in history

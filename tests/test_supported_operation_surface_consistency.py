@@ -153,7 +153,7 @@ def _arguments(operation, caps, path):
 @pytest.mark.parametrize("model_id,operation", list(_admitted_cases()))
 def test_supported_operation_plans_executes_and_accepts_adapter_requests(model_id, operation, tmp_path, capsys, monkeypatch):
     if model_id == "tektronix-tbs2074" and operation in {
-        "timebase-position", "doctor", "live-data-snapshot", "smoke"
+        "timebase-position", "cursor-set", "doctor", "live-data-snapshot", "smoke"
     }:
         from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
         initialize = TektronixSimulatorBackend.__post_init__

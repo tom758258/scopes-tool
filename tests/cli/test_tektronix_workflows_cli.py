@@ -8,6 +8,20 @@ from tests.cli.test_worker_cli import _runtime, _execute_worker_job
 MODELS = ("tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b")
 
 
+def _set_tbs2074_delay_mode_on(monkeypatch):
+    from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
+
+    initialize = TektronixSimulatorBackend.__post_init__
+
+    def initialize_with_delay_mode_on(backend):
+        initialize(backend)
+        backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
+
+    monkeypatch.setattr(
+        TektronixSimulatorBackend, "__post_init__", initialize_with_delay_mode_on
+    )
+
+
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("command,arguments", [
     ("doctor", []),
@@ -22,7 +36,9 @@ MODELS = ("tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b")
     ("triggered-capture-series", ["--channel", "1", "--count", "1", "--trigger-timeout-seconds", "1"]),
     ("triggered-measure-loop", ["--channel", "1", "--count", "1", "--trigger-timeout-seconds", "1"]),
 ])
-def test_cli_workflows_simulate_and_plan(model, command, arguments, tmp_path, capsys):
+def test_cli_workflows_simulate_and_plan(model, command, arguments, tmp_path, capsys, monkeypatch):
+    if model == "tektronix-tbs2074" and command == "doctor":
+        _set_tbs2074_delay_mode_on(monkeypatch)
     for mode in ("--dry-run", "--simulate"):
         output = [] if command in {"doctor", "cleanup", "measure-sweep"} else ["--output-dir", str(tmp_path / mode)]
         code = cli.main([command, *arguments, *output, mode, "--model", model, "--json"])
@@ -43,7 +59,9 @@ def test_cli_workflows_simulate_and_plan(model, command, arguments, tmp_path, ca
     ("measure-log", {"channel": [1], "count": 1, "save_results": False}),
     ("triggered-measure-loop", {"channel": [1], "count": 1, "trigger_timeout_seconds": 1, "save_results": False}),
 ])
-def test_worker_native_workflows(model, command, arguments):
+def test_worker_native_workflows(model, command, arguments, monkeypatch):
+    if model == "tektronix-tbs2074" and command == "doctor":
+        _set_tbs2074_delay_mode_on(monkeypatch)
     job, result = _execute_worker_job(_runtime(model=model), command, arguments)
     assert job.state == "succeeded", result
     assert job.result["system_error"] is None
@@ -51,7 +69,8 @@ def test_worker_native_workflows(model, command, arguments):
     assert "ALLEv?" in job.result["scpi"]["sent"]
 
 
-def test_cli_tbs2074_cursor_set_uses_core_tektronix_commands(capsys):
+def test_cli_tbs2074_cursor_set_uses_core_tektronix_commands(capsys, monkeypatch):
+    _set_tbs2074_delay_mode_on(monkeypatch)
     assert cli.main(
         [
             "cursor",
@@ -73,7 +92,8 @@ def test_cli_tbs2074_cursor_set_uses_core_tektronix_commands(capsys):
     assert not any(":MARKer:" in command for command in commands)
 
 
-def test_worker_tbs2074_cursor_set_uses_core_tektronix_commands():
+def test_worker_tbs2074_cursor_set_uses_core_tektronix_commands(monkeypatch):
+    _set_tbs2074_delay_mode_on(monkeypatch)
     job, result = _execute_worker_job(
         _runtime(model="tektronix-tbs2074"),
         "cursor",

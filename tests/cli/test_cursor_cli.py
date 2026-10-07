@@ -133,7 +133,19 @@ def test_cursor_auto_timebase_rejects_missing_x(capsys):
     assert message == "--auto-timebase requires --x1 or --x2."
 
 
-def test_tek_b2_cursor_simulation_uses_native_scpi(capsys):
+def test_tek_b2_cursor_simulation_uses_native_scpi(capsys, monkeypatch):
+    from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
+
+    initialize = TektronixSimulatorBackend.__post_init__
+
+    def initialize_with_delay_mode_on(backend):
+        initialize(backend)
+        backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
+
+    monkeypatch.setattr(
+        TektronixSimulatorBackend, "__post_init__", initialize_with_delay_mode_on
+    )
+
     assert cli.main(
         [
             "cursor",

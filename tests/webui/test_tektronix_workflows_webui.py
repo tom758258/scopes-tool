@@ -10,6 +10,20 @@ from scopes_tool_webui.command_validation import _validate_parameters
 MODELS = ("tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b")
 
 
+def _set_tbs2074_delay_mode_on(monkeypatch):
+    from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
+
+    initialize = TektronixSimulatorBackend.__post_init__
+
+    def initialize_with_delay_mode_on(backend):
+        initialize(backend)
+        backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
+
+    monkeypatch.setattr(
+        TektronixSimulatorBackend, "__post_init__", initialize_with_delay_mode_on
+    )
+
+
 @pytest.mark.parametrize("model", (MODELS[0],))
 @pytest.mark.parametrize("command,parameters", [
     ("doctor", {}),
@@ -27,7 +41,9 @@ MODELS = ("tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b")
         {"action": "measure", "parameters": {"item": "vpp", "channel": 1}},
     ]}}),
 ])
-def test_model_workflow_end_to_end(model, command, parameters, tmp_path):
+def test_model_workflow_end_to_end(model, command, parameters, tmp_path, monkeypatch):
+    if model == "tektronix-tbs2074" and command == "doctor":
+        _set_tbs2074_delay_mode_on(monkeypatch)
     definition = next(c for c in command_catalog(include_hidden=True) if c["id"] == command)
     for mode in (m for m in definition["modes"] if m != "live"):
         normalized = dict(parameters)
@@ -56,7 +72,8 @@ def test_catalog_projects_core_subsets(model):
     assert catalog["smoke"]["presentation"]["models"][model]["supported"] is (model == MODELS[0])
 
 
-def test_tbs2074_smoke_keeps_png(tmp_path):
+def test_tbs2074_smoke_keeps_png(tmp_path, monkeypatch):
+    _set_tbs2074_delay_mode_on(monkeypatch)
     result = execute_command("smoke", mode="simulate", resource=None, model_id=MODELS[0],
                              parameters={"save_artifacts": True}, artifact_dir=tmp_path)
     assert result["exit_code"] == 0, result
