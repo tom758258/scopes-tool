@@ -39,7 +39,9 @@ def test_tek_profiles_declare_cursor_source_and_fixed_realtime_memory():
 
 @pytest.mark.parametrize("model_id", TEK_MODELS)
 def test_tek_instrument_summary_reports_realtime_memory_and_sampling_type(model_id):
-    scope, _ = simulated_scope(model_id)
+    scope, backend = simulated_scope(model_id)
+    if model_id == TBS2074:
+        backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
 
     summary = query_instrument_summary(scope)
 

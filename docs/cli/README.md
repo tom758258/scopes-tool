@@ -952,10 +952,16 @@ Set or query the horizontal timebase reference:
 ```
 
 Timebase scale must be a positive finite number in seconds per division.
-Timebase position must be a finite number in seconds. Timebase reference accepts
-`left`, `center`, or `right`. These commands first query `*IDN?` to verify the
-connected scope model is recognized, then perform one `:SYSTem:ERRor?`
-post-check.
+Timebase position must be a finite number in seconds. On TBS2074,
+`timebase-position` first reads Horizontal Delay Mode and requires it to be
+`ON`; the command then uses native Delay Time seconds. If the mode is `OFF`,
+the command fails without changing the mode and does not translate the native
+percent position to seconds. Scopes Tool does not expose or auto-enable this
+mode. The TBS2074 simulator intentionally starts with Delay Mode `OFF`.
+
+Timebase reference accepts `left`, `center`, or `right`. These commands
+first query `*IDN?` to verify the connected scope model is recognized, then
+perform one `:SYSTem:ERRor?` post-check.
 
 Configure or query analog edge trigger source, level, and slope with the
 canonical `trigger-edge` command:

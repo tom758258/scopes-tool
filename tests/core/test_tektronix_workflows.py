@@ -20,6 +20,8 @@ def scope_for(model):
 @pytest.mark.parametrize("model", MODELS)
 def test_doctor_uses_native_status_without_writes(model):
     with scope_for(model) as scope:
+        if model == "tektronix-tbs2074":
+            scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
         result = run_doctor(scope, "SIM::INSTR")
         assert result.exit_code == 0
         assert result.system_error is None

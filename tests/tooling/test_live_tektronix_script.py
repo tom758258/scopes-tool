@@ -27,6 +27,14 @@ TARGETS = (
 requires_windows = pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 
 
+def test_tbs2074_confirmation_requires_delay_mode_on() -> None:
+    assert (
+        "Set Horizontal Delay Mode to ON before continuing. "
+        "timebase-position requires native Delay Time seconds and does not "
+        "change this mode automatically."
+    ) in TEXT
+
+
 def run_script(*arguments: str, env: dict[str, str] | None = None, script: Path = SCRIPT) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [

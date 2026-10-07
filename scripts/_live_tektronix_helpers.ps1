@@ -366,6 +366,10 @@ print(json.dumps({
             "Disconnect unknown or sensitive DUT signals, and any signal the test must not disturb.",
             "Default checks use the instrument's current state; a fixed CH1/CH2 Probe Comp fixture is not required."
         )
+        if ($script:Target -eq "tektronix-tbs2074") {
+            $physicalPreparation.Add(
+                "Set Horizontal Delay Mode to ON before continuing. timebase-position requires native Delay Time seconds and does not change this mode automatically.")
+        }
         if ($IncludeConfigurationActions) {
             $physicalPreparation.Add(
                 "Connect a suitable, stable signal to CH1 (for example, the oscilloscope's Probe Comp / Demo output).")
