@@ -16,6 +16,8 @@ TEK_MODELS = (TBS2074, *LEGACY_TEK_MODELS)
 
 def simulated_scope(model_id=TBS2074):
     backend = TektronixSimulatorBackend(physical_model_id=model_id)
+    if model_id == TBS2074:
+        backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
     scope = TektronixOscilloscope(backend)
     scope.query_idn()
     backend.history.clear()

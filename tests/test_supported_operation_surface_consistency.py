@@ -152,6 +152,21 @@ def _arguments(operation, caps, path):
 
 @pytest.mark.parametrize("model_id,operation", list(_admitted_cases()))
 def test_supported_operation_plans_executes_and_accepts_adapter_requests(model_id, operation, tmp_path, capsys, monkeypatch):
+    if model_id == "tektronix-tbs2074" and operation in {
+        "timebase-position", "cursor-set", "doctor", "live-data-snapshot", "smoke"
+    }:
+        from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
+        initialize = TektronixSimulatorBackend.__post_init__
+
+        def initialize_with_delay_mode_on(backend):
+            initialize(backend)
+            backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
+
+        # These operations read timebase position, whose TBS2074 support
+        # explicitly requires Delay Mode ON. The simulator itself still defaults OFF.
+        monkeypatch.setattr(
+            TektronixSimulatorBackend, "__post_init__", initialize_with_delay_mode_on
+        )
     if operation == "setup-recall":
         from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
         initialize = TektronixSimulatorBackend.__post_init__

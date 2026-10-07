@@ -40,18 +40,19 @@ def test_tek_simulator_representative_roundtrips():
     with simulated_scope("tektronix-tbs2074") as scope:
         scope.set_channel_label(1, "Input")
         assert scope.query_channel_label(1) == "Input"
-        scope.backend.record_length_points = 1000
-        scope.backend.sample_rate_hz = 1000
-        scope.set_timebase_position(0.103)
-        assert scope.query_timebase_position() == pytest.approx(0.1)
-        assert scope.backend.tek_settings["HORIZONTAL:POSITION"] == "40"
         assert scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] == "OFF"
+        with pytest.raises(OscilloscopeError, match="requires Horizontal Delay Mode ON"):
+            scope.query_timebase_position()
+        with pytest.raises(OscilloscopeError, match="requires Horizontal Delay Mode ON"):
+            scope.set_timebase_position(0.103)
+        assert scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] == "OFF"
+        assert scope.backend.tek_settings["HORIZONTAL:POSITION"] == "50"
         scope.backend.write("HORizontal:MAIn:DELay:MODe ON")
         scope.set_timebase_position(0.003)
         assert scope.query_timebase_position() == pytest.approx(0.003)
         assert scope.backend.tek_settings["HORIZONTAL:DELAY:TIME"] == "0.003"
         assert scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] == "ON"
-        assert scope.backend.tek_settings["HORIZONTAL:POSITION"] == "40"
+        assert scope.backend.tek_settings["HORIZONTAL:POSITION"] == "50"
         scope.configure_trigger_edge_level(source_channel=1, level_volts=0.25)
         assert scope.query_trigger_edge_level(source_channel=1).level_volts == pytest.approx(0.25)
     with simulated_scope("tektronix-tds2024b") as scope:
@@ -246,27 +247,36 @@ def test_tbs2000_channel_and_trigger_mappings():
     assert len(backend.history) == start
 
 
-@pytest.mark.parametrize("mode,percent,seconds,requested,written", [
-    ("ON", "50", 0.003, 0.003, "HORizontal:MAIn:DELay:TIMe 0.003"),
-    ("OFF", "50", 0.0, 0.0, "HORizontal:POSition 50"),
-    ("OFF", "40", 0.1, 0.1, "HORizontal:POSition 40"),
-    ("OFF", "40", 0.1, 0.103, "HORizontal:POSition 40"),
-])
-def test_tbs2000_timebase_position_preserves_mode(mode, percent, seconds, requested, written):
+def test_tbs2000_timebase_position_uses_delay_time_when_mode_on():
     scope, backend = make_scope(responses={
-        "HORizontal:MAIn:DELay:MODe?": mode,
+        "HORizontal:MAIn:DELay:MODe?": "ON",
         "HORizontal:MAIn:DELay:TIMe?": "0.003",
-        "HORizontal:POSition?": percent,
-        "HORizontal:RECOrdlength?": "1000",
-        "HORizontal:SAMPLERate?": "1000",
     })
-    assert scope.query_timebase_position() == pytest.approx(seconds)
-    scope.set_timebase_position(requested)
-    assert scope.query_timebase_position() == pytest.approx(seconds)
-    assert [command for command in backend.history if not command.endswith("?")] == [written]
-    if mode == "ON":
-        assert "HORizontal:RECOrdlength?" not in backend.history
-        assert "HORizontal:POSition?" not in backend.history
+    assert scope.query_timebase_position() == pytest.approx(0.003)
+    scope.set_timebase_position(0.003)
+    assert scope.query_timebase_position() == pytest.approx(0.003)
+    assert [command for command in backend.history if not command.endswith("?")] == [
+        "HORizontal:MAIn:DELay:TIMe 0.003"
+    ]
+    assert "HORizontal:RECOrdlength?" not in backend.history
+    assert "HORizontal:SAMPLERate?" not in backend.history
+    assert "HORizontal:POSition?" not in backend.history
+
+
+def test_tbs2000_timebase_position_rejects_mode_off_without_writes():
+    scope, backend = make_scope(responses={
+        "HORizontal:MAIn:DELay:MODe?": "OFF",
+    })
+    with pytest.raises(OscilloscopeError, match="requires Horizontal Delay Mode ON"):
+        scope.query_timebase_position()
+    with pytest.raises(OscilloscopeError, match="requires Horizontal Delay Mode ON"):
+        scope.set_timebase_position(0.1)
+    assert [command for command in backend.history if not command.endswith("?")] == []
+    assert backend.history.count("HORizontal:MAIn:DELay:MODe?") == 2
+    assert "HORizontal:MAIn:DELay:TIMe?" not in backend.history
+    assert "HORizontal:POSition?" not in backend.history
+    assert "HORizontal:RECOrdlength?" not in backend.history
+    assert "HORizontal:SAMPLERate?" not in backend.history
 
 
 @pytest.mark.parametrize("model_id,_,__", MODELS)
@@ -744,6 +754,8 @@ def test_simulator_roundtrips_and_slot_safety(model_id, _, __):
 @pytest.mark.parametrize("model_id,_,__", MODELS)
 def test_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
     with simulated_scope(model_id) as scope:
+        if model_id == "tektronix-tbs2074":
+            scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
         scope.backend.history.clear()
         channels = scope.query_channel_summary()
         readouts = query_acquisition_readouts(scope)
@@ -757,9 +769,11 @@ def test_partial_aggregates_zero_unsupported_scpi(model_id, _, __):
             assert channels[2].units == "volt" and channels[3].units == "volt"
             assert "CH3:YUNIT?" in history and "CH4:YUNIT?" in history
             assert snapshot["timebase"]["position"] == 0.0
-            assert "HORIZONTAL:POSITION?" in history
+            assert "HORIZONTAL:MAIN:DELAY:MODE?" in history
+            assert "HORIZONTAL:MAIN:DELAY:TIME?" in history
+            assert "HORIZONTAL:POSITION?" not in history
             assert "HORIZONTAL:RECORDLENGTH?" in history and "HORIZONTAL:SAMPLERATE?" in history
-            assert not any(command in history for command in ("HORIZONTAL:MAIN:POSITION?", "HORIZONTAL:DELAY:TIME?"))
+            assert "HORIZONTAL:MAIN:POSITION?" not in history
             scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
             scope.backend.tek_settings["HORIZONTAL:DELAY:TIME"] = "0.25"
             assert query_instrument_summary(scope)["timebase"]["position"] == 0.25

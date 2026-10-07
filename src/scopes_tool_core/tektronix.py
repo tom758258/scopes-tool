@@ -671,31 +671,28 @@ class TektronixOscilloscope(Oscilloscope):
     def query_timebase_scale(self) -> float:
         return self._float("HORizontal:MAIn:SCAle?")
 
-    def _timebase_record_duration(self) -> float:
-        length = self._float("HORizontal:RECOrdlength?")
-        rate = self._float("HORizontal:SAMPLERate?")
-        if length <= 0 or rate <= 0:
-            raise OscilloscopeError("Invalid Tek horizontal record geometry")
-        return length / rate
-
     def set_timebase_position(self, seconds: float) -> None:
         if isinstance(seconds, bool) or not isinstance(seconds, (float, int)) or not math.isfinite(seconds):
             raise ParameterValidationError("value must be a finite number")
         if not self._is_tbs2000:
             self._write_number("HORizontal:MAIn:POSition", seconds)
-        elif _boolean(self.scpi.query("HORizontal:MAIn:DELay:MODe?"), "HORizontal:MAIn:DELay:MODe?"):
-            self._write_number("HORizontal:MAIn:DELay:TIMe", seconds)
-        else:
-            percent = 50.0 - seconds / self._timebase_record_duration() * 100.0
-            self._write_number("HORizontal:POSition", round(percent))
+            return
+        mode_command = "HORizontal:MAIn:DELay:MODe?"
+        if not _boolean(self.scpi.query(mode_command), mode_command):
+            raise OscilloscopeError(
+                "TBS2074 timebase-position requires Horizontal Delay Mode ON"
+            )
+        self._write_number("HORizontal:MAIn:DELay:TIMe", seconds)
 
     def query_timebase_position(self) -> float:
         if not self._is_tbs2000:
             return self._float("HORizontal:MAIn:POSition?")
-        if _boolean(self.scpi.query("HORizontal:MAIn:DELay:MODe?"), "HORizontal:MAIn:DELay:MODe?"):
-            return self._float("HORizontal:MAIn:DELay:TIMe?")
-        percent = self._float("HORizontal:POSition?")
-        return (50.0 - percent) / 100.0 * self._timebase_record_duration()
+        mode_command = "HORizontal:MAIn:DELay:MODe?"
+        if not _boolean(self.scpi.query(mode_command), mode_command):
+            raise OscilloscopeError(
+                "TBS2074 timebase-position requires Horizontal Delay Mode ON"
+            )
+        return self._float("HORizontal:MAIn:DELay:TIMe?")
 
     def set_channel_display(self, channel: int, enabled: bool) -> None:
         self.scpi.write(f"SELect:CH{self._channel(channel)} {'ON' if enabled else 'OFF'}")
