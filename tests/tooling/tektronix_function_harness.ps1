@@ -6,8 +6,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$script:FixtureJson = [IO.File]::ReadAllText($FixturePath)
-$fixture = $script:FixtureJson | ConvertFrom-Json
+$script:Scenario = [IO.File]::ReadAllText($FixturePath) | ConvertFrom-Json
+$fixture = $script:Scenario
 $script:ModeQueries = 0
 $script:VectorsSet = $false
 $script:HiddenCaptured = $false
@@ -35,9 +35,14 @@ function Invoke-FakeTransport {
     param([string]$Command, [string[]]$Options, [switch]$Simulate)
 
     # Fresh values match the independent fake CLI invocations; only explicit state persists.
-    $scenario = $script:FixtureJson | ConvertFrom-Json
+    $scenario = $script:Scenario
     $property = $scenario.values.PSObject.Properties[$Command]
-    $value = if ($null -eq $property) { [pscustomobject]@{} } else { $property.Value }
+    $value = [pscustomobject]@{}
+    if ($null -ne $property) {
+        # Clone only this result; the wrapper preserves null and array values.
+        $valueJson = ConvertTo-Json -InputObject @{ value = $property.Value } -Depth 100 -Compress
+        $value = ($valueJson | ConvertFrom-Json).value
+    }
     if ($Command -in @("run", "stop-acquisition")) {
         $status = @{ value = 0; raw = "0" }
         if ($scenario.native_status_command -eq $Command) {
@@ -150,7 +155,6 @@ function Invoke-FakeTransport {
     return @{ ExitCode = 0; Payload = $payload }
 }
 
-$fixture = $script:FixtureJson | ConvertFrom-Json
 $script:RepoRoot = (Resolve-Path -LiteralPath (Join-Path (Split-Path -Parent $ScriptPath) "..")).Path
 $RepoRoot = $script:RepoRoot
 . (Join-Path $script:RepoRoot "scripts/_validation_helpers.ps1")
@@ -179,7 +183,6 @@ $script:VectorsSet = $false
 $script:HiddenCaptured = $false
 $script:CursorState = $null
 $script:PositionState = $null
-$script:FixtureJson = [IO.File]::ReadAllText($FixturePath)
 $script:TargetProfile = Get-ValidationTargetProfile -Target $script:Target -IncludeTektronix
 $Resource = "USB0::FAKE::INSTR"
 $Python = $PythonPath
