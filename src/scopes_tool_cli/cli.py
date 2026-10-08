@@ -17,9 +17,6 @@ from scopes_tool_core.capabilities import (
     capabilities_for_model_id,
     operation_supported,
 )
-from scopes_tool_core.channel import (
-    validate_analog_channel,
-)
 from scopes_tool_core.cleanup import plan_cleanup
 from scopes_tool_core.drivers import driver_for_physical_model
 from scopes_tool_core.errors import (
@@ -28,16 +25,11 @@ from scopes_tool_core.errors import (
 )
 from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.idn import parse_idn
-from scopes_tool_core.output_files import (
-    write_json_file,
-    write_json_file_best_effort,
-)
 from scopes_tool_core.planning import (
     plan_doctor,
 )
 from scopes_tool_core.scope import Oscilloscope
-from scopes_tool_core.simulator_backend import SimulatedSignal, simulator_idn
-from scopes_tool_core.simulator_config import parse_simulate_signal_spec
+from scopes_tool_core.simulator_backend import simulator_idn
 from scopes_tool_core.status import (
     system_clear_status_command,
     system_opc_query,
@@ -54,18 +46,6 @@ from scopes_tool_core.visa_backend import (
     list_visa_resources,
     verify_asrl_resource_live,
 )
-from scopes_tool_core.waveform import (
-    WORD_BYTE_ORDER,
-    WORD_UNSIGNED,
-    waveform_byte_order_command,
-    waveform_data_query,
-    waveform_format_byte_command,
-    waveform_format_word_command,
-    waveform_points_command,
-    waveform_preamble_query,
-    waveform_source_command,
-    waveform_unsigned_command,
-)
 from scopes_tool_core.workflow import StopRequested
 
 from . import dispatch as cli_dispatch
@@ -77,7 +57,6 @@ from ._dry_run_serial_search import _plan_serial_search
 from ._dry_run_trigger import _plan_trigger
 from ._dry_run_workflows import _plan_workflows
 from .commands import (
-    acquisition,
     introspection,
     system,
     workflows,
@@ -157,38 +136,6 @@ def _dispatch_command(
         args,
         stop_requested=stop_requested,
     )
-
-def _parse_simulate_signal_specs(
-    specs: Sequence[str], capabilities: ScopeCapabilities
-) -> dict[int, SimulatedSignal]:
-    signals: dict[int, SimulatedSignal] = {}
-    for spec in specs:
-        channel, signal = _parse_simulate_signal_spec(spec)
-        validate_analog_channel(channel, capabilities)
-        if channel in signals:
-            raise OscilloscopeError(f"duplicate --simulate-signal for CH{channel}")
-        signals[channel] = signal
-    return signals
-
-
-def _parse_simulate_signal_spec(spec: str) -> tuple[int, SimulatedSignal]:
-    return parse_simulate_signal_spec(spec)
-
-
-def _parse_simulate_signal_channel(token: str) -> int:
-    normalized = token.strip().upper()
-    if normalized.startswith("CH"):
-        normalized = normalized[2:]
-    try:
-        channel = int(normalized)
-    except ValueError as exc:
-        raise OscilloscopeError(
-            "--simulate-signal channel must be CHn or a positive integer"
-        ) from exc
-    if channel < 1:
-        raise OscilloscopeError("--simulate-signal channel must be at least 1")
-    return channel
-
 
 def _run_json_command(args: argparse.Namespace) -> int:
     payload, code = _execute_json_command(args)
@@ -813,78 +760,6 @@ def _report_cleanup(report: dict[str, object]) -> list[str]:
         lines.append(f"- Restore Attempted: {restore.get('attempted')}")
         lines.append(f"- Restore Succeeded: {restore.get('succeeded')}")
     return lines
-
-
-def _print_waveform_capture_commands(
-    channels: Sequence[int], waveform_format: str, points: int
-) -> None:
-    for channel in channels:
-        print(f"Command: {waveform_source_command(channel)}")
-        if waveform_format == "word":
-            print(f"Command: {waveform_format_word_command()}")
-            print(f"Command: {waveform_byte_order_command(WORD_BYTE_ORDER)}")
-            print(f"Command: {waveform_unsigned_command(WORD_UNSIGNED)}")
-        else:
-            print(f"Command: {waveform_format_byte_command()}")
-        print(f"Command: {waveform_points_command(points)}")
-        print(f"Command: {waveform_preamble_query()}")
-        print(f"Command: {waveform_data_query()}")
-
-
-def _format_channel_list(channels: Sequence[int]) -> str:
-    return ", ".join(f"CH{channel}" for channel in channels)
-
-def _doctor_snapshot(scope: Oscilloscope) -> dict[str, object]:
-    if scope.capabilities is None:
-        raise OscilloscopeError("Capabilities unavailable for this model")
-    acquisition = scope.query_acquisition_config()
-    channels = []
-    for channel in range(1, scope.capabilities.analog_channels + 1):
-        channels.append(
-            {
-                "channel": channel,
-                "display": scope.query_channel_display(channel),
-                "scale_volts_per_division": scope.query_channel_scale(channel),
-                "offset_volts": scope.query_channel_offset(channel),
-                "coupling": scope.query_channel_coupling(channel),
-                "probe_ratio": scope.query_channel_probe_ratio(channel),
-                "bandwidth_limit": scope.query_channel_bandwidth_limit(channel),
-            }
-        )
-    timebase = {
-        "scale_seconds_per_division": scope.query_timebase_scale(),
-        "position_seconds": scope.query_timebase_position(),
-    }
-    trigger = scope.query_trigger_edge()
-    return {
-        **runtime._scope_backend_json(scope),
-        "acquisition": {
-            "type": acquisition.type,
-            "count": acquisition.count,
-        },
-        "channels": channels,
-        "timebase": timebase,
-        "edge_trigger": {
-            "source_channel": trigger.source_channel,
-            "level_volts": trigger.level_volts,
-            "slope": trigger.slope,
-        },
-    }
-
-
-def _write_json_file(
-    payload: dict[str, object],
-    path: Path,
-    *,
-    file_kind: str,
-) -> Path:
-    return write_json_file(payload, path, file_kind=file_kind)
-
-
-def _write_json_file_best_effort(payload: dict[str, object], path: Path) -> None:
-    write_json_file_best_effort(payload, path)
-
-
 
 
 def _format_plain_output_file_error(file_kind: str, path: Path, exc: OSError) -> str:
