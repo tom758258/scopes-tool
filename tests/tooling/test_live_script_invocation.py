@@ -1010,7 +1010,7 @@ sys.exit(9)
         encoding="utf-8",
     )
 
-    output_root = REPO_ROOT / ".tmp_tests" / "preflight_cli_check" / tmp_path.name
+    output_root = tmp_path / "preflight_cli_check"
     invocation_log = tmp_path / "fake-cli-invocations.jsonl"
     # All migrated validators take the canonical Target/Connection contract,
     # validate Connection against the resource transport, and write
