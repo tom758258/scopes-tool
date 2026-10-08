@@ -716,6 +716,7 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
     mobile = extract_function(styles, "@media (max-width: 700px)")
     assert "grid-template-columns: 1fr;" in extract_css_rule(mobile, ".command-form {")
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_acquisition_control_workspace_latest_result() -> None:
     app = read_static("app.js")
     functions = "\n".join(extract_function_declaration(app, signature) for signature in (
