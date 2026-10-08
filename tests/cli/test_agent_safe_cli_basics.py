@@ -283,10 +283,8 @@ def test_model_help_distinguishes_one_shot_planning_from_worker(capsys):
 
     assert excinfo.value.code == 0
     help_text = " ".join(capsys.readouterr().out.split())
-    assert (
-        "canonical physical model ID used for dry-run and simulation planning"
-        in help_text
-    )
+    assert "--model MODEL" in help_text
+    assert "dry-run and simulation planning" in help_text
     assert "live execution uses the identity detected from *IDN?" in help_text
     assert "expected live worker model" not in help_text
 

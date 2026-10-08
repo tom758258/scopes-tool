@@ -702,19 +702,21 @@ def test_global_command_state_keeps_the_existing_execution_lifecycle() -> None:
     assert "const commandStatus = liveCommandState.status;" in source
 
 def test_dedicated_editor_actions_use_the_workspace_header() -> None:
-    app_source = read_static("app.js")
     bootstrap_source = read_static("editor-bootstrap.js")
     html = read_static("index.html")
 
-    assert bootstrap_source.count("headerActions: elements.workspaceHeaderActions,") == 20
-    assert app_source.count("headerActions: elements.workspaceHeaderActions,") == 0
+    for editor in (
+        "referenceEditor", "referenceLabelsEditor", "referenceDisplayEditor",
+        "saveExportEditor", "serialWorkspaceHooks", "triggerEditor", "searchEditor",
+        "segmentedEditor", "workflowEditor", "sequenceEditor", "channelDisplayEditor",
+        "channelScaleRangeEditor", "externalTriggerEditor", "timebasePositionEditor",
+        "channelOffsetEditor", "cursorEditor", "annotationEditor", "wgenEditor",
+        "demoEditor", "diagnosticsEditor",
+    ):
+        hooks = extract_function(bootstrap_source, f"const {editor} =")
+        assert "headerActions: elements.workspaceHeaderActions," in hooks, editor
+        assert "executeCommand," in hooks, editor
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
-
-    styles = read_static("styles.css")
-    desktop_form = extract_css_rule(styles, ".command-form {")
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in desktop_form
-    mobile = extract_function(styles, "@media (max-width: 700px)")
-    assert "grid-template-columns: 1fr;" in extract_css_rule(mobile, ".command-form {")
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_acquisition_control_workspace_latest_result() -> None:

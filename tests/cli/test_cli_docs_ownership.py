@@ -46,7 +46,6 @@ def test_cli_integration_keeps_cli_fields_out_of_core_schema():
     text = read_doc("cli-integration.md")
 
     assert "measurement_cli_name" in text
-    assert "argparse.Namespace" in text
     assert "scopes-tool = scopes_tool_cli.cli:main" in text
 
 

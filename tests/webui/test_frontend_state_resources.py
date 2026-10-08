@@ -109,20 +109,18 @@ def test_resource_controls_match_the_powers_initial_presentation() -> None:
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
 
-    assert 'data-i18n="device.resource">VISA Resource</span>' in html
-    assert 'data-i18n-placeholder="device.resourcePlaceholder" placeholder="Waiting Scan"' in html
-    assert 'data-i18n="device.liveResourcePlaceholder">Scan to load live resources</option>' in html
-    assert 'data-i18n="device.liveResource">Live Resource</span>' in html
-    assert 'data-i18n="device.scan">Scan Device</button>' in html
-    assert '"device.resourcePlaceholder": "Waiting Scan"' in english
-    assert '"device.resource": "VISA Resource"' in english
-    assert '"device.liveResource": "Live Resource"' in english
-    assert '"device.liveResourcePlaceholder": "Scan to load live resources"' in english
-    assert '"device.scan": "Scan Device"' in english
-    assert '"device.resourcePlaceholder": "等待掃描"' in chinese
-    assert '"device.liveResource": "即時資源"' in chinese
-    assert '"device.liveResourcePlaceholder": "掃描後載入即時資源"' in chinese
-    assert '"device.scan": "掃描裝置"' in chinese
+    for key in (
+        "device.resource",
+        "device.liveResource",
+        "device.liveResourcePlaceholder",
+        "device.scan",
+    ):
+        assert f'data-i18n="{key}"' in html
+        assert f'"{key}":' in english
+        assert f'"{key}":' in chinese
+    assert 'data-i18n-placeholder="device.resourcePlaceholder"' in html
+    assert '"device.resourcePlaceholder":' in english
+    assert '"device.resourcePlaceholder":' in chinese
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:

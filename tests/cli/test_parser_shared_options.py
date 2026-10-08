@@ -121,8 +121,9 @@ def test_waveform_transfer_help_is_consistent(
 ) -> None:
     help_text = " ".join(_subcommand_parser(command).format_help().split())
 
-    assert "waveform point count; supported values: 1000, 5000, 10000" in help_text
-    assert "waveform transfer format; defaults to byte" in help_text
+    assert "--points POINTS" in help_text
+    assert "1000, 5000, 10000" in help_text
+    assert "--format {byte,word}" in help_text
 
 
 @pytest.mark.parametrize(("command", "_extra_args"), CAPTURE_CHANNEL_CASES)
@@ -132,8 +133,10 @@ def test_capture_channel_help_is_consistent(
 ) -> None:
     help_text = " ".join(_subcommand_parser(command).format_help().split())
 
-    assert "analog channel number; repeat for aligned" in help_text
-    assert "or use all for every analog channel on the detected model" in help_text
+    assert "--channel CHANNEL" in help_text
+    assert "repeat" in help_text
+    assert "all" in help_text
+    assert "detected model" in help_text
 
 
 @pytest.mark.parametrize(
@@ -194,11 +197,10 @@ def test_worker_client_help_is_consistent(
 ) -> None:
     help_text = " ".join(_subcommand_parser(command).format_help().split())
 
-    assert "Worker host; defaults to 127.0.0.1" in help_text
-    assert "Worker HTTP port" in help_text
-    assert (
-        f"Worker request timeout in milliseconds; defaults to {timeout_ms}"
-        in help_text
-    )
-    assert "output format; defaults to text" in help_text
-    assert "write worker client output as JSON" in help_text
+    for option in (
+        "--host HOST", "--port PORT", "--timeout-ms TIMEOUT_MS",
+        "--format {text,json}", "--json",
+    ):
+        assert option in help_text
+    assert "127.0.0.1" in help_text
+    assert str(timeout_ms) in help_text

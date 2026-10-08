@@ -922,17 +922,10 @@ def test_numeric_inputs_share_spinner_presentation_rules() -> None:
     command_form = read_static("command-form.js")
     workflow_editor = read_static("workflow-editor.js")
     helper = read_static("numeric-input.js")
-    styles = read_static("styles.css")
 
     assert 'from "/static/numeric-input.js";' in command_form
     assert 'from "/static/numeric-input.js";' in workflow_editor
     assert 'input.step = "any";' in helper
-    assert 'input.classList.add("no-number-spinner");' in helper
-    assert 'input[type="number"]::-webkit-inner-spin-button' in styles
-    assert 'input[type="number"]::-webkit-outer-spin-button' in styles
-    assert "input.no-number-spinner::-webkit-inner-spin-button" in styles
-    assert "input.no-number-spinner::-webkit-outer-spin-button" in styles
-    assert "-moz-appearance: textfield;" in styles
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:

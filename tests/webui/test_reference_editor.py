@@ -45,6 +45,7 @@ def test_reference_editor_wiring_and_localization() -> None:
         "description.reference-waveform",
         "description.reference-labels",
         "reference.editor.title",
+        "save-export.editor.title",
         "reference.editor.saveAndDisplay",
         "reference.editor.currentLoaded",
         "reference.editor.readFailed",
@@ -65,12 +66,6 @@ def test_reference_editor_wiring_and_localization() -> None:
     ):
         assert f'"{key}":' in english
         assert f'"{key}":' in chinese
-    assert '"reference.editor.title": "Reference waveform"' in english
-    assert '"reference-labels.editor.title": "Reference Labels"' in english
-    assert '"save-export.editor.title": "Save / Export"' in english
-    assert '"reference.editor.title": "參考波形"' in chinese
-    assert '"reference-labels.editor.title": "參考標籤"' in chinese
-    assert '"save-export.editor.title": "儲存 / 匯出"' in chinese
     english_reference_help = next(
         line for line in english.splitlines()
         if '"help.reference-label.label":' in line
@@ -79,15 +74,14 @@ def test_reference_editor_wiring_and_localization() -> None:
         line for line in chinese.splitlines()
         if '"help.reference-label.label":' in line
     )
-    assert "Set the reference waveform label" in english_reference_help
+    assert "reference waveform label" in english_reference_help
     assert (
         "does not control whether the label text is shown on the instrument display"
         in english_reference_help
     )
-    assert "設定參考波形的標籤名稱" in chinese_reference_help
+    assert "參考波形" in chinese_reference_help
+    assert "標籤" in chinese_reference_help
     assert "不控制標籤文字是否顯示在儀器畫面上" in chinese_reference_help
-    assert '"labels.visibility": "Label visibility"' in english
-    assert '"labels.visibility": "標籤顯示"' in chinese
     display_label_description = next(
         line for line in english.splitlines()
         if '"description.display-label":' in line

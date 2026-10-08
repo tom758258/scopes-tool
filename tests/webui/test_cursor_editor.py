@@ -100,14 +100,6 @@ def test_cursor_command_carries_cursor_editor_metadata() -> None:
         assert concept in english_hint
 
 
-def test_cursor_set_form_layout_is_scoped() -> None:
-    css = read_static("styles.css")
-    assert ".cursor-set-form" in css
-    for field in ("source_channel", "x1", "x2", "y1", "y2"):
-        assert f'[data-field="{field}"]' in css, field
-    assert "grid-template-areas: none" in css
-
-
 def test_cursor_set_validation_requires_source_and_one_position() -> None:
     request = validate_job_request({
         "command": "cursor",

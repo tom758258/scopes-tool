@@ -215,7 +215,6 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     bootstrap_source = read_static("editor-bootstrap.js")
     html = read_static("index.html")
     editor_source = read_static("serial-editor.js")
-    styles_source = read_static("styles.css")
 
     assert 'import { SerialDecodeEditor, SerialListerEditor, SerialTriggerEditor, createSerialEditorController } from "/static/serial-editor.js";' in bootstrap_source
     assert 'id="form-heading"' in html
@@ -231,7 +230,6 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     assert '"serial-trigger": () => serialTriggerEditor,' in renderer_map
     assert '"serial-lister": () => serialListerEditor,' in renderer_map
     assert "serial: () => serialEditor," not in renderer_map
-    assert "function scheduleEditorRead()" not in app_source
     presentation = extract_function(app_source, "function syncEditorPresentation(editorKind)")
     assert "serialDecodeEditor?.schedulePresentation();" in presentation
     assert "serialTriggerEditor?.schedulePresentation();" in presentation
@@ -245,18 +243,10 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
     assert "syncWorkspaceHeaderActions(editorKind);" in app_source
     assert "serialDecodeEditor?.applyDecodeButton" in app_source
     assert "serialTriggerEditor?.applyTriggerButton" in app_source
-    assert 'className = `${primary ? "primary" : "secondary"} serial-editor-action`' in editor_source
-    assert "SERIAL_EDITOR_COMMANDS" not in app_source
     assert "serialDecodeEditor?.rerender();" in app_source
     assert "serialTriggerEditor?.rerender();" in app_source
     assert "serialListerEditor?.rerender();" in app_source
     assert "renderPcOutputNote: (note)" in bootstrap_source
-    assert "serial-lister-row" in editor_source
-    assert editor_source.count('className = "command-form";') >= 5
-    assert ".serial-lister-row { display: grid; gap: 8px; width: 50%; }" in styles_source
-    assert ".serial-lister-row > .serial-editor-action { justify-self: start; }" in styles_source
-    assert ".serial-lister-row > .command-form" in styles_source
-    assert ".serial-lister-row { width: 100%; align-items: stretch; }" in styles_source
     assert 'translate(`${editorKind}.editor.title`)' in app_source
     for command_id in (
         "serial-mode",

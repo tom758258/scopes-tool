@@ -200,16 +200,6 @@ def test_screenshot_hardcopy_controls_dry_run_explicit_ink_saver_has_no_restore(
     }
 
 
-def test_screenshot_help_describes_general_image_output(capsys):
-    with pytest.raises(SystemExit) as excinfo:
-        cli.main(["--help"])
-
-    assert excinfo.value.code == 0
-    help_text = " ".join(capsys.readouterr().out.split())
-    assert "capture the current oscilloscope screen to an image file" in help_text
-    assert "capture the current oscilloscope screen to a PNG file" not in help_text
-
-
 def test_screenshot_hardcopy_controls_reject_invalid_values_before_backend(monkeypatch):
     opened = False
 

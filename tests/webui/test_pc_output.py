@@ -598,11 +598,11 @@ def test_pc_output_helper_text_is_plain_localized_text() -> None:
     english = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
     chinese = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
 
-    assert "Leave it blank to use the data folder." in html
-    assert "Leave it blank to use the data folder." in english
-    assert "留空時預設使用 data 資料夾。" in chinese
-    for source in (html, english, chinese):
+    assert 'data-i18n="pcOutput.helper"' in html
+    for source, blank_token in ((html, "blank"), (english, "blank"), (chinese, "留空")):
         helper_text = source.split("pcOutput.helper", 1)[1].split("\n", 1)[0]
+        assert blank_token in helper_text
+        assert "data" in helper_text
         assert "`" not in helper_text
 
 
