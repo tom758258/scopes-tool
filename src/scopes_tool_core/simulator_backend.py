@@ -13,30 +13,28 @@ from .demo import DEMO_FUNCTION_TOKENS
 from .errors import BackendClosedError, ParameterValidationError
 from .identity import VENDOR_REGISTRY, physical_model_for_id
 from .segmented import segmented_waveform_all_supported
+from .simulator_annotation import apply_annotation_write, query_annotation
+from .simulator_channel import apply_channel_write, query_channel
 from .simulator_fft import apply_fft_write, query_fft
 from .simulator_rendering import (
     _simulated_screenshot_bmp,
     _simulated_screenshot_png,
 )
 from .simulator_search import apply_search_write, query_search
-from .simulator_support import SimulatorBackendError, _parse_scpi_bool_write
+from .simulator_serial import (
+    _canonical_lister_display,
+    _canonical_lister_reference,
+    apply_serial_write,
+    query_lister,
+    query_serial,
+)
+from .simulator_support import (
+    SimulatorBackendError,
+    _parse_scpi_bool_write,
+    _parse_scpi_string_arg,
+)
 from .serial import (
     SERIAL_MODE_TOKENS,
-    parse_serial_can_trigger_id_mode,
-    parse_serial_can_trigger_type,
-    parse_serial_i2c_trigger_qualifier,
-    parse_serial_i2c_trigger_type,
-    parse_serial_spi_trigger_type,
-    normalize_serial_trigger_pattern,
-    parse_serial_mode,
-    parse_serial_uart_trigger_qualifier,
-    parse_serial_uart_trigger_type,
-    serial_uart_trigger_qualifier_readback,
-    serial_uart_trigger_type_readback,
-    serial_can_trigger_type_readback,
-    serial_i2c_trigger_qualifier_readback,
-    serial_i2c_trigger_type_readback,
-    serial_spi_trigger_type_readback,
     normalize_serial_can_trigger_id_mode,
     validate_serial_can_trigger_data_length,
 )
@@ -834,38 +832,7 @@ class SimulatorBackend:
                         self.wgen_amplitude_volts *= 2.0
                         self.wgen_offset_volts *= 2.0
                 self.wgen_load = WGEN_LOAD_TOKENS[new_load]
-        elif match := re.fullmatch(r":SBUS(\d+):MODE (.+)", command, re.IGNORECASE):
-            bus = self._validate_serial_bus(int(match.group(1)))
-            canonical = parse_serial_mode(match.group(2))
-            if canonical is None or canonical not in self._capabilities.serial_modes:
-                raise SimulatorBackendError(
-                    f"Serial mode {match.group(2)!r} is not supported by "
-                    f"simulator model {self.model}."
-                )
-            self.serial_modes[bus] = SERIAL_MODE_TOKENS[canonical]
-        elif match := re.fullmatch(
-            r":SBUS(\d+):DISPLAY (.+)", command, re.IGNORECASE
-        ):
-            bus = self._validate_serial_bus(int(match.group(1)))
-            self.serial_display[bus] = _parse_scpi_bool_write(command)
-        elif match := re.fullmatch(r":LISTer:DISPlay (.+)", command, re.IGNORECASE):
-            value = _canonical_lister_display(match.group(1))
-            if value == "SBUS2" and self._capabilities.serial_bus_count < 2:
-                raise SimulatorBackendError(
-                    f"Simulator model {self.model} does not support Lister bus2 display."
-                )
-            self.lister_display = value
-        elif match := re.fullmatch(r":LISTer:REFerence (.+)", command, re.IGNORECASE):
-            self.lister_reference = _canonical_lister_reference(match.group(1))
-        elif self._apply_serial_uart_trigger_write(command):
-            pass
-        elif self._apply_serial_i2c_trigger_write(command):
-            pass
-        elif self._apply_serial_spi_trigger_write(command):
-            pass
-        elif self._apply_serial_can_trigger_write(command):
-            pass
-        elif self._apply_serial_protocol_write(command):
+        elif apply_serial_write(self, command):
             pass
         elif apply_search_write(self, command):
             pass
@@ -1353,10 +1320,9 @@ class SimulatorBackend:
             if self.system_errors:
                 return self.system_errors.pop(0)
             return '+0,"No error"'
-        if upper == ":LISTER:DISPLAY?":
-            return self.lister_display
-        if upper == ":LISTER:REFERENCE?":
-            return self.lister_reference
+        lister_response = query_lister(self, command)
+        if lister_response is not None:
+            return lister_response
         if upper == ":WAVEFORM:PREAMBLE?":
             return self._waveform_preamble()
         if upper == ":HARDCOPY:INKSAVER?":
@@ -1406,36 +1372,9 @@ class SimulatorBackend:
             return f"{self.wgen_offset_volts:g}"
         if upper == f"{wgen_root}:OUTPUT:LOAD?":
             return self.wgen_load
-        serial_uart_trigger_value = self._query_serial_uart_trigger(command)
-        if serial_uart_trigger_value is not None:
-            return serial_uart_trigger_value
-        serial_i2c_trigger_value = self._query_serial_i2c_trigger(command)
-        if serial_i2c_trigger_value is not None:
-            return serial_i2c_trigger_value
-        serial_spi_trigger_value = self._query_serial_spi_trigger(command)
-        if serial_spi_trigger_value is not None:
-            return serial_spi_trigger_value
-        serial_can_trigger_value = self._query_serial_can_trigger(command)
-        if serial_can_trigger_value is not None:
-            return serial_can_trigger_value
-        serial_protocol_value = self._query_serial_protocol(command)
-        if serial_protocol_value is not None:
-            return serial_protocol_value
-        serial_match = re.fullmatch(
-            r":SBUS(\d+)(?::(MODE|DISPLAY))?\?", command, re.IGNORECASE
-        )
-        if serial_match is not None:
-            bus = self._validate_serial_bus(int(serial_match.group(1)))
-            setting = serial_match.group(2)
-            if setting is None:
-                enabled = 1 if self.serial_display[bus] else 0
-                return (
-                    f":SBUS{bus}:DISP {enabled};"
-                    f"MODE {self.serial_modes[bus]};"
-                )
-            if setting.upper() == "MODE":
-                return self.serial_modes[bus]
-            return "1" if self.serial_display[bus] else "0"
+        serial_response = query_serial(self, command)
+        if serial_response is not None:
+            return serial_response
         search_response = query_search(self, command)
         if search_response is not None:
             return search_response
@@ -2404,75 +2343,10 @@ class SimulatorBackend:
 
 
     def _apply_channel_write(self, command: str) -> bool:
-        channel = _extract_channel(command)
-        if channel is None:
-            return False
-        channel = self._validate_channel(channel)
-        upper = command.upper()
-        value = command.rsplit(" ", 1)[1] if " " in command else ""
-        if ":DISPLAY " in upper:
-            self.channel_display[channel] = upper.endswith(" ON")
-        elif ":SCALE " in upper:
-            self.channel_scale[channel] = float(value)
-        elif ":OFFSET " in upper:
-            self.channel_offset[channel] = float(value)
-        elif ":COUPLING " in upper:
-            self.channel_coupling[channel] = value.upper()
-        elif ":PROBE " in upper:
-            self.channel_probe[channel] = float(value)
-        elif ":BWLIMIT " in upper:
-            self.channel_bandwidth_limit[channel] = upper.endswith(" ON")
-        elif ":IMPEDANCE " in upper:
-            self.channel_impedance[channel] = "FIFTy" if value.upper().startswith("FIFT") else "ONEMeg"
-        elif ":INVERT " in upper:
-            self.channel_invert[channel] = upper.endswith(" ON")
-        elif ":RANGE " in upper:
-            self.channel_range[channel] = float(value)
-        elif ":UNITS " in upper:
-            self.channel_units[channel] = "AMP" if value.upper().startswith("AMP") else "VOLT"
-        elif ":VERNIER " in upper:
-            self.channel_vernier[channel] = upper.endswith(" ON")
-        elif ":PROBE:SKEW " in upper:
-            self.channel_probe_skew[channel] = float(value)
-        elif ":LABEL " in upper:
-            self.channel_label[channel] = _parse_scpi_string_arg(command.split(" ", 1)[1])
-        else:
-            return False
-        return True
+        return apply_channel_write(self, command)
 
     def _query_channel(self, command: str) -> str | None:
-        channel = _extract_channel(command)
-        if channel is None:
-            return None
-        channel = self._validate_channel(channel)
-        upper = command.upper()
-        if ":DISPLAY?" in upper:
-            return "1" if self.channel_display.get(channel, True) else "0"
-        if ":SCALE?" in upper:
-            return f"{self.channel_scale.get(channel, 1.0):.12g}"
-        if ":OFFSET?" in upper:
-            return f"{self.channel_offset.get(channel, 0.0):.12g}"
-        if ":COUPLING?" in upper:
-            return self.channel_coupling.get(channel, "DC")
-        if ":PROBE?" in upper:
-            return f"{self.channel_probe.get(channel, 10.0):.12g}"
-        if ":BWLIMIT?" in upper:
-            return "1" if self.channel_bandwidth_limit.get(channel, False) else "0"
-        if ":IMPEDANCE?" in upper:
-            return self.channel_impedance.get(channel, "ONEMeg")
-        if ":INVERT?" in upper:
-            return "1" if self.channel_invert.get(channel, False) else "0"
-        if ":RANGE?" in upper:
-            return f"{self.channel_range.get(channel, self.channel_scale.get(channel, 1.0) * 8.0):.12g}"
-        if ":UNITS?" in upper:
-            return self.channel_units.get(channel, "VOLT")
-        if ":VERNIER?" in upper:
-            return "1" if self.channel_vernier.get(channel, False) else "0"
-        if ":PROBE:SKEW?" in upper:
-            return f"{self.channel_probe_skew.get(channel, 0.0):.12g}"
-        if ":LABEL?" in upper:
-            return f'"{self.channel_label.get(channel, "")}"'
-        return None
+        return query_channel(self, command)
 
     def _validate_channel(self, channel: int) -> int:
         if channel < 1 or channel > self._capabilities.analog_channels:
@@ -2492,314 +2366,11 @@ class SimulatorBackend:
             )
         return bus
 
-    def _apply_serial_protocol_write(self, command: str) -> bool:
-        match = re.fullmatch(r":SBUS(\d+):(UART|IIC|SPI|CAN):(.+?)\s+(.+)", command, re.IGNORECASE)
-        if match is None:
-            return False
-        bus = self._validate_serial_bus(int(match.group(1)))
-        key = _serial_protocol_field_key(bus, match.group(2), match.group(3))
-        if key is None:
-            raise SimulatorBackendError(f"Unsupported simulator serial command: {command}")
-        self.serial_protocol_settings[bus][key] = match.group(4).strip()
-        return True
-
-    def _apply_serial_uart_trigger_write(self, command: str) -> bool:
-        match = re.fullmatch(
-            r":SBUS(\d+):UART:TRIGger:(TYPE|DATA|QUALifier)\s+(.+)",
-            command,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return False
-        bus = self._validate_serial_bus(int(match.group(1)))
-        field_name = match.group(2).upper()
-        value = match.group(3).strip()
-        if field_name == "TYPE":
-            self.serial_uart_trigger_types[bus] = serial_uart_trigger_type_readback(
-                parse_serial_uart_trigger_type(value)
-            )
-        elif field_name == "DATA":
-            try:
-                data = int(value)
-            except ValueError as exc:
-                raise SimulatorBackendError(
-                    f"Unsupported simulator UART trigger data: {value!r}"
-                ) from exc
-            if not 0 <= data <= 255:
-                raise SimulatorBackendError(
-                    "Simulator UART trigger data must be in range 0-255."
-                )
-            self.serial_uart_trigger_data[bus] = data
-        else:
-            self.serial_uart_trigger_qualifiers[bus] = (
-                serial_uart_trigger_qualifier_readback(
-                    parse_serial_uart_trigger_qualifier(value)
-                )
-            )
-        return True
-
-    def _query_serial_uart_trigger(self, command: str) -> str | None:
-        match = re.fullmatch(
-            r":SBUS(\d+):UART:TRIGger:(TYPE|DATA|QUALifier)\?",
-            command,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return None
-        bus = self._validate_serial_bus(int(match.group(1)))
-        field_name = match.group(2).upper()
-        if field_name == "TYPE":
-            return self.serial_uart_trigger_types[bus]
-        if field_name == "DATA":
-            return str(self.serial_uart_trigger_data[bus])
-        return self.serial_uart_trigger_qualifiers[bus]
-
-    def _apply_serial_i2c_trigger_write(self, command: str) -> bool:
-        match = re.fullmatch(
-            r":SBUS(\d+):IIC:TRIGger:(TYPE|PATTern:ADDRess|PATTern:DATA|PATTern:DATa2|QUALifier)\s+(.+)",
-            command,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return False
-        bus = self._validate_serial_bus(int(match.group(1)))
-        field_name = match.group(2).upper()
-        value = match.group(3).strip()
-        if field_name == "TYPE":
-            self.serial_i2c_trigger_types[bus] = serial_i2c_trigger_type_readback(
-                parse_serial_i2c_trigger_type(value)
-            )
-        elif field_name.endswith("ADDRESS"):
-            self.serial_i2c_trigger_addresses[bus] = int(value, 0)
-        elif field_name.endswith("DATA2"):
-            self.serial_i2c_trigger_data2[bus] = int(value, 0)
-        elif field_name.endswith("DATA"):
-            self.serial_i2c_trigger_data[bus] = int(value, 0)
-        else:
-            self.serial_i2c_trigger_qualifiers[bus] = serial_i2c_trigger_qualifier_readback(
-                parse_serial_i2c_trigger_qualifier(value)
-            )
-        return True
-
-    def _query_serial_i2c_trigger(self, command: str) -> str | None:
-        match = re.fullmatch(
-            r":SBUS(\d+):IIC:TRIGger:(TYPE|PATTern:ADDRess|PATTern:DATA|PATTern:DATa2|QUALifier)\?",
-            command,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return None
-        bus = self._validate_serial_bus(int(match.group(1)))
-        field_name = match.group(2).upper()
-        if field_name == "TYPE":
-            return self.serial_i2c_trigger_types[bus]
-        if field_name.endswith("ADDRESS"):
-            return str(self.serial_i2c_trigger_addresses[bus])
-        if field_name.endswith("DATA2"):
-            return str(self.serial_i2c_trigger_data2[bus])
-        if field_name.endswith("DATA"):
-            return str(self.serial_i2c_trigger_data[bus])
-        return self.serial_i2c_trigger_qualifiers[bus]
-
-    def _apply_serial_spi_trigger_write(self, command: str) -> bool:
-        match = re.fullmatch(
-            r":SBUS(\d+):SPI:TRIGger:(TYPE|PATTern:(MOSI|MISO):(WIDTh|DATA))\s+(.+)",
-            command,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return False
-        bus = self._validate_serial_bus(int(match.group(1)))
-        field_name = match.group(2).upper()
-        channel = (match.group(3) or "").upper()
-        value = match.group(5).strip()
-        if field_name == "TYPE":
-            self.serial_spi_trigger_types[bus] = serial_spi_trigger_type_readback(
-                parse_serial_spi_trigger_type(value)
-            )
-        elif field_name.endswith("WIDTH"):
-            self.serial_spi_trigger_widths[bus][channel] = int(value)
-        else:
-            self.serial_spi_trigger_data[bus][channel] = normalize_serial_trigger_pattern(
-                _parse_scpi_string_arg(value), "SPI trigger data", max_bits=64
-            )
-        return True
-
-    def _query_serial_spi_trigger(self, command: str) -> str | None:
-        match = re.fullmatch(
-            r":SBUS(\d+):SPI:TRIGger:(TYPE|PATTern:(MOSI|MISO):(WIDTh|DATA))\?",
-            command,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return None
-        bus = self._validate_serial_bus(int(match.group(1)))
-        field_name = match.group(2).upper()
-        channel = (match.group(3) or "").upper()
-        if field_name == "TYPE":
-            return self.serial_spi_trigger_types[bus]
-        if field_name.endswith("WIDTH"):
-            return str(self.serial_spi_trigger_widths[bus][channel])
-        return f'"{self.serial_spi_trigger_data[bus][channel]}"'
-
-    def _apply_serial_can_trigger_write(self, command: str) -> bool:
-        condition = re.fullmatch(
-            r":SBUS(\d+):CAN:TRIGger\s+(.+)", command, re.IGNORECASE
-        )
-        if condition is not None:
-            bus = self._validate_serial_bus(int(condition.group(1)))
-            self.serial_can_trigger_types[bus] = serial_can_trigger_type_readback(
-                parse_serial_can_trigger_type(condition.group(2).strip())
-            )
-            return True
-        match = re.fullmatch(
-            r":SBUS(\d+):CAN:TRIGger:PATTern:(ID:MODE|ID|DATA:LENGth|DATA)\s+(.+)",
-            command,
-            re.IGNORECASE,
-        )
-        if match is None:
-            return False
-        bus = self._validate_serial_bus(int(match.group(1)))
-        field_name = match.group(2).upper()
-        value = match.group(3).strip()
-        if field_name == "ID:MODE":
-            self.serial_can_trigger_id_modes[bus] = "STAN" if parse_serial_can_trigger_id_mode(value) == "standard" else "EXT"
-        elif field_name == "ID":
-            self.serial_can_trigger_ids[bus] = normalize_serial_trigger_pattern(
-                _parse_scpi_string_arg(value), "CAN trigger ID", max_bits=29
-            )
-        elif field_name == "DATA:LENGTH":
-            self.serial_can_trigger_data_lengths[bus] = int(value)
-        else:
-            self.serial_can_trigger_data[bus] = normalize_serial_trigger_pattern(
-                _parse_scpi_string_arg(value), "CAN trigger data", max_bits=64
-            )
-        return True
-
-    def _query_serial_can_trigger(self, command: str) -> str | None:
-        condition = re.fullmatch(r":SBUS(\d+):CAN:TRIGger\?", command, re.IGNORECASE)
-        if condition is not None:
-            bus = self._validate_serial_bus(int(condition.group(1)))
-            return self.serial_can_trigger_types[bus]
-        match = re.fullmatch(
-            r":SBUS(\d+):CAN:TRIGger:PATTern:(ID:MODE|ID|DATA:LENGth|DATA)\?",
-            command, re.IGNORECASE
-        )
-        if match is None:
-            return None
-        bus = self._validate_serial_bus(int(match.group(1)))
-        field_name = match.group(2).upper()
-        if field_name == "ID:MODE":
-            return self.serial_can_trigger_id_modes[bus]
-        if field_name == "ID":
-            return f'"{self.serial_can_trigger_ids[bus]}"'
-        if field_name == "DATA:LENGTH":
-            return str(self.serial_can_trigger_data_lengths[bus])
-        return f'"{self.serial_can_trigger_data[bus]}"'
-
-    def _query_serial_protocol(self, command: str) -> str | None:
-        match = re.fullmatch(r":SBUS(\d+):(UART|IIC|SPI|CAN):(.+?)\?", command, re.IGNORECASE)
-        if match is None:
-            return None
-        bus = self._validate_serial_bus(int(match.group(1)))
-        key = _serial_protocol_field_key(bus, match.group(2), match.group(3))
-        if key is None:
-            raise SimulatorBackendError(f"Unsupported simulator serial query: {command}")
-        value = self.serial_protocol_settings[bus][key]
-        return _serial_protocol_query_value(key, value)
-
     def _apply_annotation_write(self, command: str) -> bool:
-        parsed = _parse_annotation_path(command)
-        if parsed is None or parsed[2]:
-            return False
-        slot, field_name, _query = parsed
-        state = self._annotation_slot(slot)
-        upper = command.upper()
-        if field_name == "STATE":
-            state["enabled"] = upper.endswith(" ON")
-        elif field_name == "TEXT":
-            state["text"] = _parse_scpi_string_arg(command.split(" ", 1)[1])
-        elif field_name == "COLOR":
-            state["color"] = command.rsplit(" ", 1)[1].upper()
-        elif field_name == "BACKGROUND":
-            state["background"] = command.rsplit(" ", 1)[1].upper()
-        elif field_name == "X1POSITION":
-            state["x"] = int(command.rsplit(" ", 1)[1])
-        elif field_name == "Y1POSITION":
-            state["y"] = int(command.rsplit(" ", 1)[1])
-        else:
-            return False
-        return True
+        return apply_annotation_write(self, command)
 
     def _query_annotation(self, command: str) -> str | None:
-        parsed = _parse_annotation_path(command)
-        if parsed is None or not parsed[2]:
-            return None
-        slot, field_name, _query = parsed
-        state = self._annotation_slot(slot)
-        if field_name == "STATE":
-            return "1" if state["enabled"] else "0"
-        if field_name == "TEXT":
-            return f'"{state["text"]}"'
-        if field_name == "COLOR":
-            return str(state["color"])
-        if field_name == "BACKGROUND":
-            return str(state["background"])
-        if field_name == "X1POSITION":
-            return str(state["x"])
-        if field_name == "Y1POSITION":
-            return str(state["y"])
-        return None
-
-    def _annotation_slot(self, slot: int) -> dict[str, Any]:
-        max_slot = self._capabilities.annotation_slots
-        if slot < 1 or slot > max_slot:
-            raise SimulatorBackendError(f"Simulator annotation slot must be in range 1-{max_slot}.")
-        return self.annotation_state.setdefault(
-            slot,
-            {
-                "enabled": False,
-                "text": "",
-                "color": "WHITE",
-                "background": "OPAQ",
-                "x": 0,
-                "y": 0,
-            },
-        )
-
-
-def _extract_channel(command: str) -> int | None:
-    marker = ":CHANnel"
-    if marker not in command:
-        return None
-    remainder = command.split(marker, 1)[1]
-    digits = []
-    for char in remainder:
-        if char.isdigit():
-            digits.append(char)
-        else:
-            break
-    return int("".join(digits)) if digits else None
-
-
-def _parse_annotation_path(command: str) -> tuple[int, str, bool] | None:
-    match = re.fullmatch(
-        r":DISPlay:ANNotation(\d*)(?:(?::(TEXT|COLor|BACKground|X1Position|Y1Position))?(\?)?(?:\s+.*)?)",
-        command,
-        flags=re.IGNORECASE,
-    )
-    if not match:
-        return None
-    raw_slot, field_name, query = match.groups()
-    slot = int(raw_slot) if raw_slot else 1
-    return slot, (field_name or "STATE").upper(), query == "?"
-
-
-def _parse_scpi_string_arg(value: str) -> str:
-    text = value.strip()
-    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
-        return text[1:-1]
-    return text
+        return query_annotation(self, command)
 
 
 def _coerce_simulated_signal(
@@ -2833,80 +2404,6 @@ def _parse_positive_scpi_number(value: str) -> float:
     if not math.isfinite(parsed) or parsed <= 0:
         raise SimulatorBackendError("SCPI numeric parameter must be positive and finite.")
     return parsed
-
-
-def _serial_protocol_field_key(bus: int, protocol: str, suffix: str) -> str | None:
-    prefix = protocol.upper() + ":"
-    paths = {
-        "UART:SOURCE:RX": "uart_rx_source",
-        "UART:SOURCE:TX": "uart_tx_source",
-        "UART:BAUDRATE": "uart_baud_rate",
-        "UART:WIDTH": "uart_data_bits",
-        "UART:PARITY": "uart_parity",
-        "UART:POLARITY": "uart_polarity",
-        "UART:BITORDER": "uart_bit_order",
-        "IIC:SOURCE:CLOCK": "iic_clock_source",
-        "IIC:SOURCE:DATA": "iic_data_source",
-        "IIC:ASIZE": "iic_address_size",
-        "SPI:SOURCE:CLOCK": "spi_clock_source",
-        "SPI:SOURCE:FRAME": "spi_frame_source",
-        "SPI:SOURCE:MOSI": "spi_mosi_source",
-        "SPI:SOURCE:MISO": "spi_miso_source",
-        "SPI:CLOCK:SLOPE": "spi_clock_slope",
-        "SPI:BITORDER": "spi_bit_order",
-        "SPI:WIDTH": "spi_word_width",
-        "SPI:FRAMING": "spi_framing",
-        "SPI:CLOCK:TIMEOUT": "spi_clock_timeout",
-        "CAN:SOURCE": "can_source",
-        "CAN:SIGNAL:BAUDRATE": "can_baud_rate",
-        "CAN:SIGNAL:DEFINITION": "can_signal_definition",
-        "CAN:SAMPLEPOINT": "can_sample_point",
-    }
-    return paths.get(prefix + suffix.upper())
-
-
-def _serial_protocol_query_value(key: str, value: str) -> str:
-    if key.endswith("_bit_order"):
-        return {"LSBFirst": "LSBF", "MSBFirst": "MSBF"}.get(value, value)
-    if key == "spi_clock_slope":
-        return {"POSitive": "POS", "NEGative": "NEG"}.get(value, value)
-    if key == "spi_framing":
-        return {"CHIPselect": "CHIP", "NCHipselect": "NCH", "TIMeout": "TIM"}.get(value, value)
-    return value
-
-
-def _canonical_lister_display(raw: str) -> str:
-    values = {
-        "OFF": "OFF",
-        "0": "OFF",
-        "SBUS1": "SBUS1",
-        "ON": "SBUS1",
-        "1": "SBUS1",
-        "SBUS2": "SBUS2",
-        "2": "SBUS2",
-        "ALL": "ALL",
-    }
-    try:
-        return values[raw.strip().upper()]
-    except KeyError as exc:
-        raise SimulatorBackendError(
-            f"Unsupported simulator Lister display: {raw!r}"
-        ) from exc
-
-
-def _canonical_lister_reference(raw: str) -> str:
-    values = {
-        "TRIGGER": "TRIGger",
-        "TRIG": "TRIGger",
-        "PREVIOUS": "PREVious",
-        "PREV": "PREVious",
-    }
-    try:
-        return values[raw.strip().upper()]
-    except KeyError as exc:
-        raise SimulatorBackendError(
-            f"Unsupported simulator Lister reference: {raw!r}"
-        ) from exc
 
 
 def _parse_simulator_wgen_number(command: str, field: str) -> float:

@@ -16,3 +16,10 @@ def _parse_scpi_bool_write(command: str) -> bool:
     if value in {"0", "OFF"}:
         return False
     raise SimulatorBackendError(f"Unsupported simulator write: {command}")
+
+
+def _parse_scpi_string_arg(value: str) -> str:
+    text = value.strip()
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        return text[1:-1]
+    return text
