@@ -55,10 +55,8 @@ from scopes_tool_core.visa_backend import (
     verify_asrl_resource_live,
 )
 from scopes_tool_core.waveform import (
-    MultiChannelWaveformCapture,
     WORD_BYTE_ORDER,
     WORD_UNSIGNED,
-    WaveformCapture,
     waveform_byte_order_command,
     waveform_data_query,
     waveform_format_byte_command,
@@ -534,63 +532,6 @@ def _apply_json_record(payload: dict[str, object]) -> None:
         payload["files"] = files
 
 
-
-
-def _measurement_result_json(result, *, parameters: dict[str, object]) -> dict[str, object]:
-    return {
-        "item": result.item,
-        "channel": result.channel,
-        "reference_channel": result.reference_channel,
-        "value": result.value,
-        "unit": result.unit,
-        "valid": result.valid,
-        "raw_value": result.raw_value,
-        "reason": result.reason,
-        "parameters": parameters,
-    }
-
-
-
-
-def _waveform_preamble_json(preamble) -> dict[str, object]:
-    return {
-        "raw": preamble.raw,
-        "format_code": preamble.format_code,
-        "type_code": preamble.type_code,
-        "points": preamble.points,
-        "count": preamble.count,
-        "x_increment": preamble.x_increment,
-        "x_origin": preamble.x_origin,
-        "x_reference": preamble.x_reference,
-        "y_increment": preamble.y_increment,
-        "y_origin": preamble.y_origin,
-        "y_reference": preamble.y_reference,
-    }
-
-
-def _waveform_capture_summary(capture: WaveformCapture | MultiChannelWaveformCapture) -> dict[str, object]:
-    if isinstance(capture, MultiChannelWaveformCapture):
-        summaries = [_single_waveform_capture_summary(item) for item in capture.captures]
-        return {
-            "actual_points": {f"CH{item['channel']}": item["actual_points"] for item in summaries},
-            "captures": summaries,
-        }
-    single = _single_waveform_capture_summary(capture)
-    return {"actual_points": single["actual_points"], "captures": [single]}
-
-
-def _single_waveform_capture_summary(capture: WaveformCapture) -> dict[str, object]:
-    return {
-        "channel": capture.channel,
-        "requested_points": capture.requested_points,
-        "actual_points": len(capture.raw_samples),
-        "format": capture.format_name,
-        "preamble": _waveform_preamble_json(capture.preamble),
-        "byte_order": capture.byte_order,
-        "unsigned": capture.unsigned,
-    }
-
-
 def _cmd_list_resources(args: argparse.Namespace) -> int:
     listing = list_visa_resources(visa_library=args.visa_library)
     print(f"PyVISA backend: {listing.backend}")
@@ -931,116 +872,6 @@ def _doctor_snapshot(scope: Oscilloscope) -> dict[str, object]:
     }
 
 
-def _run_sweep_measurement(
-    scope: Oscilloscope,
-    command: str,
-    channel: int,
-    item: str,
-) -> dict[str, object]:
-    try:
-        result = scope.query_measurement(channel, item)
-        system_error = scope.post_command_status()
-        runtime._json_record_system_error(system_error)
-        return {
-            "command": command,
-            **_measurement_result_json(result, parameters={}),
-            "system_error": runtime._system_error_json(system_error),
-        }
-    except OscilloscopeError as exc:
-        system_error = _query_system_error_best_effort(scope)
-        return _sweep_error_record(
-            item=item,
-            channel=channel,
-            reference_channel=None,
-            command=command,
-            exc=exc,
-            system_error=system_error,
-        )
-
-
-def _run_sweep_pair_measurement(
-    scope: Oscilloscope,
-    command: str,
-    source_channel: int,
-    reference_channel: int,
-    item: str,
-) -> dict[str, object]:
-    try:
-        result = scope.query_pair_measurement(source_channel, reference_channel, item)
-        system_error = scope.post_command_status()
-        runtime._json_record_system_error(system_error)
-        return {
-            "command": command,
-            **_measurement_result_json(result, parameters={}),
-            "system_error": runtime._system_error_json(system_error),
-        }
-    except OscilloscopeError as exc:
-        system_error = _query_system_error_best_effort(scope)
-        return _sweep_error_record(
-            item=item,
-            channel=source_channel,
-            reference_channel=reference_channel,
-            command=command,
-            exc=exc,
-            system_error=system_error,
-        )
-
-
-def _query_system_error_best_effort(scope: Oscilloscope):
-    try:
-        entry = scope.post_command_status()
-        runtime._json_record_system_error(entry)
-        return entry
-    except OscilloscopeError:
-        return None
-
-
-def _sweep_error_record(
-    *,
-    item: str,
-    channel: int,
-    reference_channel: int | None,
-    command: str | None,
-    exc: OscilloscopeError,
-    system_error,
-) -> dict[str, object]:
-    return {
-        "item": item,
-        "channel": channel,
-        "reference_channel": reference_channel,
-        "value": None,
-        "unit": None,
-        "valid": False,
-        "raw_value": None,
-        "reason": str(exc),
-        "command": command,
-        "system_error": None if system_error is None else runtime._system_error_json(system_error),
-        "error": {"type": type(exc).__name__, "message": str(exc)},
-    }
-
-
-def _measure_sweep_summary(measurements: Sequence[dict[str, object]]) -> dict[str, int]:
-    valid_count = 0
-    invalid_count = 0
-    error_count = 0
-    for measurement in measurements:
-        if measurement.get("error") is not None:
-            error_count += 1
-        elif measurement.get("valid") is True:
-            valid_count += 1
-        else:
-            invalid_count += 1
-    return {
-        "valid_count": valid_count,
-        "invalid_count": invalid_count,
-        "error_count": error_count,
-    }
-
-
-
-
-
-
 def _write_json_file(
     payload: dict[str, object],
     path: Path,
@@ -1062,20 +893,6 @@ def _format_plain_output_file_error(file_kind: str, path: Path, exc: OSError) ->
     if isinstance(exc, PermissionError):
         message += ". The file may be open in another program, or the folder may not be writable."
     return message
-
-def _format_measurement_parameters(values: dict[str, object]) -> str:
-    if not values:
-        return ""
-    labels = {
-        "time_s": "time",
-        "level": "level",
-        "slope": "slope",
-        "occurrence": "occurrence",
-    }
-    formatted = ", ".join(f"{labels[key]}={value}" for key, value in values.items())
-    return f" ({formatted})"
-
-
 
 
 if __name__ == "__main__":
