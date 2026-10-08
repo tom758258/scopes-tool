@@ -125,7 +125,12 @@ function Invoke-TektronixCliValidation {
         if (-not [string]::IsNullOrWhiteSpace($stdout)) {
             try {
                 $parsed = $stdout | ConvertFrom-Json -ErrorAction Stop
-                Write-JsonReport -LiteralPath $jsonPath -Report $parsed
+                # Preserve Write-JsonReport's mandatory Report binding and Depth 20.
+                if ($null -eq $parsed) {
+                    throw 'CLI JSON payload is null.'
+                }
+                $serializedJson = $parsed | ConvertTo-Json -Depth 20
+                Write-Utf8NoBomText -LiteralPath $jsonPath -Text $serializedJson
                 $record.json = $jsonPath
             } catch { }
         }
@@ -175,7 +180,11 @@ function Invoke-TektronixCliValidation {
             $invocation.result = "FAIL"
             throw "$Stage failed (exit $($record.exit_code), timeout=$timedOut)$cliErrorDetail; see $stdoutPath and $stderrPath"
         }
-        $payload = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json -ErrorAction Stop
+        # Match Get-Content's BOM-less decoding on Windows PowerShell 5.1.
+        $payload = if (-not [string]::IsNullOrEmpty($serializedJson)) {
+            $jsonText = [System.Text.Encoding]::Default.GetString([System.Text.Encoding]::UTF8.GetBytes($serializedJson))
+            $jsonText | ConvertFrom-Json -ErrorAction Stop
+        } else { $null }
         if ($payload.ok -ne $true) {
             $invocation.result = "FAIL"
             throw "$Stage returned ok=false$cliErrorDetail; see $jsonPath"

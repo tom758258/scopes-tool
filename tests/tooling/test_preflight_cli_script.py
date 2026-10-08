@@ -459,7 +459,11 @@ def test_shareable_artifacts_redact_sensitive_values(tmp_path: Path) -> None:
         "targets = @('keysight-dsox4034a'); resource = $resource; "
         "notes = 'host 192.168.1.50 link 169.254.8.9 user C:\\Users\\alice\\evidence.txt repo ' + $repoRoot; "
         "idn = [pscustomobject]@{{ raw = $idnRaw; serial = 'SYNTH12345' }}; "
-        "artifact_paths = [ordered]@{{ report = (Join-Path $privateRoot 'report.json') }} }}; "
+        "artifact_paths = [ordered]@{{ report = (Get-ArtifactRelativePath "
+        "-Path (Join-Path $privateRoot 'report.json') -BaseRoot $repoRoot); "
+        "summary = (Get-ArtifactRelativePath -Path (Join-Path $privateRoot 'summary.md') "
+        "-BaseRoot $repoRoot); missing = (Get-ArtifactRelativePath "
+        "-Path (Join-Path $privateRoot 'missing.json') -BaseRoot $repoRoot) }} }}; "
         "Write-Utf8NoBomText -LiteralPath (Join-Path $privateRoot 'report.json') "
         "($report | ConvertTo-Json -Depth 12); "
         "Write-Utf8NoBomLines -LiteralPath (Join-Path $privateRoot 'summary.md') "
@@ -504,3 +508,8 @@ def test_shareable_artifacts_redact_sensitive_values(tmp_path: Path) -> None:
     shareable_report = read_json(shareable_dir / "report.json")
     assert shareable_report["idn"] == "<redacted-idn>"
     assert shareable_report["redaction_applied"] is True
+    assert shareable_report["artifact_paths"] == {
+        "report": "shareable/report.json",
+        "summary": "shareable/summary.md",
+        "missing": "<private-local-path>",
+    }

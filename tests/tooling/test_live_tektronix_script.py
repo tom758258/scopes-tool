@@ -721,6 +721,8 @@ def test_private_and_shareable_reports_keep_common_schema(tmp_path: Path) -> Non
     assert private_report["status"] == shared_report["status"] == "passed"
     assert private_report["summary_counts"] == shared_report["summary_counts"]
     assert shared_report["resource"] == "<redacted-resource>"
+    assert shared_report["artifact_paths"]["report"] == "shareable/report.json"
+    assert shared_report["artifact_paths"]["summary"] == "shareable/summary.md"
     assert "USB0::FAKE::INSTR" not in shareable_path.read_text(encoding="utf-8")
 
 
