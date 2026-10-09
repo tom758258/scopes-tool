@@ -4,6 +4,25 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title data-i18n="page.title">Scopes Tool</title>
+    <script>
+      (() => {
+        let preference = "system";
+        try {
+          const prefix = "scopes-tool.webui.theme=";
+          const saved = document.cookie
+            .split(";")
+            .map((part) => part.trim())
+            .find((part) => part.startsWith(prefix))
+            ?.slice(prefix.length);
+          if (["system", "light", "dark"].includes(saved)) preference = saved;
+        } catch (_error) {}
+        let dark = preference === "dark";
+        if (preference === "system") {
+          try { dark = matchMedia("(prefers-color-scheme: dark)").matches; } catch (_error) {}
+        }
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      })();
+    </script>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
@@ -14,7 +33,24 @@
           <p class="brand-subtitle"><span data-i18n="page.unofficial_tool">Unofficial Tool</span> <span id="webui-version">v—</span></p>
         </div>
         <div class="page-head-actions">
-          <button id="locale-toggle" class="secondary locale-toggle" type="button" lang="zh-TW" aria-label="Switch language to Traditional Chinese">繁體中文</button>
+          <div class="page-head-setting">
+            <span class="page-head-setting-label" data-i18n="page.appearance">Appearance</span>
+            <button id="theme-toggle" class="secondary theme-toggle" type="button" title="Switch theme to Light" aria-label="Switch theme to Light" data-i18n-title="accessibility.switch_theme_to_light" data-i18n-aria-label="accessibility.switch_theme_to_light">
+              <span class="theme-toggle-icon" aria-hidden="true">◐</span>
+              <span id="theme-toggle-label" data-i18n="theme.system">System</span>
+            </button>
+          </div>
+          <div class="page-head-setting">
+            <span class="page-head-setting-label" data-i18n="page.language">Language</span>
+            <button id="locale-toggle" class="secondary locale-toggle" type="button" title="Switch language to Traditional Chinese" aria-label="Switch language to Traditional Chinese">
+              <svg class="locale-toggle-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                <path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z" fill="none" stroke="currentColor" stroke-width="1.5"></path>
+              </svg>
+              <span id="locale-toggle-label" lang="en">English</span>
+            </button>
+          </div>
+          <button id="help-button" class="secondary help-button" type="button" data-i18n="page.help" disabled>Help</button>
         </div>
       </div>
 
@@ -29,6 +65,24 @@
             <p id="device-status" class="visually-hidden" aria-live="polite" data-i18n="device.ready">Ready</p>
           </div>
           <div class="device-resource-actions">
+            <div class="supported-devices">
+              <button id="supported-devices-toggle" class="secondary supported-devices-button" type="button" data-i18n="supported_devices.heading" data-i18n-title="supported_devices.heading" data-i18n-aria-label="supported_devices.heading" title="Supported devices" aria-label="Supported devices" aria-controls="supported-devices-panel" aria-expanded="false">Supported devices</button>
+              <div id="supported-devices-panel" class="device-options-panel supported-devices-panel" role="dialog" aria-labelledby="supported-devices-heading" hidden>
+                <h2 id="supported-devices-heading" data-i18n="supported_devices.heading">Supported devices</h2>
+                <p class="compact-note" data-i18n="supported_devices.description">Devices and connections available for supported use.</p>
+                <p id="supported-devices-status" class="compact-note" aria-live="polite" hidden></p>
+                <div class="supported-devices-table-wrap">
+                  <table class="supported-devices-table">
+                    <thead><tr>
+                      <th scope="col" data-i18n="supported_devices.vendor">Vendor</th>
+                      <th scope="col" data-i18n="supported_devices.model">Model</th>
+                      <th scope="col" data-i18n="supported_devices.connections">Connections</th>
+                    </tr></thead>
+                    <tbody id="supported-devices-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
             <div class="device-options">
               <button id="settings-button" class="secondary icon-button utility-icon-button device-options-button" type="button" data-i18n-title="device.settings" data-i18n-aria-label="device.settings" title="Settings" aria-label="Settings" aria-controls="settings-panel" aria-expanded="false">&#9881;</button>
               <div id="settings-panel" class="device-options-panel" role="dialog" data-i18n-aria-label="device.settings" aria-label="Settings" aria-labelledby="settings-heading" hidden>

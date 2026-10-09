@@ -21,6 +21,7 @@ from .desktop import (
     select_directory_with_dialog,
 )
 from .jobs import JobManagerShuttingDown, job_manager
+from .supported_devices import supported_devices_payload
 
 
 PACKAGE_NAME = "scopes-tool-webui"
@@ -76,6 +77,11 @@ async def commands(include_hidden: bool = False) -> list[dict[str, Any]]:
 @app.get("/api/models")
 async def models() -> list[dict[str, str]]:
     return model_catalog()
+
+
+@app.get("/api/supported-devices")
+async def supported_devices() -> list[dict[str, str | list[str]]]:
+    return supported_devices_payload()
 
 
 @app.post("/api/sequence/validate")

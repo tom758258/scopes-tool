@@ -1,4 +1,5 @@
 const COLORS = ["#1769aa", "#c44d00", "#2e7d32", "#7b1fa2"];
+const DARK_COLORS = ["#8bbcf5", "#ffad70", "#68d391", "#ce93d8"];
 const INSET = 8;
 const BLOCK_SIZE = 64;
 const summaries = new WeakMap();
@@ -136,11 +137,14 @@ export class MonitorChart {
       this.resizeObserver = new ResizeObserver(() => this.requestDraw());
       this.resizeObserver.observe(canvas);
     }
+    this.onThemeChange = () => this.requestDraw();
+    canvas.ownerDocument?.addEventListener("themechange", this.onThemeChange);
     this.requestDraw();
   }
 
   dispose() {
     this.resizeObserver?.disconnect();
+    this.canvas.ownerDocument?.removeEventListener("themechange", this.onThemeChange);
     this.canvas.removeEventListener?.("mousemove", this.onMove);
     this.canvas.removeEventListener?.("mouseleave", this.onLeave);
     if (this.frame !== undefined && typeof cancelAnimationFrame === "function") {
@@ -179,9 +183,10 @@ export class MonitorChart {
       this.hideHover();
       return;
     }
+    const colors = this.canvas.ownerDocument?.documentElement.dataset.theme === "dark" ? DARK_COLORS : COLORS;
     let colorIndex = 0;
     for (const segments of projection.channels.values()) {
-      context.strokeStyle = COLORS[colorIndex++ % COLORS.length];
+      context.strokeStyle = colors[colorIndex++ % colors.length];
       for (const segment of segments) {
         context.beginPath();
         segment.forEach(([x, y], index) => {

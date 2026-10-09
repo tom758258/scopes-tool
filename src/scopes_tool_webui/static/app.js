@@ -12,6 +12,8 @@ import {
   workspaceContextForCompletedJob,
   workspaceContextKey,
 } from "/static/execution-context.js";
+import { initializeThemeUi } from "/static/theme_ui.js";
+import { initializeSupportedDevices } from "/static/supported-devices.js";
 import { initializeI18n, locale, setLocale, translate, translateJobStatus } from "/static/i18n.js";
 import { requestCancel, runJob } from "/static/jobs.js";
 import { liveStateText, renderInstrumentSummary } from "/static/live-data.js";
@@ -173,6 +175,22 @@ let updateBasicAvailability = () => {};
 let pcOutputSelectionStatus = null;
 let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false, updatedAt: null };
 let previousEditorKind = null;
+
+const themeUi = initializeThemeUi({
+  button: document.querySelector("#theme-toggle"),
+  label: document.querySelector("#theme-toggle-label"),
+  documentElement: document.documentElement,
+  cookieDocument: document,
+  mediaQuery: window.matchMedia("(prefers-color-scheme: dark)"),
+});
+initializeSupportedDevices({
+  button: document.querySelector("#supported-devices-toggle"),
+  panel: document.querySelector("#supported-devices-panel"),
+  body: document.querySelector("#supported-devices-body"),
+  status: document.querySelector("#supported-devices-status"),
+  settings: elements.settings,
+  onOpen: () => deviceResource?.setSettingsExpanded(false),
+});
 
 initializeI18n();
 renderLocaleToggle();
@@ -752,6 +770,7 @@ async function updateHealth() {
 document.addEventListener("localechange", () => {
   const commandDraft = commandForm?.draft();
   renderLocaleToggle();
+  themeUi.refresh();
   renderVersion();
   renderLiveData();
   renderCollapseLabels();
@@ -1172,10 +1191,12 @@ function renderCurrentResult() {
 
 function renderLocaleToggle() {
   const nextLocale = locale() === "en" ? "zh-TW" : "en";
-  const label = nextLocale === "zh-TW" ? "locale.toChinese" : "locale.toEnglish";
-  elements.localeToggle.textContent = translate(label);
-  elements.localeToggle.lang = nextLocale === "zh-TW" ? "zh-TW" : "en";
+  const label = nextLocale === "zh-TW" ? "accessibility.switch_language_to_zh_tw" : "accessibility.switch_language_to_en";
+  const currentLabel = document.querySelector("#locale-toggle-label");
+  currentLabel.textContent = translate(locale() === "en" ? "locale.display_en" : "locale.display_zh_tw");
+  currentLabel.lang = locale() === "en" ? "en" : "zh-TW";
   elements.localeToggle.setAttribute("aria-label", translate(label));
+  elements.localeToggle.title = translate(label);
 }
 
 function renderVersion() {
