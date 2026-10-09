@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import textwrap
@@ -117,10 +118,17 @@ WORKFLOW_EDITOR_HARNESS = r'''
         this.className = "";
         this.textContent = "";
         this.customValidity = "";
-        const classes = new Set();
         this.classList = {
-          add: (...names) => names.forEach((name) => classes.add(name)),
-          contains: (name) => classes.has(name),
+          add: (...names) => {
+            this.className = [...new Set([...this.className.split(/\s+/).filter(Boolean), ...names])].join(" ");
+          },
+          contains: (name) => this.className.split(/\s+/).includes(name),
+          toggle: (name, force) => {
+            const values = new Set(this.className.split(/\s+/).filter(Boolean));
+            if (force) values.add(name);
+            else values.delete(name);
+            this.className = [...values].join(" ");
+          },
         };
       }
       addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
@@ -155,7 +163,8 @@ WORKFLOW_EDITOR_HARNESS = r'''
         }
         return true;
       }
-      reportValidity() {}
+      reportValidity() { this.validityReported = true; }
+      scrollIntoView(options) { this.scrollOptions = options; }
       querySelectorAll(selector) {
         const tags = new Set(selector.split(",").map((value) => value.trim().toUpperCase()));
         const found = [];
@@ -247,12 +256,174 @@ def run_editor_behavior(script: str) -> None:
             str(EDITOR_SOURCE),
             str(NUMERIC_INPUT_SOURCE),
             str(MONITOR_CHART_SOURCE),
+            str(STATIC_ROOT / "locale_en.js"),
+            str(STATIC_ROOT / "locale_zh_tw.js"),
         ],
         capture_output=True,
         text=True,
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.parametrize("command_id", [
+    "capture-batch", "capture-until", "capture-monitor", "triggered-capture-series",
+    "measure-log", "triggered-measure-loop",
+])
+def test_workflow_empty_choices_show_feedback_and_recover(command_id: str) -> None:
+    definition = next(entry for entry in command_catalog() if entry["id"] == command_id)
+    run_editor_behavior(
+        f"definitions.splice(0, definitions.length, {json.dumps(definition)});\n"
+        f"env.selectedId = {json.dumps(command_id)};\n"
+        r'''
+        const loadLocale = async (path) => import(
+          `data:text/javascript;charset=utf-8,${encodeURIComponent(fs.readFileSync(path, "utf8"))}`,
+        );
+        const { en } = await loadLocale(process.argv[4]);
+        const { zhTW } = await loadLocale(process.argv[5]);
+        const isMeasurement = ["measure-log", "triggered-measure-loop"].includes(env.selectedId);
+        const field = isMeasurement ? "items" : "channels";
+        const messageKey = isMeasurement
+          ? "workflow.editor.measurementRequired" : "workflow.editor.channelRequired";
+        assert.equal(en[messageKey], isMeasurement
+          ? "Select at least one measurement." : "Select at least one channel.");
+        assert.equal(zhTW[messageKey], isMeasurement
+          ? "請至少選擇一個量測項目。" : "請至少選擇一個通道。");
+        const visibleErrors = () => editor.container.querySelectorAll("small").filter(
+          (node) => node.role === "alert" && !node.hidden,
+        );
+        const editor = buildEditor();
+        editor.present();
+        assert.equal(visibleErrors().length, 0);
+        for (const name of ["channels", "items"]) {
+          const field = definitions[0].fields.find((entry) => entry.name === name);
+          if (field) assert.deepEqual(editor.checkedValues(name), (field.default || []).map(String));
+        }
+        editor.controls.count.value = "3";
+        editor.controls.interval_seconds.value = "0.25";
+        if (editor.controls.trigger_timeout_seconds) editor.controls.trigger_timeout_seconds.value = "4.5";
+        if (editor.controls.threshold) editor.controls.threshold.value = "1.5";
+        if (editor.controls.timeout_seconds) editor.controls.timeout_seconds.value = "10";
+        for (const name of ["channels", ...(isMeasurement ? ["items"] : [])]) {
+          for (const input of editor.controls[name]) {
+            input.checked = false;
+            input.dispatch("change");
+          }
+        }
+        assert.equal(visibleErrors().length, 0, "unchecking alone must not show an error");
+        for (const dictionary of [en, zhTW]) {
+          globalThis.translate = (key) => dictionary[key] || key;
+          editor.rerender();
+          await settle();
+          assert.equal(visibleErrors().length, 0, "rerender must discard old feedback");
+          assert.equal(editor.controls.count.value, "3");
+          assert.equal(editor.controls.interval_seconds.value, "0.25");
+          const section = editor.container.querySelectorAll("section").find(
+            (node) => node.querySelectorAll("input").includes(editor.controls[field][0]),
+          );
+          const originalStyle = section.className;
+          assert.equal(editor.runButton.disabled, false);
+          editor.runButton.dispatch("click");
+          await settle();
+          assert.equal(submissions.length, 0);
+          assert.equal(visibleErrors().length, 1);
+          const error = visibleErrors()[0];
+          assert.equal(error.parentNode, section);
+          assert.equal(error.textContent, dictionary[messageKey]);
+          assert.notEqual(section.className, originalStyle);
+          assert.ok(section.scrollOptions, "invalid section must be scrolled into view");
+          const choices = editor.controls[field][0].parentNode.parentNode;
+          assert.ok(section.children.indexOf(error) > section.children.indexOf(choices));
+        }
+        const section = visibleErrors()[0].parentNode;
+        const errorStyle = section.className;
+        editor.controls[field][0].checked = true;
+        editor.controls[field][0].dispatch("change");
+        assert.equal(visibleErrors().length, 0, "correction must immediately clear feedback");
+        assert.notEqual(section.className, errorStyle);
+        editor.controls[field][1].checked = true;
+        editor.controls[field][1].dispatch("change");
+        const expected = { count: 3, interval_seconds: 0.25 };
+        if (isMeasurement) {
+          Object.assign(expected, { items: "vpp,frequency", pair_items: "phase,delay", save_results: true });
+          if (env.selectedId === "measure-log") {
+            expected.pair_items = "phase";
+            expected.stop_on_error = false;
+          } else expected.trigger_timeout_seconds = 4.5;
+          assert.deepEqual(editor.checkedValues("channels"), []);
+        } else {
+          Object.assign(expected, { channels: "1,2", points: 1000, format: "byte" });
+          if (env.selectedId === "capture-until") Object.assign(expected, {
+            condition_channel: 1, metric: "max", operator: "gt", threshold: 1.5, timeout_seconds: 10,
+          });
+          if (env.selectedId === "capture-monitor") Object.assign(expected, {
+            retention_points: 250000, save_results: true,
+          });
+          if (env.selectedId === "triggered-capture-series") expected.trigger_timeout_seconds = 4.5;
+        }
+        editor.runButton.dispatch("click");
+        await settle();
+        assert.deepEqual(submissions, [{ command: env.selectedId, parameters: expected, options: { intent: "command" } }]);
+        assert.equal(editor.controls.count.value, "3");
+        ''',
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+def test_workflow_choice_feedback_is_cleared_on_command_switch_and_busy_is_preserved() -> None:
+    run_editor_behavior(
+        r'''
+        const editor = buildEditor();
+        editor.present();
+        for (const input of editor.controls.items) input.checked = false;
+        await editor.submit();
+        assert.equal(editor.controls.count.validityReported, true, "missing run limits must still report validity");
+        assert.equal(editor.controls.count.customValidity, "workflow.editor.limitRequired");
+        assert.ok(editor.container.querySelectorAll("small").every((node) => node.role !== "alert" || node.hidden));
+        editor.controls.count.value = "7";
+        await editor.submit();
+        const error = editor.container.querySelectorAll("small").find((node) => node.role === "alert" && !node.hidden);
+        assert.ok(error);
+        env.selectedId = "triggered-measure-loop";
+        editor.present();
+        assert.ok(editor.container.querySelectorAll("small").every((node) => node.role !== "alert" || node.hidden));
+        env.selectedId = "measure-log";
+        editor.present();
+        assert.equal(editor.controls.count.value, "7");
+        assert.deepEqual(editor.checkedValues("items"), []);
+        assert.ok(editor.container.querySelectorAll("small").every((node) => node.role !== "alert" || node.hidden));
+        env.selectedId = "other-editor";
+        editor.present();
+        assert.equal(editor.container.children.length, 0);
+        env.selectedId = "measure-log";
+        editor.present();
+        assert.ok(editor.container.querySelectorAll("small").every((node) => node.role !== "alert" || node.hidden));
+
+        env.executionBusy = true;
+        editor.present();
+        await editor.submit();
+        assert.equal(editor.runButton.disabled, true);
+        assert.ok(editor.container.querySelectorAll("small").every((node) => node.role !== "alert" || node.hidden));
+        assert.equal(submissions.length, 0);
+        env.executionBusy = false;
+        editor.controls.items[0].checked = true;
+        editor.controls.items[0].dispatch("change");
+        let complete;
+        hooks.executeCommand = (command, parameters, options) => {
+          submissions.push({ command, parameters, options });
+          return new Promise((resolve) => { complete = resolve; });
+        };
+        const pending = editor.submit();
+        assert.equal(editor.runButton.disabled, true);
+        assert.ok(editor.container.querySelectorAll("input, select, button").every((control) => control.disabled));
+        await editor.submit();
+        assert.equal(submissions.length, 1, "pending submission must not be duplicated");
+        complete({ status: "completed" });
+        await pending;
+        assert.equal(editor.runButton.disabled, false);
+        ''',
+    )
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
@@ -412,6 +583,7 @@ def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once
           editor.controls.trigger_timeout_seconds.customValidity,
           "form.greaterThan",
         );
+        assert.equal(editor.controls.trigger_timeout_seconds.validityReported, true);
 
         editor.controls.trigger_timeout_seconds.value = "4.5";
         await editor.submit();

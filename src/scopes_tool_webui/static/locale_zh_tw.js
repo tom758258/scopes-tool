@@ -1995,6 +1995,8 @@ export const zhTW = {
   "workflow.editor.description": "設定本機工作流程輸入，接著執行一個前景工作並檢視結果。",
   "workflow.editor.channels": "類比通道",
   "workflow.editor.measurements": "量測項目",
+  "workflow.editor.channelRequired": "請至少選擇一個通道。",
+  "workflow.editor.measurementRequired": "請至少選擇一個量測項目。",
   "workflow.editor.pairs": "通道配對（選用）",
   "workflow.editor.pairMeasurements": "配對量測項目",
   "workflow.editor.runLimits": "執行限制",

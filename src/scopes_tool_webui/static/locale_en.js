@@ -1995,6 +1995,8 @@ export const en = {
   "workflow.editor.description": "Configure local workflow inputs, then run one foreground job and review its result.",
   "workflow.editor.channels": "Analog channels",
   "workflow.editor.measurements": "Measurements",
+  "workflow.editor.channelRequired": "Select at least one channel.",
+  "workflow.editor.measurementRequired": "Select at least one measurement.",
   "workflow.editor.pairs": "Channel pairs (optional)",
   "workflow.editor.pairMeasurements": "Pair measurements",
   "workflow.editor.runLimits": "Run limits",

@@ -36,6 +36,7 @@ export class WorkflowEditor {
     this.renderedKey = null;
     this.drafts = new Map();
     this.controls = {};
+    this.choiceSections = {};
     this.pairRows = [];
     this.buildHeaderAction();
   }
@@ -106,6 +107,7 @@ export class WorkflowEditor {
       this.captureDraft();
       this.renderedKey = null;
       this.controls = {};
+      this.choiceSections = {};
       this.pairRows = [];
       this.container.replaceChildren();
       this.applyBusyState();
@@ -132,6 +134,7 @@ export class WorkflowEditor {
     );
     this.drafts.set(key, draft);
     this.controls = {};
+    this.choiceSections = {};
     this.pairRows = [];
     this.container.replaceChildren();
 
@@ -286,6 +289,7 @@ export class WorkflowEditor {
       this.controls[name].push(input);
       input.addEventListener("change", () => {
         this.captureDraft();
+        if (this.checkedValues(name).length) this.setChoiceError(name, "");
         if (name === "pair_items") {
           this.controls.pair_items?.[0]?.setCustomValidity?.("");
           this.applyBusyState();
@@ -293,8 +297,31 @@ export class WorkflowEditor {
       });
     }
     section.append(choices);
+    if (["channels", "items"].includes(name)) {
+      const error = document.createElement("small");
+      error.className = "error-summary workflow-editor-choice-error";
+      error.setAttribute("role", "alert");
+      error.hidden = true;
+      section.append(error);
+      this.choiceSections[name] = { section, error };
+    }
     this.appendFieldHelp(section, field);
     return section;
+  }
+
+  setChoiceError(name, message) {
+    const entry = this.choiceSections[name];
+    if (!entry) return;
+    entry.error.textContent = message;
+    entry.error.hidden = !message;
+    entry.section.classList.toggle("workflow-editor-section-invalid", Boolean(message));
+  }
+
+  validateChoices(name, messageKey) {
+    const valid = this.checkedValues(name).length > 0;
+    this.setChoiceError(name, valid ? "" : translate(messageKey));
+    if (!valid) this.choiceSections[name].section.scrollIntoView({ block: "center" });
+    return valid;
   }
 
   buildPairsSection(channels, pairs, field = null) {
@@ -716,7 +743,7 @@ export class WorkflowEditor {
         return null;
       }
     }
-    if (!draft.items.length) return null;
+    if (!this.validateChoices("items", "workflow.editor.measurementRequired")) return null;
     const pairItemControl = this.controls.pair_items?.[0];
     pairItemControl?.setCustomValidity?.("");
     if (draft.pairs.length && !draft.pair_items.length) {
@@ -764,7 +791,7 @@ export class WorkflowEditor {
   }
 
   waveformWorkflowValues(definition, draft) {
-    if (!draft.channels.length) return null;
+    if (!this.validateChoices("channels", "workflow.editor.channelRequired")) return null;
     const numberNames = definition.id === "capture-until"
       ? ["threshold", "count", "timeout_seconds", "interval_seconds"]
       : definition.id === "capture-batch"

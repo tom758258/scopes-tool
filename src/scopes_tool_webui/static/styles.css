@@ -440,6 +440,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: var(--shado
 .workflow-editor-section:first-child { padding-top: 0; border-top: 0; }
 .workflow-editor-heading { font-size: 13px; font-weight: 700; }
 .workflow-editor-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.workflow-editor-section-invalid .workflow-editor-choices { outline: 1px solid var(--danger); outline-offset: 3px; }
+.workflow-editor-choice-error { margin: 0; }
 .workflow-editor-pairs { display: grid; gap: 8px; }
 .workflow-editor-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 8px; }
 .workflow-editor-pair .field { min-width: 0; }
