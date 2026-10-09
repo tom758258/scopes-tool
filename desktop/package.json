@@ -1,0 +1,14 @@
+{
+  "name": "scopes-tool-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "productName": "Scopes Tool",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.cjs"
+  },
+  "devDependencies": {
+    "electron": "43.3.0"
+  }
+}

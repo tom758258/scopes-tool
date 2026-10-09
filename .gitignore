@@ -56,3 +56,6 @@ data/
 
 # Local/private project notes
 Local/
+
+# Electron dependencies
+desktop/node_modules/

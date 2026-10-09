@@ -190,6 +190,23 @@ See the [CLI README](docs/cli/README.md) for detailed CLI behavior and the
 [WebUI README](docs/webui/README.md) for Device / Resource, port, command,
 language, job, and artifact behavior.
 
+## Electron Desktop
+
+The source-mode Electron Desktop loads the existing FastAPI WebUI through the
+private Python Desktop Host. It requires Node.js 22.12 or newer and the configured
+Scopes Python `.venv` described above. No real instrument is needed to start it.
+From the repository root:
+
+```powershell
+Set-Location .\desktop
+npm ci
+npm start
+```
+
+The window supports System, Light, and Dark themes and waits for Host cleanup
+before exiting. This setup covers source development only; Windows packaging
+is outside its scope.
+
 ## Build
 
 Build the wheel and source distribution with the `build` package included in
