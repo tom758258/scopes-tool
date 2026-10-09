@@ -338,33 +338,52 @@ def test_workflow_empty_choices_show_feedback_and_recover(command_id: str) -> No
         }
         const section = visibleErrors()[0].parentNode;
         const errorStyle = section.className;
-        editor.controls[field][0].checked = true;
-        editor.controls[field][0].dispatch("change");
-        assert.equal(visibleErrors().length, 0, "correction must immediately clear feedback");
-        assert.notEqual(section.className, errorStyle);
-        editor.controls[field][1].checked = true;
-        editor.controls[field][1].dispatch("change");
         const expected = { count: 3, interval_seconds: 0.25 };
         if (isMeasurement) {
-          Object.assign(expected, { items: "vpp,frequency", pair_items: "phase,delay", save_results: true });
+          Object.assign(expected, { pair_items: "phase,delay", save_results: true });
           if (env.selectedId === "measure-log") {
             expected.pair_items = "phase";
             expected.stop_on_error = false;
           } else expected.trigger_timeout_seconds = 4.5;
           assert.deepEqual(editor.checkedValues("channels"), []);
         } else {
-          Object.assign(expected, { channels: "1,2", points: 1000, format: "byte" });
+          Object.assign(expected, { points: 1000, format: "byte" });
           if (env.selectedId === "capture-until") Object.assign(expected, {
-            condition_channel: 1, metric: "max", operator: "gt", threshold: 1.5, timeout_seconds: 10,
+            metric: "max", operator: "gt", threshold: 1.5, timeout_seconds: 10,
           });
           if (env.selectedId === "capture-monitor") Object.assign(expected, {
             retention_points: 250000, save_results: true,
           });
           if (env.selectedId === "triggered-capture-series") expected.trigger_timeout_seconds = 4.5;
         }
-        editor.runButton.dispatch("click");
-        await settle();
-        assert.deepEqual(submissions, [{ command: env.selectedId, parameters: expected, options: { intent: "command" } }]);
+        const selections = isMeasurement
+          ? [["frequency"], ["vpp"]] : [["3"], ["2", "4"]];
+        const expectedCsv = isMeasurement ? ["frequency", "vpp"] : ["3", "2,4"];
+        for (const [index, selected] of selections.entries()) {
+          for (const input of editor.controls[field]) {
+            input.checked = false;
+            input.dispatch("change");
+          }
+          for (const value of selected) {
+            const input = editor.controls[field].find((input) => input.value === value);
+            assert.ok(input, "selection must exist in the catalog");
+            input.checked = true;
+            input.dispatch("change");
+            assert.equal(visibleErrors().length, 0, "correction must immediately clear feedback");
+            assert.notEqual(section.className, errorStyle);
+          }
+          if (env.selectedId === "capture-until") expected.condition_channel = [3, 2][index];
+          editor.runButton.dispatch("click");
+          await settle();
+          assert.equal(submissions.length, index + 1);
+          assert.deepEqual(submissions[index], {
+            command: env.selectedId,
+            parameters: { ...expected, [field]: expectedCsv[index] },
+            options: { intent: "command" },
+          });
+          if (isMeasurement) assert.equal(Object.hasOwn(submissions[index].parameters, "channels"), false);
+        }
+        assert.notEqual(submissions[0].parameters[field], submissions[1].parameters[field]);
         assert.equal(editor.controls.count.value, "3");
         ''',
     )
