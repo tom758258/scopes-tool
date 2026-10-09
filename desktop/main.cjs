@@ -243,6 +243,12 @@ function handleBackendEvent(event) {
 }
 
 function backendCommand() {
+  if (app.isPackaged) {
+    return {
+      command: path.join(path.dirname(process.execPath), "scopes-tool-webui-host.exe"),
+      args: [],
+    };
+  }
   const repositoryRoot = path.resolve(__dirname, "..");
 
   const hostSource = path.join(

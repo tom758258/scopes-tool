@@ -37,6 +37,7 @@ async function desktop(options = {}) {
     return saved === undefined ? [] : [{ value: saved }];
   };
   const app = new EventEmitter();
+  app.isPackaged = options.packaged || false;
   app.whenReady = () => options.appReady || Promise.resolve();
   app.quit = () => {
     const event = { prevented: false, preventDefault() { this.prevented = true; } };
@@ -106,12 +107,15 @@ async function desktop(options = {}) {
     session: options.sessionError ? {} : { defaultSession: { cookies } },
   };
   const context = vm.createContext({
-    __dirname: path.dirname(mainPath), URL, Set,
-    process: { stderr: new PassThrough() },
+    __dirname: options.dirname || path.dirname(mainPath), URL, Set,
+    process: { stderr: new PassThrough(), execPath: options.execPath },
     require(name) {
       if (name === "electron") return electron;
       if (name === "node:child_process") return { spawn };
-      if (name === "node:fs") return { existsSync: (file) => options.missing !== path.basename(file) };
+      if (name === "node:fs") return { existsSync: (file) => {
+        if (options.packaged) assert.equal(file, path.join(path.dirname(options.execPath), "scopes-tool-webui-host.exe"));
+        return options.missing !== path.basename(file);
+      } };
       return require(name);
     },
   });
@@ -146,7 +150,11 @@ test("Desktop metadata and lock match the Python distribution and source entry p
   assert.equal(metadata.productName, "Scopes Tool");
   assert.equal(metadata.version, version);
   assert.equal(metadata.main, "main.cjs");
-  assert.deepEqual(metadata.scripts, { start: "electron .", check: "node --check main.cjs" });
+  assert.equal(metadata.scripts.start, "electron .");
+  assert.equal(metadata.scripts.check, "node --check main.cjs");
+  assert.equal(metadata.scripts["dist:win"], "electron-builder --dir --win --x64");
+  assert.deepEqual(metadata.build.files, ["main.cjs", "assets/scopes-icon.ico"]);
+  assert.equal(metadata.build.win.icon, "assets/scopes-icon.ico");
   assert.equal(lock.name, metadata.name);
   assert.equal(lock.version, version);
   assert.equal(lock.packages[""].version, version);
@@ -166,6 +174,36 @@ test("Host uses the repository venv, module, hidden process and separate pipes",
   h.children[0].stderr.write(JSON.stringify({ event: "ready", url: readyUrl }) + "\n");
   await flush();
   assert.equal(h.windows.length, 0);
+});
+
+test("Packaged Host uses the executable directory without repository files", async () => {
+  const directory = path.join(root, ".tmp_tests", "outside-source");
+  const h = await ready({
+    packaged: true,
+    execPath: path.join(directory, "Scopes Tool.exe"),
+    dirname: path.join(directory, "resources", "app.asar"),
+  });
+  assert.equal(h.launches[0].command, path.join(directory, "scopes-tool-webui-host.exe"));
+  assert.deepEqual(h.launches[0].args, []);
+  assert.equal(h.launches[0].config.cwd, undefined);
+  assert.equal(h.windows[0].shown, true);
+  assert.equal(h.windows[0].options.icon, path.join(directory, "resources/app.asar/assets/scopes-icon.ico"));
+  h.windows[0].close();
+  assert.deepEqual(h.writes, ['{"command":"shutdown"}\n']);
+  h.exit();
+  assert.equal(h.errors.length, 0);
+  assert.ok(h.order.includes("app.quit"));
+});
+
+test("Missing packaged Host reports its path and exits before spawning", async () => {
+  const execPath = path.join(root, ".tmp_tests", "Scopes Tool.exe");
+  const h = await desktop({ packaged: true, execPath, missing: "scopes-tool-webui-host.exe" });
+  assert.equal(h.launches.length, 0);
+  assert.equal(h.windows.length, 0);
+  assert.equal(h.errors.length, 1);
+  assert.ok(h.errors[0].message.includes(path.dirname(execPath)));
+  assert.match(h.errors[0].message, /Desktop backend executable not found/);
+  assert.ok(h.order.includes("app.quit"));
 });
 
 test("Only one complete JSONL ready creates a window using the supplied URL", async () => {
