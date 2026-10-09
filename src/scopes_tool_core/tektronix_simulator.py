@@ -46,7 +46,9 @@ class TektronixSimulatorBackend(SimulatorBackend):
             "SELECT:MATH": "OFF", "MATH:DEFINE": '"CH1+CH2"',
             "DISPLAY:PERSISTENCE": "0", "DISPLAY:PERSISTENCE:STATE": "OFF", "DISPLAY:PERSISTENCE:VALUE": "1",
             "SAVE:IMAGE:FILEFORMAT": "PNG", "SAVE:WAVEFORM:FILEFORMAT": "SPREADSheet",
-            "HORIZONTAL:DELAY:MODE": "OFF", "HORIZONTAL:DELAY:TIME": "0",
+            "HORIZONTAL:DELAY:MODE": (
+                "ON" if self._capabilities.series == "TBS2000" else "OFF"
+            ), "HORIZONTAL:DELAY:TIME": "0",
             "HORIZONTAL:POSITION": "50",
             "TRIGGER:A:PULSE:CLASS": "WIDTH", "TRIGGER:A:RUNT:SOURCE": "CH1",
             "TRIGGER:A:RUNT:POLARITY": "POSITIVE", "TRIGGER:A:RUNT:WHEN": "OCCURS", "TRIGGER:A:RUNT:WIDTH": "1e-6",

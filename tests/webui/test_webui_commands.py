@@ -1247,6 +1247,25 @@ def test_live_data_snapshot_is_hidden_and_runs_through_simulated_jobs() -> None:
     assert rejected.status_code == 400
 
 
+def test_tbs2074_live_data_snapshot_runs_with_simulator_defaults() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/jobs",
+        json={
+            "command": "live-data-snapshot",
+            "mode": "simulate",
+            "model_id": "tektronix-tbs2074",
+            "parameters": {},
+        },
+    )
+    assert response.status_code == 202
+    job = wait_for_job(client, response.json()["job_id"])
+
+    assert job["status"] == "completed"
+    summary = job["result"]["result"]["live_data"]
+    assert summary["timebase"]["position"] == pytest.approx(0.0)
+
+
 def test_tek_presentation_only_support_inherits_underlying_operations() -> None:
     commands = {entry["id"]: entry for entry in TestClient(app).get("/api/commands").json()}
     model = "tektronix-tbs2074"

@@ -40,14 +40,8 @@ def test_tek_simulator_representative_roundtrips():
     with simulated_scope("tektronix-tbs2074") as scope:
         scope.set_channel_label(1, "Input")
         assert scope.query_channel_label(1) == "Input"
-        assert scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] == "OFF"
-        with pytest.raises(OscilloscopeError, match="requires Horizontal Delay Mode ON"):
-            scope.query_timebase_position()
-        with pytest.raises(OscilloscopeError, match="requires Horizontal Delay Mode ON"):
-            scope.set_timebase_position(0.103)
-        assert scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] == "OFF"
-        assert scope.backend.tek_settings["HORIZONTAL:POSITION"] == "50"
-        scope.backend.write("HORizontal:MAIn:DELay:MODe ON")
+        assert scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] == "ON"
+        assert scope.query_timebase_position() == pytest.approx(0.0)
         scope.set_timebase_position(0.003)
         assert scope.query_timebase_position() == pytest.approx(0.003)
         assert scope.backend.tek_settings["HORIZONTAL:DELAY:TIME"] == "0.003"
@@ -56,9 +50,11 @@ def test_tek_simulator_representative_roundtrips():
         scope.configure_trigger_edge_level(source_channel=1, level_volts=0.25)
         assert scope.query_trigger_edge_level(source_channel=1).level_volts == pytest.approx(0.25)
     with simulated_scope("tektronix-tds2024b") as scope:
+        assert scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] == "OFF"
         scope.set_timebase_position(0.002)
         assert scope.query_timebase_position() == pytest.approx(0.002)
     with simulated_scope("tektronix-tbs1052b") as scope:
+        assert scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] == "OFF"
         scope.set_timebase_position(0.002)
         assert scope.query_timebase_position() == pytest.approx(0.002)
         scope.set_channel_scale(2, 0.5)
