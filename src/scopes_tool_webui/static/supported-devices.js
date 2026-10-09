@@ -5,10 +5,28 @@ export function initializeSupportedDevices({ button, panel, body, status, settin
   let loaded = false;
   let loading = false;
   let statusKey = null;
+  let devices = [];
 
   const renderStatus = () => {
     status.hidden = !statusKey;
     status.textContent = statusKey ? translate(statusKey) : "";
+  };
+  const renderDevices = () => {
+    body.replaceChildren();
+    devices.forEach((device) => {
+      const row = owner.createElement("tr");
+      const connections = device.connections.map((connection) => {
+        if (connection === "USB") return translate("supported_devices.connection.usb");
+        if (connection === "TCPIP") return translate("supported_devices.connection.tcpip");
+        return connection;
+      }).join(translate("supported_devices.connection_separator"));
+      [device.vendor, device.model, connections].forEach((value) => {
+        const cell = owner.createElement("td");
+        cell.textContent = value;
+        row.append(cell);
+      });
+      body.append(row);
+    });
   };
   const setExpanded = (expanded) => {
     panel.hidden = !expanded;
@@ -22,17 +40,8 @@ export function initializeSupportedDevices({ button, panel, body, status, settin
     try {
       const response = await fetch("/api/supported-devices");
       if (!response.ok) throw new Error("Unable to load supported devices");
-      const devices = await response.json();
-      body.replaceChildren();
-      devices.forEach((device) => {
-        const row = owner.createElement("tr");
-        [device.vendor, device.model, device.connections.join(", ")].forEach((value) => {
-          const cell = owner.createElement("td");
-          cell.textContent = value;
-          row.append(cell);
-        });
-        body.append(row);
-      });
+      devices = await response.json();
+      renderDevices();
       loaded = true;
       statusKey = devices.length ? null : "supported_devices.empty";
     } catch (_error) {
@@ -60,5 +69,8 @@ export function initializeSupportedDevices({ button, panel, body, status, settin
     setExpanded(false);
     button.focus();
   });
-  owner.addEventListener("localechange", renderStatus);
+  owner.addEventListener("localechange", () => {
+    renderStatus();
+    if (loaded) renderDevices();
+  });
 }

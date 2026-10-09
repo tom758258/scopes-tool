@@ -151,9 +151,14 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
         const button = new Node(), panel = new Node(), body = new Node(), status = new Node(), settings = new Node();
         button.ownerDocument = doc; panel.hidden = true;
         let requests = 0, opened = 0, fail = true;
+        const devices = [
+          {vendor: "Keysight", model: "DSOX4024A", connections: ["USB", "TCPIP"]},
+          {vendor: "Keysight", model: "DSOX2004A", connections: ["USB"]},
+        ];
+        const originalDevices = JSON.stringify(devices);
         globalThis.fetch = async (path) => {
           assert.equal(path, "/api/supported-devices"); requests++;
-          return {ok: !fail, json: async () => [{vendor: "Keysight", model: "DSOX4024A", connections: ["USB", "TCPIP"]}]};
+          return {ok: !fail, json: async () => devices};
         };
         initializeSupportedDevices({button, panel, body, status, settings, onOpen: () => opened++});
         const event = {stopPropagation() { this.stopped = true; }};
@@ -168,8 +173,17 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
         assert.equal(panel.hidden, true); assert.equal(button.attributes["aria-expanded"], "false");
         assert.equal(button.focused, true);
         fail = false; button.emit("click", event); await new Promise(setImmediate);
-        assert.deepEqual(body.children[0].children.map((cell) => cell.textContent), ["Keysight", "DSOX4024A", "USB, TCPIP"]);
+        assert.deepEqual(body.children[0].children.map((cell) => cell.textContent), ["Keysight", "DSOX4024A", "USB、LAN / TCPIP"]);
+        assert.equal(body.children[1].children[2].textContent, "USB");
         assert.equal(status.hidden, true);
+        setLocale("en");
+        assert.deepEqual(body.children[0].children.map((cell) => cell.textContent), ["Keysight", "DSOX4024A", "USB, LAN / TCPIP"]);
+        assert.equal(body.children[1].children[2].textContent, "USB");
+        assert.equal(requests, 2);
+        setLocale("zh-TW");
+        assert.equal(body.children[0].children[2].textContent, "USB、LAN / TCPIP");
+        assert.equal(requests, 2);
+        assert.equal(JSON.stringify(devices), originalDevices);
         const inside = {stopPropagation() { this.stopped = true; }};
         panel.emit("click", inside); assert.equal(inside.stopped, true); assert.equal(panel.hidden, false);
         doc.emit("click"); assert.equal(panel.hidden, true);
