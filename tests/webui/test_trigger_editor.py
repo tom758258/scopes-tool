@@ -20,6 +20,133 @@ STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
 TRIGGER_EDITOR_SOURCE = STATIC_ROOT / "trigger-editor.js"
 
 
+EXTERNAL_TRIGGER_FAKE_DOM_HARNESS = r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag = "div") {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.className = "";
+            this.textContent = "";
+            this.type = "";
+            this.value = "";
+            this.inputMode = "";
+            this.style = {};
+            this.attributes = {};
+            this.customValidity = "";
+            this.reported = [];
+            const classList = { toggled: {} };
+            classList.toggle = (name, force) => { classList.toggled[name] = force; };
+            this.classList = classList;
+          }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) {
+            for (const node of nodes) {
+              node.remove();
+              node.parent = this;
+              this.children.push(node);
+            }
+          }
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
+          setAttribute(k, v) { this.attributes[k] = String(v); }
+          setCustomValidity(value) { this.customValidity = String(value); }
+          reportValidity() { this.reported.push(this.customValidity); }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+'''
+
+TRIGGER_DIV_FAKE_DOM_HARNESS = r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+        import path from "node:path";
+
+        class FakeNode {
+          constructor(tag = "div") {
+            this.tagName = tag.toUpperCase();
+            this.children = [];
+            this.dataset = {};
+            this.listeners = {};
+            this.hidden = false;
+            this.disabled = false;
+            this.checked = false;
+            this.className = "";
+            this.textContent = "";
+            this.type = "";
+            this.value = "";
+            this.multiple = false;
+            this.options = [];
+            this.style = {};
+            this.attributes = {};
+          }
+          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
+          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
+          replaceChildren(...nodes) { this.children = [...nodes]; }
+          append(...nodes) {
+            for (const node of nodes) {
+              node.remove();
+              node.parent = this;
+              this.children.push(node);
+              if (node.tagName === "OPTION") this.options.push(node);
+            }
+          }
+          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
+          setAttribute(k, v) { this.attributes[k] = String(v); }
+          querySelector(sel) {
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (!match) return null;
+            const find = (list) => {
+              for (const node of list || []) {
+                if (node.dataset && node.dataset.field === match[1]) return node;
+                const found = find(node.children);
+                if (found) return found;
+              }
+              return null;
+            };
+            return find(this.children);
+          }
+          querySelectorAll(sel) {
+            const out = [];
+            const collect = (list) => {
+              for (const node of list || []) {
+                if (node.dataset && node.dataset.field) out.push(node);
+                collect(node.children);
+              }
+            };
+            collect(this.children);
+            if (sel === "[data-field]") return out;
+            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
+            if (match) return out.filter((node) => node.dataset.field === match[1]);
+            return [];
+          }
+          closest() { return null; }
+          get validity() { return { badInput: false }; }
+          setCustomValidity() {}
+          reportValidity() {}
+          checkValidity() { return true; }
+        }
+        globalThis.Option = class {
+          constructor(text, value) {
+            this.tagName = "OPTION";
+            this.textContent = text;
+            this.value = String(value);
+            this.selected = false;
+            this.children = [];
+            this.dataset = {};
+          }
+          remove() {}
+        };
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+'''
+
+
 def read_static(name: str) -> str:
     return (STATIC_ROOT / name).read_text(encoding="utf-8")
 
@@ -521,47 +648,8 @@ def test_external_trigger_range_level_composite_workspace() -> None:
 
 def test_external_trigger_level_uses_current_range() -> None:
     script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag = "div") {
-            this.tagName = tag.toUpperCase();
-            this.children = [];
-            this.dataset = {};
-            this.listeners = {};
-            this.hidden = false;
-            this.disabled = false;
-            this.className = "";
-            this.textContent = "";
-            this.type = "";
-            this.value = "";
-            this.inputMode = "";
-            this.style = {};
-            this.attributes = {};
-            this.customValidity = "";
-            this.reported = [];
-            const classList = { toggled: {} };
-            classList.toggle = (name, force) => { classList.toggled[name] = force; };
-            this.classList = classList;
-          }
-          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
-          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
-          replaceChildren(...nodes) { this.children = [...nodes]; }
-          append(...nodes) {
-            for (const node of nodes) {
-              node.remove();
-              node.parent = this;
-              this.children.push(node);
-            }
-          }
-          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
-          setAttribute(k, v) { this.attributes[k] = String(v); }
-          setCustomValidity(value) { this.customValidity = String(value); }
-          reportValidity() { this.reported.push(this.customValidity); }
-        }
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        EXTERNAL_TRIGGER_FAKE_DOM_HARNESS
+        + r'''
         // Template shapes mirror the composition contract only, not locale prose.
         const TEMPLATES = {
           "external-trigger.editor.modeRange": "Range",
@@ -867,47 +955,8 @@ def test_external_trigger_level_uses_current_range() -> None:
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_external_trigger_quick_fill() -> None:
     script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag = "div") {
-            this.tagName = tag.toUpperCase();
-            this.children = [];
-            this.dataset = {};
-            this.listeners = {};
-            this.hidden = false;
-            this.disabled = false;
-            this.className = "";
-            this.textContent = "";
-            this.type = "";
-            this.value = "";
-            this.inputMode = "";
-            this.style = {};
-            this.attributes = {};
-            this.customValidity = "";
-            this.reported = [];
-            const classList = { toggled: {} };
-            classList.toggle = (name, force) => { classList.toggled[name] = force; };
-            this.classList = classList;
-          }
-          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
-          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
-          replaceChildren(...nodes) { this.children = [...nodes]; }
-          append(...nodes) {
-            for (const node of nodes) {
-              node.remove();
-              node.parent = this;
-              this.children.push(node);
-            }
-          }
-          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
-          setAttribute(k, v) { this.attributes[k] = String(v); }
-          setCustomValidity(value) { this.customValidity = String(value); }
-          reportValidity() { this.reported.push(this.customValidity); }
-        }
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        EXTERNAL_TRIGGER_FAKE_DOM_HARNESS
+        + r'''
         globalThis.translate = (key) => key;
 
         const strip = (filename) => fs.readFileSync(filename, "utf8")
@@ -2040,87 +2089,8 @@ def test_trigger_setting_fields_help_descriptions_and_enum_labels_are_localized(
 def test_trigger_level_div_quick_fill(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog())
     script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-        import path from "node:path";
-
-        class FakeNode {
-          constructor(tag = "div") {
-            this.tagName = tag.toUpperCase();
-            this.children = [];
-            this.dataset = {};
-            this.listeners = {};
-            this.hidden = false;
-            this.disabled = false;
-            this.checked = false;
-            this.className = "";
-            this.textContent = "";
-            this.type = "";
-            this.value = "";
-            this.multiple = false;
-            this.options = [];
-            this.style = {};
-            this.attributes = {};
-          }
-          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
-          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
-          replaceChildren(...nodes) { this.children = [...nodes]; }
-          append(...nodes) {
-            for (const node of nodes) {
-              node.remove();
-              node.parent = this;
-              this.children.push(node);
-              if (node.tagName === "OPTION") this.options.push(node);
-            }
-          }
-          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
-          setAttribute(k, v) { this.attributes[k] = String(v); }
-          querySelector(sel) {
-            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
-            if (!match) return null;
-            const find = (list) => {
-              for (const node of list || []) {
-                if (node.dataset && node.dataset.field === match[1]) return node;
-                const found = find(node.children);
-                if (found) return found;
-              }
-              return null;
-            };
-            return find(this.children);
-          }
-          querySelectorAll(sel) {
-            const out = [];
-            const collect = (list) => {
-              for (const node of list || []) {
-                if (node.dataset && node.dataset.field) out.push(node);
-                collect(node.children);
-              }
-            };
-            collect(this.children);
-            if (sel === "[data-field]") return out;
-            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
-            if (match) return out.filter((node) => node.dataset.field === match[1]);
-            return [];
-          }
-          closest() { return null; }
-          get validity() { return { badInput: false }; }
-          setCustomValidity() {}
-          reportValidity() {}
-          checkValidity() { return true; }
-        }
-        globalThis.Option = class {
-          constructor(text, value) {
-            this.tagName = "OPTION";
-            this.textContent = text;
-            this.value = String(value);
-            this.selected = false;
-            this.children = [];
-            this.dataset = {};
-          }
-          remove() {}
-        };
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        TRIGGER_DIV_FAKE_DOM_HARNESS
+        + r'''
         globalThis.queueMicrotask = (fn) => { fn(); };
         // Template shapes mirror the composition contract only, not locale prose.
         const TEMPLATES = {
@@ -2301,87 +2271,8 @@ def test_trigger_level_div_quick_fill(tmp_path: Path) -> None:
 def test_trigger_edge_div_coherence_keeps_draft_source(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog())
     script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-        import path from "node:path";
-
-        class FakeNode {
-          constructor(tag = "div") {
-            this.tagName = tag.toUpperCase();
-            this.children = [];
-            this.dataset = {};
-            this.listeners = {};
-            this.hidden = false;
-            this.disabled = false;
-            this.checked = false;
-            this.className = "";
-            this.textContent = "";
-            this.type = "";
-            this.value = "";
-            this.multiple = false;
-            this.options = [];
-            this.style = {};
-            this.attributes = {};
-          }
-          addEventListener(name, handler) { (this.listeners[name] ||= []).push(handler); }
-          dispatch(name) { for (const handler of this.listeners[name] || []) handler({ type: name }); }
-          replaceChildren(...nodes) { this.children = [...nodes]; }
-          append(...nodes) {
-            for (const node of nodes) {
-              node.remove();
-              node.parent = this;
-              this.children.push(node);
-              if (node.tagName === "OPTION") this.options.push(node);
-            }
-          }
-          remove() { if (this.parent) this.parent.children = this.parent.children.filter((n) => n !== this); this.parent = null; }
-          setAttribute(k, v) { this.attributes[k] = String(v); }
-          querySelector(sel) {
-            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
-            if (!match) return null;
-            const find = (list) => {
-              for (const node of list || []) {
-                if (node.dataset && node.dataset.field === match[1]) return node;
-                const found = find(node.children);
-                if (found) return found;
-              }
-              return null;
-            };
-            return find(this.children);
-          }
-          querySelectorAll(sel) {
-            const out = [];
-            const collect = (list) => {
-              for (const node of list || []) {
-                if (node.dataset && node.dataset.field) out.push(node);
-                collect(node.children);
-              }
-            };
-            collect(this.children);
-            if (sel === "[data-field]") return out;
-            const match = /^\[data-field="([^"]+)"\]$/.exec(sel || "");
-            if (match) return out.filter((node) => node.dataset.field === match[1]);
-            return [];
-          }
-          closest() { return null; }
-          get validity() { return { badInput: false }; }
-          setCustomValidity() {}
-          reportValidity() {}
-          checkValidity() { return true; }
-        }
-        globalThis.Option = class {
-          constructor(text, value) {
-            this.tagName = "OPTION";
-            this.textContent = text;
-            this.value = String(value);
-            this.selected = false;
-            this.children = [];
-            this.dataset = {};
-          }
-          remove() {}
-        };
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        TRIGGER_DIV_FAKE_DOM_HARNESS
+        + r'''
         globalThis.queueMicrotask = (fn) => { fn(); };
         // Template shapes mirror the composition contract only, not locale prose.
         const TEMPLATES = {

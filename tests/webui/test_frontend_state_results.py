@@ -12,6 +12,19 @@ from tests.webui._frontend_state_test_support import (
     read_static,
 )
 
+
+RESULT_FAKE_DOM_HARNESS = r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) { this.tagName = tag; this.children = []; this.className = ""; this.textContent = ""; }
+          append(...nodes) { this.children.push(...nodes); }
+        }
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+'''
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_system_result_summaries_localize_options_and_unknown_operation_bits() -> None:
     results_path = STATIC_ROOT / "results.js"
@@ -218,15 +231,8 @@ def test_search_serial_result_uses_scoped_labels() -> None:
 def test_wgen_aggregate_result_uses_wgen_labels() -> None:
     results_path = STATIC_ROOT / "results.js"
     script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) { this.tagName = tag; this.children = []; this.className = ""; this.textContent = ""; }
-          append(...nodes) { this.children.push(...nodes); }
-        }
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        RESULT_FAKE_DOM_HARNESS
+        + r'''
         const translationsEN = {
           "results.field.function": "Math function",
           "wgen.state.output": "WGEN output",
@@ -342,15 +348,8 @@ def test_wgen_aggregate_result_uses_wgen_labels() -> None:
 def test_demo_workspace_result_uses_demo_presentation() -> None:
     results_path = STATIC_ROOT / "results.js"
     script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) { this.tagName = tag; this.children = []; this.className = ""; this.textContent = ""; }
-          append(...nodes) { this.children.push(...nodes); }
-        }
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        RESULT_FAKE_DOM_HARNESS
+        + r'''
         const translations = {
           "results.field.function": "Math function",
           "demo.state.output": "DEMO output",

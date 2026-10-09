@@ -13,6 +13,24 @@ APP_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "app.js"
 STYLES_CSS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "styles.css"
 LOCALE_EN_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "locale_en.js"
 LOCALE_ZH_TW_JS = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "locale_zh_tw.js"
+
+
+RESULT_FAKE_DOM_HARNESS = r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        class FakeNode {
+          constructor(tag) {
+            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
+          }
+          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
+          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
+        }
+
+        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+'''
+
+
 def test_result_clear_resets_history_and_detail() -> None:
     source = RESULTS_JS.read_text(encoding="utf-8")
     app_source = APP_JS.read_text(encoding="utf-8")
@@ -71,17 +89,8 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
     assert '"results.summary.triggerWaitTimedOut": "Trigger wait timed out."' in english
     assert '"results.summary.triggerWaitTimedOut": "等待觸發逾時。"' in chinese
     script = textwrap.dedent(
-        r'''
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = ""; }
-          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
-          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
-        }
-
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        RESULT_FAKE_DOM_HARNESS
+        + r'''
         globalThis.testLocale = "en";
         const labels = {
           en: {
@@ -613,19 +622,8 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
     assert '"results.field.index": "索引"' in chinese
     assert '"results.field.matched": "符合"' in chinese
     script = textwrap.dedent(
-        r"""
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) {
-            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
-          }
-          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
-          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
-        }
-
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        RESULT_FAKE_DOM_HARNESS
+        + r"""
         globalThis.testLocale = "en";
 
         const enLabels = {
@@ -1043,19 +1041,8 @@ def test_output_filename_stays_literal_in_zh_tw() -> None:
     assert '"enum.normal": "Normal"' in english
     assert '"enum.normal": "正常"' in chinese
     script = textwrap.dedent(
-        r"""
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) {
-            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
-          }
-          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
-          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
-        }
-
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        RESULT_FAKE_DOM_HARNESS
+        + r"""
         globalThis.testLocale = "zh-TW";
 
         const labels = {
@@ -1128,20 +1115,8 @@ def test_measure_sweep_table_has_horizontal_scroll_wrapper() -> None:
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_measure_sweep_dry_run_uses_generic_planned_presentation() -> None:
     script = textwrap.dedent(
-        r"""
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) {
-            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
-          }
-          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
-          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
-        }
-
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
-
+        RESULT_FAKE_DOM_HARNESS
+        + r"""
         const labels = {
           "command.measure-sweep": "Multiple Measurements",
           "status.completed": "Completed",
@@ -1206,19 +1181,7 @@ def test_measure_sweep_dry_run_uses_generic_planned_presentation() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-SYSTEM_SEMANTIC_WORKSPACE_HARNESS = r"""
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) {
-            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
-          }
-          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
-          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
-        }
-
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+SYSTEM_SEMANTIC_WORKSPACE_HARNESS = RESULT_FAKE_DOM_HARNESS + r"""
         globalThis.testLocale = "zh-TW";
         const actualLocales = process.argv[2] && process.argv[3] ? {
           en: (await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(fs.readFileSync(process.argv[2], "utf8"))}`)).en,
@@ -1748,19 +1711,8 @@ def test_segmented_capture_workspace_result_labels_are_localized() -> None:
         assert f'"{key}": "{en_value}"' in english, key
         assert f'"{key}": "{zh_value}"' in chinese, key
     script = textwrap.dedent(
-        r"""
-        import assert from "node:assert/strict";
-        import fs from "node:fs";
-
-        class FakeNode {
-          constructor(tag) {
-            this.tagName = tag.toUpperCase(); this.children = []; this.childElementCount = 0; this.className = ""; this.textContent = "";
-          }
-          append(...nodes) { this.children.push(...nodes); this.childElementCount = this.children.length; }
-          replaceChildren(...nodes) { this.children = [...nodes]; this.childElementCount = this.children.length; }
-        }
-
-        globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+        RESULT_FAKE_DOM_HARNESS
+        + r"""
         globalThis.testLocale = "en";
 
         const enLabels = {
