@@ -75,7 +75,12 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
     assert payload["mode"] == "dry_run"
     assert payload["scpi"]["planned"] == ["*IDN?"]
     assert payload["scpi"]["sent"] == []
-    assert payload["capabilities"] == {
+    capabilities = dict(payload["capabilities"])
+    assert capabilities.pop("acquisition_modes") == [
+        "normal", "peak", "average", "high_resolution"
+    ]
+    assert capabilities.pop("average_counts") == list(range(2, 65537))
+    assert capabilities == {
         "series": "4000X",
         "analog_channels": 4,
         "default_waveform_points": 1000,
