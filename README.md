@@ -72,9 +72,12 @@ src/
   scopes_tool_core/
   scopes_tool_cli/
   scopes_tool_webui/
+desktop/
+examples/
 tests/
   core/
   cli/
+  packaging/
   webui/
   tooling/
 docs/
@@ -204,8 +207,8 @@ npm start
 ```
 
 The window supports System, Light, and Dark themes and waits for Host cleanup
-before exiting. This setup covers source development only; Windows packaging
-is outside its scope.
+before exiting. This setup covers source development only; Windows packaging is described in
+the [Build](#build) section.
 
 ## Build
 
@@ -223,6 +226,75 @@ dist\
   scopes_tool-<version>-py3-none-any.whl
   scopes_tool-<version>.tar.gz
 ```
+
+On Windows x64, prepare the locked development environment for a shared
+PyInstaller onedir build. It needs Windows x64 Python in the project `.venv`,
+PyInstaller, and a working Tkinter / Tcl/Tk runtime for the WebUI Launcher.
+From the repository root:
+
+```powershell
+uv sync --all-extras --locked --link-mode=copy
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_bundle.ps1
+```
+
+The Windows bundle contains the CLI, WebUI Launcher, and private Desktop Host
+using a shared `_internal` directory:
+
+```text
+dist\scopes-tool\
+  scopes-tool.exe
+  scopes-tool-webui-launcher.exe
+  scopes-tool-webui-host.exe
+  _internal\
+```
+
+The build script replaces the existing `dist\scopes-tool` directory when
+rerun. This is a Windows onedir bundle, not the Electron Desktop or a release
+ZIP. The private Host is for the Desktop application, not a public CLI command.
+
+After building, run a hardware-free CLI simulator smoke check:
+
+```powershell
+.\dist\scopes-tool\scopes-tool.exe identify --simulate --json
+```
+
+Confirm the command succeeds and produces a JSON response. Then start the
+bundled WebUI Launcher:
+
+```powershell
+.\dist\scopes-tool\scopes-tool-webui-launcher.exe
+```
+
+Use the Launcher to start the local WebUI and confirm it opens in a browser.
+The default address is `http://127.0.0.1:8025`; the Launcher can try another
+local port if it is in use. Close the Launcher after checking. Neither smoke
+check requires a physical oscilloscope.
+
+To package the Electron Desktop, use Windows x64 with Node.js 22.12 or newer
+and npm. Run from the repository root:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_desktop.ps1
+```
+
+This script runs the shared Windows Bundle build itself, then builds Electron
+and combines the artifacts. There is no need to run
+`build_windows_bundle.ps1` separately first. The resulting directory is:
+
+```text
+dist\desktop\win-unpacked\
+  Scopes Tool.exe
+  scopes-tool.exe
+  scopes-tool-webui-launcher.exe
+  scopes-tool-webui-host.exe
+  _internal\
+  resources\
+  ... Electron runtime files
+```
+
+Formal release packaging and release acceptance scripts are not currently
+provided for Scopes Tool. Release instructions will be added after the
+release workflow has been validated.
 
 ## Test
 
