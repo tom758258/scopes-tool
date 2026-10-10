@@ -63,7 +63,6 @@ from scopes_tool_core.screenshot import (
     DEFAULT_SCREENSHOT_BACKGROUND,
     SCREENSHOT_TIMEOUT_MS,
     write_screenshot,
-    write_screenshot_png,
 )
 from scopes_tool_core.segmented_capture import run_segmented_capture
 from scopes_tool_core.sequence import SequenceRequest, load_sequence_document, run_sequence
@@ -337,7 +336,6 @@ def _measure_operation_request(args: argparse.Namespace) -> MeasureRequest:
     return MeasureRequest(
         item=args.item,
         channel=args.channel,
-        source_channel=args.source_channel,
         reference_channel=args.reference_channel,
         time_s=args.time_s,
         level=args.level,
@@ -826,14 +824,9 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
             f"Planned capture: current screen {display_format} image with {background} background"
         )
         print(f"Screenshot timeout ms: {SCREENSHOT_TIMEOUT_MS} (temporary)")
-        if preflight._uses_screenshot_hardcopy_controls(args):
-            history_start = len(scope.backend.history)
-            capture = scope.capture_screenshot(options=options, background=background)
-            written_image = _write_screenshot(capture, output_path, format_name)
-        else:
-            history_start = len(scope.backend.history)
-            capture = scope.capture_screenshot_png(background=background)
-            written_image = _write_screenshot_png(capture, output_path)
+        history_start = len(scope.backend.history)
+        capture = scope.capture_screenshot(options=options, background=background)
+        written_image = _write_screenshot(capture, output_path, format_name)
         for command in scope.backend.history[history_start:]:
             print(f"Command: {command}")
         file_kind = "png" if format_name == "png" else "bmp"
@@ -1077,15 +1070,6 @@ def _screenshot_output_path(args: argparse.Namespace, format_name: str) -> Path:
     if format_name == "png":
         return _default_screenshot_path()
     return _default_screenshot_path(extension=".bmp")
-
-
-def _write_screenshot_png(capture, output_path: Path) -> Path:
-    try:
-        return write_screenshot_png(capture, output_path)
-    except OSError as exc:
-        raise OscilloscopeError(
-            _format_output_file_error("screenshot PNG", output_path, exc)
-        ) from exc
 
 
 def _write_screenshot(capture, output_path: Path, format_name: str) -> Path:

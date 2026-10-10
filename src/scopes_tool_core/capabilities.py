@@ -20,7 +20,6 @@ class ScopeCapabilities:
     supports_raw_points_mode: bool
     supports_measurements: bool
     supports_delay_measurement: bool
-    supports_screenshot: bool = False  # Compatibility flag for the PNG command.
     supports_segmented_memory: bool = False
     supports_serial_decode: bool = False
     supports_screenshot_hardcopy_controls: bool = False
@@ -68,7 +67,7 @@ class ScopeCapabilities:
     autoscale_supports_optional_controls: bool = True
     setup_slots: tuple[int, ...] | None = None
     supports_setup_file_target: bool = True
-    screenshot_formats: tuple[str, ...] | None = None
+    screenshot_formats: tuple[str, ...] = ()
     channel_units_channels: tuple[int, ...] | None = None
     display_persistence_seconds: tuple[float, ...] | None = None
     measurement_items: tuple[str, ...] | None = None
@@ -120,25 +119,14 @@ class ScopeCapabilities:
                 "fixed_acquisition_memory_mode must be realtime, segmented, "
                 "equivalent_time, or None"
             )
-        if self.screenshot_formats is not None:
-            object.__setattr__(self, "supports_screenshot", "png" in self.screenshot_formats)
-
-    @property
-    def supported_screenshot_formats(self) -> tuple[str, ...]:
-        """Resolve explicit formats or the legacy PNG/hardcopy profile."""
-        if self.screenshot_formats is not None:
-            return self.screenshot_formats
-        if not self.supports_screenshot:
-            return ()
-        return ("png", "bmp", "bmp8bit") if self.supports_screenshot_hardcopy_controls else ("png",)
 
     @property
     def supports_png_screenshot(self) -> bool:
-        return "png" in self.supported_screenshot_formats
+        return "png" in self.screenshot_formats
 
     @property
     def supports_any_screenshot(self) -> bool:
-        return bool(self.supported_screenshot_formats)
+        return bool(self.screenshot_formats)
 
 
 _TEK_COMMON_OPERATIONS = frozenset({
@@ -318,7 +306,7 @@ _CAPABILITY_PROFILES = {
         supports_raw_points_mode=False,
         supports_measurements=True,
         supports_delay_measurement=False,
-        supports_screenshot=True,
+        screenshot_formats=("png",),
         supports_segmented_memory=True,
         supports_serial_decode=True,
         serial_bus_count=1,
@@ -357,7 +345,7 @@ _CAPABILITY_PROFILES = {
         supports_measurements=True,
         supports_delay_measurement=False,
         supports_measure_results_dump=True,
-        supports_screenshot=True,
+        screenshot_formats=("png",),
         supports_segmented_memory=True,
         supports_serial_decode=True,
         serial_bus_count=2,
@@ -400,7 +388,7 @@ _CAPABILITY_PROFILES = {
         supports_measurements=True,
         supports_delay_measurement=True,
         supports_measure_results_dump=True,
-        supports_screenshot=True,
+        screenshot_formats=("png", "bmp", "bmp8bit"),
         supports_segmented_memory=True,
         supports_serial_decode=True,
         serial_bus_count=2,

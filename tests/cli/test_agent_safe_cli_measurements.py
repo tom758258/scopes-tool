@@ -26,7 +26,7 @@ def test_measure_pair_phase_simulate_json_uses_signal_model(capsys):
                 "measure",
                 "--simulate",
                 "--json",
-                "--source-channel",
+                "--channel",
                 "1",
                 "--reference-channel",
                 "2",
@@ -56,7 +56,7 @@ def test_measure_pair_delay_simulate_json_on_4000x_uses_signal_model(capsys):
                 "--json",
                 "--model",
                 "keysight-dsox4034a",
-                "--source-channel",
+                "--channel",
                 "1",
                 "--reference-channel",
                 "2",
@@ -91,7 +91,7 @@ def test_measure_pair_delay_simulate_json_rejects_non_4000x_before_measurement(c
                 "--json",
                 "--model",
                 "keysight-dsox3024a",
-                "--source-channel",
+                "--channel",
                 "1",
                 "--reference-channel",
                 "2",
@@ -123,7 +123,7 @@ def test_measure_pair_phase_simulate_json_supported_across_target_models(capsys)
                     "--json",
                     "--model",
                     model,
-                    "--source-channel",
+                    "--channel",
                     "1",
                     "--reference-channel",
                     "2",
@@ -167,7 +167,7 @@ def test_measure_pair_simulate_json_reports_reference_channel_invalid_sentinel(
                 "measure",
                 "--simulate",
                 "--json",
-                "--source-channel",
+                "--channel",
                 "1",
                 "--reference-channel",
                 "2",
@@ -283,3 +283,20 @@ def test_measure_sweep_invalid_measurement_continues_and_exits_one(capsys):
         "invalid_count": 1,
         "error_count": 0,
     }
+
+
+def test_measure_old_inputs_are_rejected_before_backend_open(monkeypatch, capsys):
+    import pytest
+
+    def unexpected_open(*args, **kwargs):
+        raise AssertionError("invalid input must not open an instrument")
+
+    monkeypatch.setattr(runtime, "_open_scope", unexpected_open)
+    for argv in (
+        ["--source-channel", "1", "--item", "vpp"],
+        *(["--channel", "1", "--item", item] for item in ("freq", "pkpk", "vmin", "vmax", "yatx")),
+    ):
+        with pytest.raises(SystemExit) as exc:
+            cli.main(["measure", "--resource", "USB0::FAKE::INSTR", *argv])
+        assert exc.value.code == 2
+        assert capsys.readouterr().err

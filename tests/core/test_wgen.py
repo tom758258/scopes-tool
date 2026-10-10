@@ -223,3 +223,19 @@ def test_wgen_4000x_offset_set_queries_state_and_skips_write_on_interaction():
         ":WGEN1:OUTPut:LOAD?",
         ":WGEN1:VOLTage?",
     ]
+
+
+@pytest.mark.parametrize("validator", [validate_wgen_frequency, validate_wgen_amplitude, validate_wgen_offset])
+def test_wgen_validation_requires_series(validator):
+    with pytest.raises(TypeError, match="series"):
+        validator(1.0)
+    with pytest.raises(ParameterValidationError):
+        validator(1.0, series=None)
+
+
+def test_wgen_2000x_offset_keeps_conservative_limit():
+    assert validate_wgen_offset(2.5, series="2000X") == 2.5
+    assert validate_wgen_offset(-2.5, series="2000X") == -2.5
+    for value in (-2.51, 2.51):
+        with pytest.raises(ParameterValidationError):
+            validate_wgen_offset(value, series="2000X")

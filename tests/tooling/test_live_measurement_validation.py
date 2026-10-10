@@ -158,7 +158,7 @@ def test_pair_measurements_remain_strict() -> None:
     readiness_start = script.index("function Invoke-PairMeasurementReadiness")
     readiness_end = script.index("function Get-PairMeasurementChannelSnapshot", readiness_start)
     readiness = script[readiness_start:readiness_end]
-    assert '"--source-channel", "2"' in readiness
+    assert '"--channel", "2"' in readiness
     assert '"--item", "vpp"' in readiness
     assert ':MEASure:VPP? CHANnel2' in readiness
     assert "while ($elapsedMilliseconds -le $TimeoutMilliseconds)" in readiness
@@ -235,7 +235,7 @@ foreach ($functionName in @("Assert-FiniteNumber", "Invoke-PairMeasurementReadin
 }
 
 $Resource = "SIMULATED"
-$script:LiveConnectionArguments = @("--live", "--resource", $Resource)
+$script:LiveConnectionArguments = @("--resource", $Resource)
 $script:Scenario = ""
 $script:ReadinessCalls = 0
 $script:SleepCalls = 0

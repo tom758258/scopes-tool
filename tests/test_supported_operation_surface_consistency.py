@@ -134,7 +134,7 @@ def _arguments(operation, caps, path):
     if operation == "capture":
         cli_args.update(csv=str(path / "wave.csv"), meta=str(path / "wave.json"))
     if operation == "screenshot":
-        image_format = caps.supported_screenshot_formats[0]
+        image_format = caps.screenshot_formats[0]
         cli_args.update(output=str(path / f"screen.{image_format}"))
         if image_format != "png":
             cli_args["format"] = image_format

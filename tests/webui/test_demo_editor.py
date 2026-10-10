@@ -11,7 +11,7 @@ import pytest
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.demo import DEMO_FUNCTIONS
 import scopes_tool_webui.command_execution as command_execution_module
-import scopes_tool_webui.commands as commands_module
+import scopes_tool_webui.command_catalog as command_catalog_module
 from scopes_tool_webui.command_catalog import _command_supported_by_capabilities
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 
@@ -33,7 +33,7 @@ def read_static(name: str) -> str:
 
 
 def test_demo_command_family_routes_to_one_editor() -> None:
-    entries = [entry for entry in commands_module.COMMANDS if entry["id"] in DEMO_COMMAND_IDS]
+    entries = [entry for entry in command_catalog_module.COMMANDS if entry["id"] in DEMO_COMMAND_IDS]
 
     assert [entry["id"] for entry in entries] == DEMO_COMMAND_IDS
     for entry in entries:
@@ -47,7 +47,7 @@ def test_demo_command_family_routes_to_one_editor() -> None:
 
 
 def test_demo_options_come_from_core_constants() -> None:
-    entries = {entry["id"]: entry for entry in commands_module.COMMANDS}
+    entries = {entry["id"]: entry for entry in command_catalog_module.COMMANDS}
 
     function = next(
         field for field in entries["demo-function"]["fields"] if field["name"] == "function"
@@ -59,13 +59,13 @@ def test_demo_options_come_from_core_constants() -> None:
 def test_demo_function_options_project_by_model() -> None:
     # 2000X has only common functions, 3000X/4000X have extensions
     catalog_2000 = next(
-        entry for entry in commands_module.command_catalog() if entry["id"] == "demo-function"
+        entry for entry in command_catalog_module.command_catalog() if entry["id"] == "demo-function"
     )
     # Need to inspect per-model presentation
     from scopes_tool_webui.command_catalog import _model_command_presentation, _command_presentation
 
     # Find raw command entry
-    raw_2000 = next(entry for entry in commands_module.COMMANDS if entry["id"] == "demo-function")
+    raw_2000 = next(entry for entry in command_catalog_module.COMMANDS if entry["id"] == "demo-function")
     raw_3000 = raw_2000
     cap_2000 = capabilities_for_model_id("keysight-dsox2004a")
     cap_3000 = capabilities_for_model_id("keysight-dsox3024a")
@@ -93,7 +93,7 @@ def test_demo_function_options_project_by_model() -> None:
 
 
 def test_demo_commands_follow_model_support_flag() -> None:
-    entries = {entry["id"]: entry for entry in commands_module.COMMANDS}
+    entries = {entry["id"]: entry for entry in command_catalog_module.COMMANDS}
     supported = capabilities_for_model_id(MODEL_ID)
     unsupported = dataclasses.replace(supported, supports_demo=False)
 
@@ -235,7 +235,7 @@ def test_demo_localization_keys() -> None:
     reason="Node.js is required for frontend behavior checks",
 )
 def test_demo_editor_selected_command_presentation(tmp_path: Path) -> None:
-    catalog_json = json.dumps(commands_module.command_catalog())
+    catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     app_source = read_static("app.js")

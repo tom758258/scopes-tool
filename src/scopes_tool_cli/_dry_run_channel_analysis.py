@@ -391,7 +391,6 @@ def _measure_plan_request(args: argparse.Namespace) -> MeasurePlanRequest:
     return MeasurePlanRequest(
         item=args.item,
         channel=args.channel,
-        source_channel=args.source_channel,
         reference_channel=args.reference_channel,
         time_s=args.time_s,
         level=args.level,

@@ -15,7 +15,7 @@ import uuid
 from scopes_tool_core.simulator_backend import SimulatorInstrumentState
 
 from .command_catalog import PC_OUTPUT_COMMAND_IDS
-from .commands import ScopeSessionCloseError, execute_command
+from .command_execution import ScopeSessionCloseError, execute_command
 
 
 JOB_STATUSES = frozenset({"queued", "running", "completed", "failed", "cancelled"})

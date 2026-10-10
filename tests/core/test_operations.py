@@ -616,7 +616,7 @@ def test_run_smoke_measurement_timeout_keeps_partial_and_stops():
 
         scope.scpi.query = failing_transport  # type: ignore[method-assign]
         scope.capture_waveform_byte = unexpected_capture  # type: ignore[method-assign]
-        scope.capture_screenshot_png = unexpected_screenshot  # type: ignore[method-assign]
+        scope.capture_screenshot = unexpected_screenshot  # type: ignore[method-assign]
         with pytest.raises(_OperationError) as excinfo:
             run_smoke(
                 scope,
@@ -670,7 +670,7 @@ def test_run_smoke_partial_preserves_vpp_when_vrms_times_out():
 
         scope.scpi.query = mixed_transport  # type: ignore[method-assign]
         scope.capture_waveform_byte = unexpected_capture  # type: ignore[method-assign]
-        scope.capture_screenshot_png = unexpected_screenshot  # type: ignore[method-assign]
+        scope.capture_screenshot = unexpected_screenshot  # type: ignore[method-assign]
         with pytest.raises(_OperationError) as excinfo:
             run_smoke(
                 scope,

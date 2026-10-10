@@ -139,7 +139,6 @@ function New-ProductionIdentity {
             math_filter_operations = @()
             math_visualization_operations = @()
             supports_advanced_fft = $true
-            supports_screenshot = $true
             supports_screenshot_hardcopy_controls = $true
             supports_segmented_memory = $true
             segmented_max_segments = 1000

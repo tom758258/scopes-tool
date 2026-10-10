@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .. import preflight, runtime
+from .. import _preflight_serial as preflight_serial_module
 from scopes_tool_core.capabilities import ScopeCapabilities
 from scopes_tool_core.output_files import (
     default_capture_csv_path,
@@ -93,7 +94,7 @@ def _serial_protocol_commands(
             "can": serial_can_query_commands,
         }
         return [serial_mode_query(args.bus), *query_builders[protocol](args.bus).values()]
-    settings = preflight._serial_cli_values(
+    settings = preflight_serial_module._serial_cli_values(
         capabilities,
         protocol=args.command,
         **_serial_protocol_settings(args),

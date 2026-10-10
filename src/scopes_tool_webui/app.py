@@ -13,7 +13,8 @@ from starlette.types import Scope
 from scopes_tool_core import normalize_sequence_document
 
 from . import __version__
-from .commands import command_catalog, model_catalog, validate_job_request
+from .command_catalog import command_catalog, model_catalog
+from .command_validation import validate_job_request
 from .desktop import (
     FolderOpenUnavailable,
     FolderSelectionUnavailable,

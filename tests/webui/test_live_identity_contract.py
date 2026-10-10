@@ -7,8 +7,9 @@ import pytest
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.idn import IDN
 import scopes_tool_webui.command_execution as command_execution
-import scopes_tool_webui.commands as commands
-from scopes_tool_webui.commands import WebUIRequestError
+import scopes_tool_webui.command_validation as command_validation_module
+import scopes_tool_webui.command_catalog as command_catalog_module
+from scopes_tool_webui.command_validation import WebUIRequestError
 from scopes_tool_webui.jobs import Job
 
 
@@ -32,7 +33,7 @@ class FakeLiveScope:
 
 
 def live_impedance_request(browser_model: str) -> dict:
-    return commands.validate_job_request(
+    return command_validation_module.validate_job_request(
         {
             "command": "channel-impedance",
             "mode": "live",
@@ -62,7 +63,7 @@ def test_live_capability_validation_uses_detected_model(monkeypatch, tmp_path: P
     )
 
     with pytest.raises(WebUIRequestError, match="50 ohm is not supported"):
-        commands.execute_command(
+        command_execution.execute_command(
             request["command"],
             mode=request["mode"],
             resource=request["resource"],
@@ -85,7 +86,7 @@ def test_live_detected_model_can_accept_capability_browser_model_lacks(monkeypat
         lambda *_args, **_kwargs: {"exit_code": 0, "result": {"ok": True}, "artifacts": []},
     )
 
-    result = commands.execute_command(
+    result = command_execution.execute_command(
         request["command"],
         mode=request["mode"],
         resource=request["resource"],
@@ -102,7 +103,7 @@ def test_live_detected_model_can_accept_capability_browser_model_lacks(monkeypat
 
 def test_live_admission_keeps_model_independent_validation() -> None:
     with pytest.raises(WebUIRequestError, match="action must be one of"):
-        commands.validate_job_request(
+        command_validation_module.validate_job_request(
             {
                 "command": "channel-impedance",
                 "mode": "live",
@@ -112,7 +113,7 @@ def test_live_admission_keeps_model_independent_validation() -> None:
         )
 
     with pytest.raises(WebUIRequestError, match="channel must be an integer"):
-        commands.validate_job_request(
+        command_validation_module.validate_job_request(
             {
                 "command": "channel-impedance",
                 "mode": "live",
@@ -125,7 +126,7 @@ def test_live_admission_keeps_model_independent_validation() -> None:
 def test_planning_modes_keep_registered_model_selection() -> None:
     for mode, command in (("simulate", "identify"), ("dry-run", "measure")):
         parameters = {} if command == "identify" else {"item": "vpp", "channel": 1}
-        request = commands.validate_job_request(
+        request = command_validation_module.validate_job_request(
             {
                 "command": command,
                 "mode": mode,
@@ -137,13 +138,13 @@ def test_planning_modes_keep_registered_model_selection() -> None:
 
 
 def test_list_resources_is_hidden_and_identify_hidden_from_catalog() -> None:
-    catalog = {entry["id"]: entry for entry in commands.command_catalog()}
+    catalog = {entry["id"]: entry for entry in command_catalog_module.command_catalog()}
 
     assert "list-resources" not in catalog
     assert "identify" not in catalog
     # System snapshot is also hidden from presentation (internal command only).
     assert "system-information-snapshot" not in catalog
-    request = commands.validate_job_request(
+    request = command_validation_module.validate_job_request(
         {"command": "list-resources", "mode": "live", "parameters": {"live_only": True}}
     )
     assert request["command"] == "list-resources"
@@ -153,7 +154,7 @@ def test_list_resources_is_hidden_and_identify_hidden_from_catalog() -> None:
 def test_identify_result_projects_detected_physical_model_id(tmp_path: Path) -> None:
     scope = FakeLiveScope("DSOX4024A")
 
-    result = commands._execute_scope_command(
+    result = command_execution._execute_scope_command(
         scope,
         "identify",
         "USB0::TEST::INSTR",

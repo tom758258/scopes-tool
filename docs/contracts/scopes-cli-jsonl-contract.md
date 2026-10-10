@@ -184,8 +184,6 @@ structured error object (`event: "error"`, `ok: false`, typed `error`, and
 
 For one-shot commands, an explicit `--resource` or
 `SCOPES_TOOL_RESOURCE` selects and opts in to that single live instrument.
-The `--live` flag remains accepted for one-shot compatibility but is not
-required. It must not be combined with `--simulate` or `--dry-run`.
 
 `list-resources --live-only` is the separate discovery path that may open each
 enumerated resource and query `*IDN?`. Live worker startup is governed by the
@@ -790,7 +788,7 @@ Capability JSON currently includes `series`, `analog_channels`,
 `default_waveform_points`, `safe_max_waveform_points`,
 `supports_word_format`, `supports_raw_points_mode`, `supports_measurements`,
 `supports_delay_measurement`, `supports_measure_results_dump`,
-`supports_screenshot`, ordered `screenshot_formats`,
+ordered `screenshot_formats`,
 `supports_screenshot_hardcopy_controls`,
   `supports_segmented_memory`, `segmented_max_segments`,
   `supports_segmented_waveform_all`, `supports_serial_decode`, `serial_bus_count`,
@@ -808,9 +806,8 @@ ordered canonical operation lists. WGEN additionally reports `supports_wgen`
 and the model's `wgen_scpi_root`.
 
 `screenshot_formats` lists the supported host image encodings; an empty list
-means no screenshot capture. The compatibility field `supports_screenshot`
-retains its original PNG meaning. It can be false when explicit BMP capture is
-available. PNG workflows require PNG support, while the screenshot command can
+means no screenshot capture. This list is the sole format capability source.
+PNG workflows require PNG support, while the screenshot command can
 use an explicitly requested supported format. Optional hardcopy controls and
 transport restrictions remain validated by Core.
 

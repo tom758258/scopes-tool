@@ -474,7 +474,7 @@ $script:Sleeps = New-Object System.Collections.Generic.List[int]
 $configurationPassed = $false
 $enableInvocation = $null
 $Resource = "TEST::INSTR"
-$script:LiveConnectionArguments = @("--live", "--resource", $Resource)
+$script:LiveConnectionArguments = @("--resource", $Resource)
 
 Write-DrainErrors -Errors @() -CaseName "empty-drain"
 $emptyDrainDiagnosticCount = $script:Diagnostics.Count

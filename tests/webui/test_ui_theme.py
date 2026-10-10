@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from scopes_tool_webui.app import app
-from scopes_tool_webui.commands import model_catalog
+from scopes_tool_webui.command_catalog import model_catalog
 from scopes_tool_webui import supported_devices
 
 

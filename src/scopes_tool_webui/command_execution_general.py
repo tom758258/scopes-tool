@@ -543,9 +543,9 @@ def _execute_general_scope_command(
         return _operation_payload(result)
 
     if command == "screenshot":
-        format_name = scope.capabilities.supported_screenshot_formats[0]
-        capture = (scope.capture_screenshot_png(background=parameters["background"]) if format_name == "png" else
-            scope.capture_screenshot(options=ScreenshotOptions(format=format_name), background=parameters["background"]))
+        format_name = scope.capabilities.screenshot_formats[0]
+        options = ScreenshotOptions() if format_name == "png" else ScreenshotOptions(format=format_name)
+        capture = scope.capture_screenshot(options=options, background=parameters["background"])
         writer = write_screenshot_png_file if capture.format_name == "PNG" else write_screenshot
         path = writer(
             capture,
@@ -592,22 +592,6 @@ def _execute_general_scope_command(
             "reference", scope.query_reference_waveform(parameters["slot"])
         )
 
-    if command == "cursor":
-        action = parameters["action"]
-        if action == "set":
-            cursor_kwargs = {
-                "x1_seconds": parameters.get("x1"),
-                "x2_seconds": parameters.get("x2"),
-                "y1_volts": parameters.get("y1"),
-                "y2_volts": parameters.get("y2"),
-            }
-            if parameters.get("function") is not None:
-                cursor_kwargs["function"] = parameters["function"]
-            scope.configure_cursor(parameters.get("source_channel"), **cursor_kwargs)
-        elif action == "off":
-            scope.cursor_off()
-        return _state_scope_result("cursor", scope.query_cursor())
-
     if command == "cursor-query":
         return _state_scope_result("cursor", scope.query_cursor())
 
@@ -626,28 +610,6 @@ def _execute_general_scope_command(
     if command == "cursor-off":
         scope.cursor_off()
         return _state_scope_result("cursor", scope.query_cursor())
-
-    if command == "annotation":
-        action = parameters["action"]
-        slot = parameters["slot"]
-        if action == "set":
-            if parameters.get("text") is not None:
-                scope.set_annotation_text(parameters["text"], slot=slot)
-            if parameters.get("color") is not None:
-                scope.set_annotation_color(parameters["color"], slot=slot)
-            if parameters.get("background") is not None:
-                scope.set_annotation_background(parameters["background"], slot=slot)
-            if parameters.get("x") is not None or parameters.get("y") is not None:
-                scope.set_annotation_position(
-                    parameters.get("x"), parameters.get("y"), slot=slot
-                )
-        elif action == "on":
-            scope.set_annotation_enabled(True, slot=slot)
-        elif action == "off":
-            scope.set_annotation_enabled(False, slot=slot)
-        elif action == "clear":
-            scope.clear_annotation(slot=slot)
-        return _state_scope_result("annotation", scope.query_annotation(slot=slot))
 
     if command == "annotation-query":
         slot = parameters.get("slot", 1)

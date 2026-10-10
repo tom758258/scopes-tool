@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model_id
-from scopes_tool_webui.commands import command_catalog
+from scopes_tool_webui.command_catalog import command_catalog
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

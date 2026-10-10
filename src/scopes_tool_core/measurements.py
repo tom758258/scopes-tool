@@ -56,7 +56,8 @@ _PARAMETERIZED_MEASUREMENT_ITEMS = (
     "time_at_value",
 )
 
-_MEASUREMENT_ALIASES = {
+# Instrument readback labels only; user input requires canonical items.
+_STATISTICS_RESPONSE_LABELS = {
     "pk-pk": "vpp",
     "pkpk": "vpp",
     "freq": "frequency",
@@ -150,12 +151,8 @@ SINGLE_CHANNEL_MEASUREMENT_ITEMS = (
 INSTALLABLE_MEASUREMENT_ITEMS = tuple(_MEASUREMENT_QUERY_TEMPLATES)
 PAIR_MEASUREMENT_ITEMS = tuple(_PAIR_MEASUREMENT_QUERY_TEMPLATES)
 SUPPORTED_MEASUREMENT_ITEMS = SINGLE_CHANNEL_MEASUREMENT_ITEMS + PAIR_MEASUREMENT_ITEMS
-MEASUREMENT_ITEM_CHOICES = SUPPORTED_MEASUREMENT_ITEMS + tuple(_MEASUREMENT_ALIASES)
-MEASUREMENT_INSTALL_ITEM_CHOICES = INSTALLABLE_MEASUREMENT_ITEMS + tuple(
-    alias
-    for alias, item in _MEASUREMENT_ALIASES.items()
-    if item in _MEASUREMENT_QUERY_TEMPLATES
-)
+MEASUREMENT_ITEM_CHOICES = SUPPORTED_MEASUREMENT_ITEMS
+MEASUREMENT_INSTALL_ITEM_CHOICES = INSTALLABLE_MEASUREMENT_ITEMS
 MEASUREMENT_WINDOW_CHOICES = ("main", "zoom", "auto", "gate")
 
 
@@ -586,7 +583,6 @@ def normalize_measurement_item(item: str) -> str:
     """Normalize a user-facing measurement item."""
 
     normalized = item.strip().lower()
-    normalized = _MEASUREMENT_ALIASES.get(normalized, normalized)
     if (
         normalized not in _MEASUREMENT_QUERY_TEMPLATES
         and normalized not in _PARAMETERIZED_MEASUREMENT_ITEMS
@@ -1224,7 +1220,7 @@ def _normalize_statistics_result_label(label: str) -> str:
     if normalized.endswith(")") and "(" in normalized:
         normalized = normalized.rsplit("(", 1)[0]
     normalized = normalized.replace(" ", "_")
-    return normalize_measurement_item(normalized)
+    return normalize_measurement_item(_STATISTICS_RESPONSE_LABELS.get(normalized, normalized))
 
 
 def _looks_numeric(value: str) -> bool:

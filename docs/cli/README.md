@@ -270,7 +270,7 @@ environment-provided alternative.
 ## Agent-safe Automation
 
 Commands that accept instrument connections also accept `--json`, `--simulate`,
-`--dry-run`, `--model`, and `--live`. Use `--dry-run` to validate arguments and
+`--dry-run` and `--model`. Use `--dry-run` to validate arguments and
 inspect generated SCPI without opening VISA or writing files; add `--json` when
 automation needs the machine-readable payload. Use `--simulate --json` to run
 against the deterministic hardware-free simulator; capture workflows write fake
@@ -299,10 +299,8 @@ Simulator configuration layers are applied in this order: built-in defaults,
 
 Agents should only access real hardware after explicit user approval. For a
 one-shot command, an explicit `--resource <RESOURCE>` or
-`SCOPES_TOOL_RESOURCE` opts in to that single live instrument. `--live`
-remains accepted for one-shot compatibility, but is not required and cannot be
-combined with `--simulate` or `--dry-run`. Live workers still require
-`--live --resource`. SCPI debug logs from `--log-scpi` are written to stderr
+`SCOPES_TOOL_RESOURCE` opts in to that single live instrument. Live workers
+still require `--live --resource`. SCPI debug logs from `--log-scpi` are written to stderr
 and must not be parsed as JSON.
 
 For dry-run and simulator modes, `--model` is the planning canonical physical
@@ -2064,8 +2062,8 @@ Query read-only measurements:
 .\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item y_at_x --time 0 --log-scpi
 .\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item time_at_edge --slope positive --occurrence 1 --log-scpi
 .\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --item time_at_value --level 0.5 --slope positive --occurrence 1 --log-scpi
-.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --reference-channel 2 --item phase --log-scpi
-.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --source-channel 1 --reference-channel 2 --item delay --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --reference-channel 2 --item phase --log-scpi
+.\.venv\Scripts\scopes-tool.exe measure --resource "$env:SCOPES_TOOL_RESOURCE" --channel 1 --reference-channel 2 --item delay --log-scpi
 ```
 
 Query the measurement results already displayed on the front panel:
@@ -2088,31 +2086,17 @@ The separate `measure` command queries one value and does not install or
 change the front-panel measurement list. Use `measure-install` when the intent
 is to add a real front-panel measurement.
 
-The measurement command supports `vpp`, `frequency` (`freq` alias),
-`period`, `vavg`, `vrms`, `ac_rms` (`acrms` and `vrms_ac` aliases),
-`minimum` (`min` and `vmin` aliases), `maximum` (`max` and `vmax` aliases),
-`x_at_max` (`xmax` and `x-at-max` aliases), `x_at_min` (`xmin` and
-`x-at-min` aliases), `rise_time` (`risetime` and `rise-time` aliases),
-`fall_time` (`falltime` and `fall-time` aliases), `amplitude` (`vamp` alias),
-`top` (`vtop` alias), `base` (`vbase` alias), `overshoot`, `preshoot`,
-`positive_width` (`pwidth`, `positive-width`, and `pwid` aliases),
-`negative_width` (`nwidth`, `negative-width`, and `nwid` aliases),
-`duty_cycle` (`duty`, `dutycycle`, and `duty-cycle` aliases), and
-`negative_duty_cycle` (`nduty`, `negative-duty`, and `negative-duty-cycle`
-aliases), `area` (3000X/4000X), `positive_edges` (`pedges` and `positive-edges`
-aliases), `negative_edges` (`nedges` and `negative-edges` aliases),
-`positive_pulses`
-(`ppulses` and `positive-pulses` aliases), and `negative_pulses` (`npulses`
-and `negative-pulses` aliases), plus parameterized single-channel queries:
-`y_at_x` (`yatx`, `y-at-x`, `vtime`, `y_at_time`, and `y-at-time` aliases),
-`time_at_edge` (`tedge` and `time-at-edge` aliases), and `time_at_value`
-(`tvalue`, `time-at-value`, `time_at_level`, and `time-at-level` aliases),
-plus two-channel `phase` and 4000X-only safe `delay`.
+The measurement command accepts only canonical item names: `vpp`, `frequency`,
+`period`, `vavg`, `vrms`, `ac_rms`, `minimum`, `maximum`, `x_at_max`,
+`x_at_min`, `rise_time`, `fall_time`, `amplitude`, `top`, `base`, `overshoot`,
+`preshoot`, `positive_width`, `negative_width`, `duty_cycle`,
+`negative_duty_cycle`, `area` (3000X/4000X), `positive_edges`, `negative_edges`,
+`positive_pulses`, `negative_pulses`, `y_at_x`, `time_at_edge`, `time_at_value`,
+`phase`, and 4000X-only safe `delay`.
 `y_at_x` requires `--time`; `time_at_value` requires `--level`;
 `time_at_edge` and `time_at_value` accept `--slope positive|negative` and
 `--occurrence N`, defaulting to positive occurrence 1. Two-channel items require
-a source channel and reference channel; `--channel` remains a compatibility
-alias for `--source-channel`, and cannot be combined with it. Single-channel
+`--channel` and `--reference-channel`. Single-channel
 items reject `--reference-channel`. The command first queries `*IDN?`,
 validates the analog channel or channel pair, sends one read-only measurement
 query such as `:MEASure:VPP? CHANnel1`, and performs one `:SYSTem:ERRor?`
@@ -2690,10 +2674,10 @@ directory can hit shared-temp permission conflicts.
 
 Real instrument checks are manual. Start with `--dry-run --json`, then
 `--simulate --json`, and only use an explicit `--resource <RESOURCE>` or
-`SCOPES_TOOL_RESOURCE` after an operator selects the instrument. `--live`
-may be included for one-shot compatibility and remains required for live
-worker startup. Live checks should begin with USB communication verification
-before running state-changing or artifact-writing commands.
+`SCOPES_TOOL_RESOURCE` after an operator selects the instrument. Live worker
+startup requires `--live --resource`. Live checks should begin with USB
+communication verification before running state-changing or artifact-writing
+commands.
 
 ## Real-Instrument Checks
 

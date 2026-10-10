@@ -61,17 +61,17 @@ class ScreenshotCapture:
 def validate_screenshot_capability(capabilities: ScopeCapabilities, options: ScreenshotOptions,
                                   *, query_hardcopy: bool = False) -> None:
     options = normalize_screenshot_options(options)
-    if capabilities.screenshot_formats is not None:
-        format_name = options.format or ("png" if capabilities.supports_png_screenshot else None)
-        if query_hardcopy or format_name not in capabilities.screenshot_formats or options.palette is not None:
+    format_name = options.format or "png"
+    if not query_hardcopy and format_name not in capabilities.screenshot_formats:
+        raise ParameterValidationError("Requested screenshot format is unsupported for this model")
+    if capabilities.series not in {"2000X", "3000X", "4000X"}:
+        if query_hardcopy or options.palette is not None:
             raise ParameterValidationError("Requested screenshot format or hardcopy controls are unsupported for this model")
         return
     controls = query_hardcopy or any(value is not None for value in (
         options.format, options.ink_saver, options.palette, options.layout))
     if controls and not capabilities.supports_screenshot_hardcopy_controls:
         raise ParameterValidationError("Screenshot hardcopy controls require a 4000X capability profile.")
-    if not query_hardcopy and not capabilities.supports_png_screenshot:
-        raise ParameterValidationError("Screenshot capture is unsupported for this model")
 
 
 class ScreenshotController:
@@ -81,47 +81,29 @@ class ScreenshotController:
         self.scpi = scpi
         self.capabilities = capabilities
 
-    def capture_png(
-        self,
-        *,
-        background: str = DEFAULT_SCREENSHOT_BACKGROUND,
-        timeout_ms: int = SCREENSHOT_TIMEOUT_MS,
-    ) -> ScreenshotCapture:
-        """Capture the current screen as a color PNG image."""
-
-        if not self.capabilities.supports_png_screenshot:
-            raise ParameterValidationError(
-                f"screenshot capture is not enabled for {self.capabilities.series} capabilities."
-            )
-
-        background = normalize_screenshot_background(background)
-        raw_values = self._capture_png_values(background, timeout_ms)
-        data = screenshot_bytes_from_values(raw_values)
-        return ScreenshotCapture(
-            format_name=SCREENSHOT_FORMAT,
-            palette=SCREENSHOT_PALETTE,
-            data=data,
-            background=background,
-        )
-
     def capture(
         self,
         *,
-        options: ScreenshotOptions,
+        options: ScreenshotOptions = ScreenshotOptions(),
         background: str = DEFAULT_SCREENSHOT_BACKGROUND,
         timeout_ms: int = SCREENSHOT_TIMEOUT_MS,
     ) -> ScreenshotCapture:
         """Capture a screen image with optional 4000X hardcopy controls."""
 
-        if not self.capabilities.supports_png_screenshot:
-            raise ParameterValidationError(
-                f"screenshot capture is not enabled for {self.capabilities.series} capabilities."
-            )
         normalized = normalize_screenshot_options(options)
+        validate_screenshot_capability(self.capabilities, normalized)
         background = normalize_screenshot_background(background)
-        if not self.capabilities.supports_screenshot_hardcopy_controls:
-            raise ParameterValidationError(
-                "Screenshot hardcopy controls require a 4000X capability profile."
+        if all(value is None for value in (
+            normalized.format, normalized.ink_saver, normalized.palette, normalized.layout
+        )):
+            values = self._capture_values_with_temporary_background(
+                background, timeout_ms, None
+            )
+            return ScreenshotCapture(
+                format_name=SCREENSHOT_FORMAT,
+                palette=SCREENSHOT_PALETTE,
+                data=screenshot_bytes_from_values(values),
+                background=background,
             )
 
         if normalized.ink_saver is not None:
@@ -177,19 +159,8 @@ class ScreenshotController:
             raw_format=raw_format,
         )
 
-    def _capture_png_values(self, background: str, timeout_ms: int) -> Sequence[int]:
-        original_inksaver = parse_hardcopy_inksaver(self.scpi.query(hardcopy_inksaver_query()))
-        desired_inksaver = hardcopy_inksaver_for_background(background)
-        if original_inksaver != desired_inksaver:
-            self.scpi.write(hardcopy_inksaver_command(desired_inksaver))
-        try:
-            return self._query_screenshot_data(timeout_ms)
-        finally:
-            if original_inksaver != desired_inksaver:
-                self.scpi.write(hardcopy_inksaver_command(original_inksaver))
-
     def _capture_values_with_temporary_background(
-        self, background: str, timeout_ms: int, format_name: str
+        self, background: str, timeout_ms: int, format_name: str | None
     ) -> Sequence[int]:
         original_inksaver = parse_hardcopy_inksaver(self.scpi.query(hardcopy_inksaver_query()))
         desired_inksaver = hardcopy_inksaver_for_background(background)

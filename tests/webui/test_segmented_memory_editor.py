@@ -9,7 +9,7 @@ import pytest
 
 from scopes_tool_webui import command_execution as command_execution_module
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
-from scopes_tool_webui.commands import COMMANDS, command_catalog
+from scopes_tool_webui.command_catalog import COMMANDS, command_catalog
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"

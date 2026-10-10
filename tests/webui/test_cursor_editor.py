@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import scopes_tool_webui.command_execution as command_execution_module
-import scopes_tool_webui.commands as commands_module
+import scopes_tool_webui.command_catalog as command_catalog_module
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
@@ -24,13 +24,10 @@ def read_static(name: str) -> str:
 
 
 def test_cursor_command_carries_cursor_editor_metadata() -> None:
-    legacy = next(
-        entry for entry in commands_module.COMMANDS if entry["id"] == "cursor"
-    )
-    assert legacy.get("hidden") is True
+    assert "cursor" not in {entry["id"] for entry in command_catalog_module.COMMANDS}
 
     public = {
-        entry["id"]: entry for entry in commands_module.command_catalog()
+        entry["id"]: entry for entry in command_catalog_module.command_catalog()
     }
     assert {"cursor-query", "cursor-set", "cursor-off"} <= set(public)
     assert "cursor" not in public
@@ -98,50 +95,6 @@ def test_cursor_command_carries_cursor_editor_metadata() -> None:
     )
     for concept in ("selected and displayed", "resets acquisition", "current waveform"):
         assert concept in english_hint
-
-
-def test_cursor_set_validation_requires_source_and_one_position() -> None:
-    request = validate_job_request({
-        "command": "cursor",
-        "mode": "simulate",
-        "model_id": MODEL_ID,
-        "parameters": {
-            "action": "set",
-            "source_channel": 1,
-            "x1": 0.0,
-        },
-    })
-
-    assert request["parameters"]["source_channel"] == 1
-    assert request["parameters"]["x1"] == 0.0
-    with pytest.raises(WebUIRequestError, match="source_channel"):
-        validate_job_request({
-            "command": "cursor",
-            "mode": "simulate",
-            "model_id": MODEL_ID,
-            "parameters": {"action": "set", "x1": 0.0},
-        })
-    with pytest.raises(WebUIRequestError, match="at least one of"):
-        validate_job_request({
-            "command": "cursor",
-            "mode": "simulate",
-            "model_id": MODEL_ID,
-            "parameters": {"action": "set", "source_channel": 1},
-        })
-    with pytest.raises(WebUIRequestError, match="query, set, or off"):
-        validate_job_request({
-            "command": "cursor",
-            "mode": "simulate",
-            "model_id": MODEL_ID,
-            "parameters": {"action": "run"},
-        })
-    with pytest.raises(WebUIRequestError, match="cursor off cannot include"):
-        validate_job_request({
-            "command": "cursor",
-            "mode": "simulate",
-            "model_id": MODEL_ID,
-            "parameters": {"action": "off", "x1": 0.0},
-        })
 
 
 def test_cursor_set_command_validation_requires_source_and_one_position() -> None:
@@ -239,12 +192,12 @@ def test_cursor_set_rejects_function_on_keysight() -> None:
 
 
 def test_cursor_query_rejects_function() -> None:
-    with pytest.raises(WebUIRequestError, match="cursor query cannot include function"):
+    with pytest.raises(WebUIRequestError, match="unknown parameter"):
         validate_job_request({
-            "command": "cursor",
+            "command": "cursor-query",
             "mode": "simulate",
             "model_id": TBS2074,
-            "parameters": {"action": "query", "function": "off"},
+            "parameters": {"function": "off"},
         })
 
 
@@ -366,12 +319,6 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
 
     assert calls == [("off", (), {}), ("query", (), {})]
 
-    calls.clear()
-    command_execution_module._execute_scope_command(
-        scope, "cursor", "SIM::INSTR", {"action": "off"}, tmp_path
-    )
-
-    assert calls == [("off", (), {}), ("query", (), {})]
 
 
 @pytest.mark.skipif(
@@ -379,7 +326,7 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
     reason="Node.js is required for frontend behavior checks",
 )
 def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
-    catalog_json = json.dumps(commands_module.command_catalog())
+    catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     app_source = read_static("app.js")
@@ -648,3 +595,11 @@ def test_keysight_cursor_execution_uses_base_core_signature(tmp_path: Path) -> N
 
     assert ":MARKer:MODE MANual" in scope.backend.history
     assert not any("CURSor:FUNCtion" in command for command in scope.backend.history)
+
+
+def test_retired_cursor_command_is_rejected():
+    with pytest.raises(WebUIRequestError, match="command"):
+        validate_job_request({
+            "command": "cursor", "mode": "simulate", "model_id": MODEL_ID,
+            "parameters": {"action": "query"},
+        })

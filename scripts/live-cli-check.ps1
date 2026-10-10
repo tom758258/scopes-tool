@@ -744,7 +744,7 @@ function Invoke-StrictPairMeasurement {
 
     $arguments = @("measure") + $script:LiveConnectionArguments + @(
         "--json",
-        "--source-channel", [string]$Channel
+        "--channel", [string]$Channel
     )
     if ($ReferenceChannel -gt 0) {
         $arguments += @("--reference-channel", [string]$ReferenceChannel)
@@ -774,7 +774,7 @@ function Invoke-ReferenceWaveformReadiness {
         $invocation = Invoke-CliRaw -Stage "reference-ch1-readiness" -Arguments (
             @("measure") + $script:LiveConnectionArguments + @(
                 "--json",
-                "--source-channel", "1", "--item", "vpp"
+                "--channel", "1", "--item", "vpp"
             )
         )
         $payload = $invocation.Payload
@@ -866,7 +866,7 @@ function Invoke-PairMeasurementReadiness {
         $invocation = Invoke-CliRaw -Stage "measure-ch2-readiness" -Arguments (
             @("measure") + $script:LiveConnectionArguments + @(
                 "--json",
-                "--source-channel", "2", "--item", "vpp"
+                "--channel", "2", "--item", "vpp"
             )
         )
         $payload = $invocation.Payload

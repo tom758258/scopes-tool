@@ -239,7 +239,7 @@ class TektronixOscilloscope(Oscilloscope):
             if parameters.get("count") is not None:
                 scope.set_acquisition_count(parameters["count"])
         elif action == "screenshot":
-            scope.capture_screenshot_png(background=parameters.get("background", "black"))
+            scope.capture_screenshot(background=parameters.get("background", "black"))
         elif action == "doctor":
             from .operations import run_doctor
             run_doctor(scope, "")
@@ -261,7 +261,7 @@ class TektronixOscilloscope(Oscilloscope):
         if command in {"measure", "capture"}:
             from .planning import CapturePlanRequest, MeasurePlanRequest, plan_capture, plan_measure
             if command == "measure":
-                request = MeasurePlanRequest(args.item, args.channel, args.source_channel,
+                request = MeasurePlanRequest(args.item, args.channel,
                     args.reference_channel, args.time_s, args.level, args.slope, args.occurrence)
                 plan = plan_measure(request, capabilities)
             else:
@@ -1505,7 +1505,7 @@ class TektronixOscilloscope(Oscilloscope):
         value, raw = self._query("SAVe:WAVEform:FILEFormat?")
         return SaveWaveformFormatState(_choice(value, {"SPREADS": "csv", "SPREADSHEET": "csv"}, "waveform format response"), raw)
 
-    def capture_screenshot(self, *, options: ScreenshotOptions, background: str = "black") -> ScreenshotCapture:
+    def capture_screenshot(self, *, options: ScreenshotOptions = ScreenshotOptions(), background: str = "black") -> ScreenshotCapture:
         options = normalize_screenshot_options(options)
         background = normalize_screenshot_background(background)
         validate_screenshot_capability(self.capabilities, options)
@@ -1551,9 +1551,6 @@ class TektronixOscilloscope(Oscilloscope):
                         stack.callback(self.scpi.write, f"{command} {original}")
             finally:
                 self.scpi.set_timeout(original_timeout)
-
-    def capture_screenshot_png(self, *, background: str = "black") -> ScreenshotCapture:
-        return self.capture_screenshot(options=ScreenshotOptions(format="png"), background=background)
 
     def _capture_native_png(self, options: ScreenshotOptions, background: str) -> ScreenshotCapture:
         if background != "black" or options.ink_saver is not None or options.layout is not None:

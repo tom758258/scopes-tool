@@ -9,7 +9,7 @@ import pytest
 
 from scopes_tool_core.capabilities import ScopeCapabilities
 from scopes_tool_webui import command_catalog as catalog_module
-from scopes_tool_webui.commands import COMMANDS, command_catalog
+from scopes_tool_webui.command_catalog import COMMANDS, command_catalog
 from scopes_tool_webui.command_catalog import _ANALOG_CHANNEL_FIELDS, _model_command_presentation
 
 
@@ -64,7 +64,7 @@ def test_analog_channel_model_projection_tracks_capabilities() -> None:
         supports_raw_points_mode=False,
         supports_measurements=True,
         supports_delay_measurement=False,
-        supports_screenshot=True,
+        screenshot_formats=("png",),
         supports_segmented_memory=True,
         supports_serial_decode=True,
         serial_bus_count=1,
@@ -1702,7 +1702,7 @@ def test_serial_source_and_finite_numeric_control_metadata() -> None:
         supports_raw_points_mode=False,
         supports_measurements=True,
         supports_delay_measurement=False,
-        supports_screenshot=True,
+        screenshot_formats=("png",),
         supports_segmented_memory=True,
         supports_serial_decode=True,
         serial_bus_count=1,

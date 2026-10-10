@@ -1876,13 +1876,8 @@ class Oscilloscope:
     def clear_math(self, function: int) -> None:
         self._math_controller().clear(function)
 
-    def capture_screenshot_png(self, *, background: str = "black") -> ScreenshotCapture:
-        """Capture the current screen as a color PNG image."""
-
-        return self._screenshot_controller().capture_png(background=background)
-
     def capture_screenshot(
-        self, *, options: ScreenshotOptions, background: str = "black"
+        self, *, options: ScreenshotOptions = ScreenshotOptions(), background: str = "black"
     ) -> ScreenshotCapture:
         """Capture a screen image with optional hardcopy controls."""
 

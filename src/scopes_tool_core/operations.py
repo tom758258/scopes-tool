@@ -582,7 +582,7 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
                 **_waveform_capture_summary(capture),
             }
             human.append("Planned capture: current screen PNG image with black background")
-            screenshot = scope.capture_screenshot_png(background="black")
+            screenshot = scope.capture_screenshot(background="black")
             written_png = (
                 write_screenshot_png_file(screenshot, screenshot_path)
                 if screenshot_path is not None
@@ -1104,7 +1104,6 @@ def _measurement_query_kwargs(request: MeasureRequest, item: str) -> dict[str, o
         MeasurePlanRequest(
             item=request.item,
             channel=request.channel,
-            source_channel=request.source_channel,
             reference_channel=request.reference_channel,
             time_s=request.time_s,
             level=request.level,

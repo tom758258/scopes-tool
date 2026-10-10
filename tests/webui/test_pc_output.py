@@ -15,7 +15,7 @@ import pytest
 import scopes_tool_webui.app as app_module
 import scopes_tool_webui.desktop as desktop_module
 from scopes_tool_webui.app import app
-from scopes_tool_webui.commands import validate_job_request
+from scopes_tool_webui.command_validation import validate_job_request
 from scopes_tool_webui.desktop import (
     FolderOpenUnavailable,
     FolderSelectionUnavailable,

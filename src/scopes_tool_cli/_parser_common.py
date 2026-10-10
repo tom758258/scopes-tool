@@ -132,11 +132,6 @@ def _add_scope_connection_args(parser: argparse.ArgumentParser) -> None:
             "defaults to keysight-dsox4024a"
         ),
     )
-    parser.add_argument(
-        "--live",
-        action="store_true",
-        help="one-shot compatibility flag for live mode; cannot be combined with --simulate or --dry-run",
-    )
 
 
 def _positive_int(value: str) -> int:

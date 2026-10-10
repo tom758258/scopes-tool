@@ -40,8 +40,6 @@ from scopes_tool_core.serial import (
 )
 from scopes_tool_core.timebase import TIMEBASE_REFERENCES
 
-# This module stays the parser facade. The private names below keep their
-# existing parser.* call sites working after the per-domain split.
 from ._parser_acquisition_math import _register_acquisition_math_parsers
 from ._parser_channel_analysis import _register_channel_analysis_parsers
 from ._parser_common import (

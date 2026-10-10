@@ -960,7 +960,7 @@ def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection(
 
 def test_list_resources_command_exposes_a_boolean_live_only_parameter() -> None:
     from scopes_tool_webui.command_catalog import COMMANDS
-    from scopes_tool_webui.commands import WebUIRequestError, validate_job_request
+    from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 
     list_resources = next(entry for entry in COMMANDS if entry["id"] == "list-resources")
     assert list_resources["hidden"] is True

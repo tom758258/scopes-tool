@@ -332,7 +332,7 @@ def test_detected_capability_validation_happens_before_output_creation(tmp_path)
         _step(
             "measure",
             item="delay",
-            source_channel=1,
+            channel=1,
             reference_channel=2,
         )
     )
@@ -638,3 +638,28 @@ def test_post_step_manifest_persistence_failure_preserves_uncommitted_state_and_
     assert len(manifest["executions"]) == 1
     assert manifest["executions"][0]["loop_index"] == 1
     assert manifest["failed_step"]["loop_index"] == 2
+
+
+def test_sequence_measure_rejects_source_channel():
+    with pytest.raises(ParameterValidationError, match="unknown field"):
+        _document(_step("measure", item="vpp", source_channel=1))
+
+
+@pytest.mark.parametrize("item, reference, command", [
+    ("vpp", None, ":MEASure:VPP? CHANnel1"),
+    ("phase", 2, ":MEASure:PHASe? CHANnel1,CHANnel2"),
+    ("delay", 2, ":MEASure:DELay? AUTO,CHANnel1,CHANnel2"),
+])
+def test_sequence_measure_uses_canonical_channel(item, reference, command):
+    parameters = {"item": item, "channel": 1}
+    if reference is not None:
+        parameters["reference_channel"] = reference
+    document = _document(_step("measure", **parameters))
+    scope = _scope()
+    scope.query_idn()
+    plan = sequence.plan_sequence(sequence.SequenceRequest(document, save_results=False), scope.capabilities)
+    assert command in plan.planned_scpi
+    result = sequence.run_sequence(scope, RESOURCE, sequence.SequenceRequest(document, save_results=False))
+    assert result.exit_code == 0
+    assert command in scope.backend.history
+    assert document.version == 1

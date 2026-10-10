@@ -22,7 +22,7 @@ from scopes_tool_cli._worker_commands_workflows import (
     _normalize_segmented_capture_worker_arguments,
 )
 from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS, arguments_to_argv
-from scopes_tool_core.advanced import trigger_holdoff_commands, trigger_holdoff_query
+from scopes_tool_core.trigger_holdoff import trigger_holdoff_commands, trigger_holdoff_query
 from scopes_tool_core.acquisition import (
     acquisition_points_query,
     record_length_query,
@@ -1521,7 +1521,7 @@ def test_send_command_sends_v2_request(monkeypatch, capsys):
 )
 def test_lifecycle_client_response_validator_rejects_invalid_schema(payload):
     with pytest.raises(OscilloscopeError, match="invalid worker response"):
-        worker._validate_client_response(payload)
+        worker_client._validate_client_response(payload)
 
 
 def test_lifecycle_client_fails_closed_on_invalid_worker_response(
@@ -3111,3 +3111,30 @@ def test_worker_tek_periodic_install_uses_core_capability():
     assert result["state"] == "failed"
     assert "unsupported" in result["error"]["message"]
     assert job.result is None
+
+
+@pytest.mark.parametrize("item, reference", [("vpp", None), ("phase", 2), ("delay", 2)])
+def test_worker_measure_uses_canonical_channel(item, reference):
+    arguments = {"item": item, "channel": 1}
+    if reference is not None:
+        arguments["reference_channel"] = reference
+    parsed = worker.parse_domain_command("measure", arguments, _runtime())
+    assert parsed.channel == 1
+    assert parsed.reference_channel == reference
+    assert not hasattr(parsed, "source_channel")
+
+
+@pytest.mark.parametrize("arguments", [
+    {"item": "vpp", "source_channel": 1},
+    {"item": "freq", "channel": 1},
+])
+def test_worker_measure_rejects_old_inputs(arguments):
+    with pytest.raises(OscilloscopeError):
+        worker.parse_domain_command("measure", arguments, _runtime())
+
+
+def test_worker_cursor_remains_a_formal_command():
+    parsed = worker.parse_domain_command("cursor", {"source_channel": 1, "x1": 0.0}, _runtime())
+    assert parsed.command == "cursor"
+    assert parsed.source_channel == 1
+    assert parsed.x1 == 0.0

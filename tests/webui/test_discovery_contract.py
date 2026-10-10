@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from scopes_tool_core import discovery
 from scopes_tool_core.visa_backend import VisaLiveVerification, VisaResourceListing
-import scopes_tool_webui.commands as commands
+import scopes_tool_webui.command_validation as command_validation_module
+import scopes_tool_webui.command_execution as command_execution_module
 
 
 def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch, tmp_path) -> None:
@@ -44,7 +45,7 @@ def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch
     monkeypatch.setattr(discovery, "verify_visa_resource_live", verify)
     monkeypatch.setattr(discovery, "verify_asrl_resource_live", verify_asrl)
 
-    request = commands.validate_job_request(
+    request = command_validation_module.validate_job_request(
         {
             "command": "list-resources",
             "mode": "live",
@@ -52,7 +53,7 @@ def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch
             "parameters": {"live_only": True},
         }
     )
-    result = commands.execute_command(
+    result = command_execution_module.execute_command(
         request["command"],
         mode=request["mode"],
         resource=request["resource"],
@@ -149,7 +150,7 @@ def test_webui_list_resources_defaults_to_raw_mode(monkeypatch, tmp_path) -> Non
         lambda *, live_only: calls.append(live_only) or RawListing(),
     )
 
-    request = commands.validate_job_request(
+    request = command_validation_module.validate_job_request(
         {
             "command": "list-resources",
             "mode": "live",
@@ -157,7 +158,7 @@ def test_webui_list_resources_defaults_to_raw_mode(monkeypatch, tmp_path) -> Non
             "parameters": {},
         }
     )
-    result = commands.execute_command(
+    result = command_execution_module.execute_command(
         request["command"],
         mode=request["mode"],
         resource=request["resource"],

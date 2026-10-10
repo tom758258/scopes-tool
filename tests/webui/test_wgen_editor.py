@@ -11,7 +11,7 @@ import pytest
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.wgen import WGEN_FUNCTIONS, WGEN_LOADS, wgen_frequency_limits
 import scopes_tool_webui.command_execution as command_execution_module
-import scopes_tool_webui.commands as commands_module
+import scopes_tool_webui.command_catalog as command_catalog_module
 from scopes_tool_webui.command_catalog import _command_supported_by_capabilities
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 
@@ -36,7 +36,7 @@ def read_static(name: str) -> str:
 
 
 def test_wgen_command_family_routes_to_one_editor() -> None:
-    entries = [entry for entry in commands_module.COMMANDS if entry["id"] in WGEN_COMMAND_IDS]
+    entries = [entry for entry in command_catalog_module.COMMANDS if entry["id"] in WGEN_COMMAND_IDS]
 
     assert [entry["id"] for entry in entries] == WGEN_COMMAND_IDS
     for entry in entries:
@@ -48,7 +48,7 @@ def test_wgen_command_family_routes_to_one_editor() -> None:
 
 
 def test_wgen_options_come_from_core_constants() -> None:
-    entries = {entry["id"]: entry for entry in commands_module.COMMANDS}
+    entries = {entry["id"]: entry for entry in command_catalog_module.COMMANDS}
 
     function = next(
         field for field in entries["wgen-function"]["fields"] if field["name"] == "function"
@@ -62,7 +62,7 @@ def test_wgen_options_come_from_core_constants() -> None:
 
 
 def test_wgen_frequency_model_presentation_projects_core_limits() -> None:
-    catalog = {entry["id"]: entry for entry in commands_module.command_catalog()}
+    catalog = {entry["id"]: entry for entry in command_catalog_module.command_catalog()}
     models = catalog["wgen-frequency"]["presentation"]["models"]
 
     projected = models["keysight-dsox4024a"]["fields"]["frequency_hz"]["frequency_limits"]
@@ -81,7 +81,7 @@ def test_wgen_frequency_model_presentation_projects_core_limits() -> None:
 
 
 def test_wgen_commands_follow_model_support_flag() -> None:
-    entries = {entry["id"]: entry for entry in commands_module.COMMANDS}
+    entries = {entry["id"]: entry for entry in command_catalog_module.COMMANDS}
     supported = capabilities_for_model_id(MODEL_ID)
     unsupported = dataclasses.replace(supported, supports_wgen=False)
 
@@ -209,7 +209,7 @@ def test_wgen_frequency_set_does_not_touch_output(tmp_path: Path) -> None:
     reason="Node.js is required for frontend behavior checks",
 )
 def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
-    catalog_json = json.dumps(commands_module.command_catalog())
+    catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     app_source = read_static("app.js")
@@ -445,7 +445,7 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
     reason="Node.js is required for frontend behavior checks",
 )
 def test_wgen_frequency_range_warning(tmp_path: Path) -> None:
-    catalog_json = json.dumps(commands_module.command_catalog())
+    catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")
 
     assert '"wgen.frequency.rangeWarning"' in english

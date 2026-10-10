@@ -209,7 +209,6 @@ def _run_mode_options(args: argparse.Namespace) -> RunModeOptions:
     return RunModeOptions(
         simulate=bool(getattr(args, "simulate", False)),
         dry_run=bool(getattr(args, "dry_run", False)),
-        live=bool(getattr(args, "live", False)),
         planning_physical_model_id=planning_model_id,
         expected_physical_model_id=expected_model_id,
         simulate_signals=tuple(getattr(args, "simulate_signals", ()) or ()),
@@ -261,8 +260,7 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "supports_advanced_fft": capabilities.supports_advanced_fft,
         "supports_wgen": capabilities.supports_wgen,
         "wgen_scpi_root": capabilities.wgen_scpi_root,
-        "supports_screenshot": capabilities.supports_png_screenshot,
-        "screenshot_formats": list(capabilities.supported_screenshot_formats),
+        "screenshot_formats": list(capabilities.screenshot_formats),
         "supports_screenshot_hardcopy_controls": capabilities.supports_screenshot_hardcopy_controls,
         "supports_segmented_memory": capabilities.supports_segmented_memory,
         "segmented_max_segments": capabilities.segmented_max_segments,

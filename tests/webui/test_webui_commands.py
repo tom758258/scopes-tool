@@ -39,13 +39,10 @@ import scopes_tool_webui.app as app_module
 import scopes_tool_webui.command_execution as command_execution_module
 import scopes_tool_webui.command_execution_advanced as command_execution_advanced
 import scopes_tool_webui.command_execution_general as command_execution_general
-import scopes_tool_webui.commands as commands_module
+import scopes_tool_webui.command_catalog as command_catalog_module
 from scopes_tool_webui.app import app
-from scopes_tool_webui.commands import (
-    ScopeSessionCloseError,
-    WebUIRequestError,
-    validate_job_request,
-)
+from scopes_tool_webui.command_execution import ScopeSessionCloseError
+from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 from scopes_tool_webui.jobs import JobManager, JobManagerShuttingDown
 
 
@@ -2171,11 +2168,11 @@ def test_commands_expose_reference_and_save_subset() -> None:
     assert commands["reference-labels"]["category"] == "Reference"
     assert commands["reference-labels"]["modes"] == ["live", "simulate"]
     assert commands.get("save-export") is None
-    assert expected <= {entry["id"] for entry in commands_module.COMMANDS}
+    assert expected <= {entry["id"] for entry in command_catalog_module.COMMANDS}
     assert {
         "reference-waveform",
         "reference-labels",
-    }.isdisjoint(commands_module._COMMAND_BY_ID)
+    }.isdisjoint(command_catalog_module._COMMAND_BY_ID)
 
     browser_commands = [
         entry for entry in response.json() if not entry.get("browser_hidden")
@@ -2249,7 +2246,7 @@ def test_query_only_commands_do_not_default_set_only_channels() -> None:
     assert response.status_code == 200
     commands = {entry["id"]: entry for entry in response.json()}
     measure_source_command = next(
-        entry for entry in commands_module.COMMANDS if entry["id"] == "measure-source"
+        entry for entry in command_catalog_module.COMMANDS if entry["id"] == "measure-source"
     )
     measure_source = next(
         field for field in measure_source_command["fields"]
@@ -2261,12 +2258,12 @@ def test_query_only_commands_do_not_default_set_only_channels() -> None:
 
 
 def test_measure_source_remains_in_backend_validation_contract() -> None:
-    backend_ids = {entry["id"] for entry in commands_module.COMMANDS}
+    backend_ids = {entry["id"] for entry in command_catalog_module.COMMANDS}
     assert {
         "measure", "measure-install", "measure-results", "measure-clear", "measure-show",
         "measure-source", "measure-window", "measurement-statistics",
     } <= backend_ids
-    assert "front-panel-measurements" not in commands_module._COMMAND_BY_ID
+    assert "front-panel-measurements" not in command_catalog_module._COMMAND_BY_ID
 
     request = validate_job_request({
         "command": "measure-source",
@@ -2348,7 +2345,7 @@ def test_measurement_statistics_validation_and_reset_execution(tmp_path: Path) -
             })
 
     statistics_definition = next(
-        entry for entry in commands_module.COMMANDS
+        entry for entry in command_catalog_module.COMMANDS
         if entry["id"] == "measurement-statistics"
     )
     statistics_fields = {

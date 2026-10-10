@@ -2039,7 +2039,7 @@ function Run-Scenario {
     $script:Diagnostics = [ordered]@{}
     $script:FunctionalFailed = $false
     $Resource = "TEST::INSTR"
-    $script:LiveConnectionArguments = @("--live", "--resource", $Resource)
+    $script:LiveConnectionArguments = @("--resource", $Resource)
     $liveArtifactRoot = Join-Path $ArtifactRoot $Scenario.Name
     [void](New-Item -ItemType Directory -Path $liveArtifactRoot -Force)
 

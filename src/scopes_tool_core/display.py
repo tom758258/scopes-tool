@@ -161,14 +161,8 @@ def display_persistence_query() -> str:
 def validate_display_persistence(value: str | float, capabilities: ScopeCapabilities | None = None) -> tuple[str | None, float | None]:
     if isinstance(value, str):
         normalized = value.strip().lower()
-        aliases = {
-            "min": "minimum",
-            "minimum": "minimum",
-            "inf": "infinite",
-            "infinite": "infinite",
-        }
-        if normalized in aliases:
-            return aliases[normalized], None
+        if normalized in {"minimum", "infinite"}:
+            return normalized, None
         try:
             numeric = float(value)
         except ValueError as exc:

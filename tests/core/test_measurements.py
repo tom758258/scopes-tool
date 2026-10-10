@@ -30,7 +30,6 @@ from scopes_tool_core.simulator_backend import SimulatorBackend
 def test_measurement_query_uses_keysight_measure_syntax():
     assert measurement_query("vpp", 1) == ":MEASure:VPP? CHANnel1"
     assert measurement_query("frequency", 2) == ":MEASure:FREQuency? CHANnel2"
-    assert measurement_query("freq", 2) == ":MEASure:FREQuency? CHANnel2"
     assert measurement_query("period", 1) == ":MEASure:PERiod? CHANnel1"
     assert measurement_query("vavg", 1) == ":MEASure:VAVerage? DISPlay,CHANnel1"
     assert measurement_query("vrms", 1) == ":MEASure:VRMS? DISPlay,DC,CHANnel1"
@@ -55,39 +54,6 @@ def test_measurement_query_uses_keysight_measure_syntax():
     assert measurement_query("negative_edges", 1) == ":MEASure:NEDGes? CHANnel1"
     assert measurement_query("positive_pulses", 1) == ":MEASure:PPULses? CHANnel1"
     assert measurement_query("negative_pulses", 1) == ":MEASure:NPULses? CHANnel1"
-    assert measurement_query("acrms", 1) == ":MEASure:VRMS? DISPlay,AC,CHANnel1"
-    assert measurement_query("vrms_ac", 1) == ":MEASure:VRMS? DISPlay,AC,CHANnel1"
-    assert measurement_query("vmin", 1) == ":MEASure:VMIN? CHANnel1"
-    assert measurement_query("vmax", 1) == ":MEASure:VMAX? CHANnel1"
-    assert measurement_query("xmax", 1) == ":MEASure:XMAX? CHANnel1"
-    assert measurement_query("x-at-max", 1) == ":MEASure:XMAX? CHANnel1"
-    assert measurement_query("xmin", 1) == ":MEASure:XMIN? CHANnel1"
-    assert measurement_query("x-at-min", 1) == ":MEASure:XMIN? CHANnel1"
-    assert measurement_query("risetime", 1) == ":MEASure:RISetime? CHANnel1"
-    assert measurement_query("falltime", 1) == ":MEASure:FALLtime? CHANnel1"
-    assert measurement_query("vamp", 1) == ":MEASure:VAMPlitude? CHANnel1"
-    assert measurement_query("vtop", 1) == ":MEASure:VTOP? CHANnel1"
-    assert measurement_query("vbase", 1) == ":MEASure:VBASe? CHANnel1"
-    assert measurement_query("pwidth", 1) == ":MEASure:PWIDth? CHANnel1"
-    assert measurement_query("positive-width", 1) == ":MEASure:PWIDth? CHANnel1"
-    assert measurement_query("pwid", 1) == ":MEASure:PWIDth? CHANnel1"
-    assert measurement_query("nwidth", 1) == ":MEASure:NWIDth? CHANnel1"
-    assert measurement_query("negative-width", 1) == ":MEASure:NWIDth? CHANnel1"
-    assert measurement_query("nwid", 1) == ":MEASure:NWIDth? CHANnel1"
-    assert measurement_query("duty", 1) == ":MEASure:DUTYcycle? CHANnel1"
-    assert measurement_query("dutycycle", 1) == ":MEASure:DUTYcycle? CHANnel1"
-    assert measurement_query("duty-cycle", 1) == ":MEASure:DUTYcycle? CHANnel1"
-    assert measurement_query("nduty", 1) == ":MEASure:NDUTy? CHANnel1"
-    assert measurement_query("negative-duty", 1) == ":MEASure:NDUTy? CHANnel1"
-    assert measurement_query("negative-duty-cycle", 1) == ":MEASure:NDUTy? CHANnel1"
-    assert measurement_query("pedges", 1) == ":MEASure:PEDGes? CHANnel1"
-    assert measurement_query("positive-edges", 1) == ":MEASure:PEDGes? CHANnel1"
-    assert measurement_query("nedges", 1) == ":MEASure:NEDGes? CHANnel1"
-    assert measurement_query("negative-edges", 1) == ":MEASure:NEDGes? CHANnel1"
-    assert measurement_query("ppulses", 1) == ":MEASure:PPULses? CHANnel1"
-    assert measurement_query("positive-pulses", 1) == ":MEASure:PPULses? CHANnel1"
-    assert measurement_query("npulses", 1) == ":MEASure:NPULses? CHANnel1"
-    assert measurement_query("negative-pulses", 1) == ":MEASure:NPULses? CHANnel1"
     assert (
         measurement_query(
             "time_at_edge",
@@ -99,7 +65,7 @@ def test_measurement_query_uses_keysight_measure_syntax():
     )
     assert (
         measurement_query(
-            "time-at-value",
+            "time_at_value",
             1,
             level=0.5,
             slope="negative",
@@ -138,56 +104,68 @@ def test_delay_pair_measurement_uses_capability_flag_instead_of_series():
     )
 
 
-def test_measurement_item_normalization_accepts_aliases():
-    assert normalize_measurement_item("freq") == "frequency"
-    assert normalize_measurement_item("acrms") == "ac_rms"
-    assert normalize_measurement_item("vrms_ac") == "ac_rms"
-    assert normalize_measurement_item("min") == "minimum"
-    assert normalize_measurement_item("vmin") == "minimum"
-    assert normalize_measurement_item("max") == "maximum"
-    assert normalize_measurement_item("vmax") == "maximum"
-    assert normalize_measurement_item("xmax") == "x_at_max"
-    assert normalize_measurement_item("x-at-max") == "x_at_max"
-    assert normalize_measurement_item("xmin") == "x_at_min"
-    assert normalize_measurement_item("x-at-min") == "x_at_min"
-    assert normalize_measurement_item("risetime") == "rise_time"
-    assert normalize_measurement_item("rise-time") == "rise_time"
-    assert normalize_measurement_item("falltime") == "fall_time"
-    assert normalize_measurement_item("fall-time") == "fall_time"
-    assert normalize_measurement_item("vamp") == "amplitude"
-    assert normalize_measurement_item("vtop") == "top"
-    assert normalize_measurement_item("vbase") == "base"
-    assert normalize_measurement_item("pwidth") == "positive_width"
-    assert normalize_measurement_item("positive-width") == "positive_width"
-    assert normalize_measurement_item("pwid") == "positive_width"
-    assert normalize_measurement_item("nwidth") == "negative_width"
-    assert normalize_measurement_item("negative-width") == "negative_width"
-    assert normalize_measurement_item("nwid") == "negative_width"
-    assert normalize_measurement_item("duty") == "duty_cycle"
-    assert normalize_measurement_item("dutycycle") == "duty_cycle"
-    assert normalize_measurement_item("duty-cycle") == "duty_cycle"
-    assert normalize_measurement_item("nduty") == "negative_duty_cycle"
-    assert normalize_measurement_item("negative-duty") == "negative_duty_cycle"
-    assert normalize_measurement_item("negative-duty-cycle") == "negative_duty_cycle"
-    assert normalize_measurement_item("pedges") == "positive_edges"
-    assert normalize_measurement_item("positive-edges") == "positive_edges"
-    assert normalize_measurement_item("nedges") == "negative_edges"
-    assert normalize_measurement_item("negative-edges") == "negative_edges"
-    assert normalize_measurement_item("ppulses") == "positive_pulses"
-    assert normalize_measurement_item("positive-pulses") == "positive_pulses"
-    assert normalize_measurement_item("npulses") == "negative_pulses"
-    assert normalize_measurement_item("negative-pulses") == "negative_pulses"
-    assert normalize_measurement_item("yatx") == "y_at_x"
-    assert normalize_measurement_item("y-at-x") == "y_at_x"
-    assert normalize_measurement_item("vtime") == "y_at_x"
-    assert normalize_measurement_item("y_at_time") == "y_at_x"
-    assert normalize_measurement_item("y-at-time") == "y_at_x"
-    assert normalize_measurement_item("tedge") == "time_at_edge"
-    assert normalize_measurement_item("time-at-edge") == "time_at_edge"
-    assert normalize_measurement_item("tvalue") == "time_at_value"
-    assert normalize_measurement_item("time-at-value") == "time_at_value"
-    assert normalize_measurement_item("time_at_level") == "time_at_value"
-    assert normalize_measurement_item("time-at-level") == "time_at_value"
+@pytest.mark.parametrize(
+    "item",
+    [
+        'pk-pk',
+        'pkpk',
+        'freq',
+        'acrms',
+        'vrms_ac',
+        'min',
+        'vmin',
+        'max',
+        'vmax',
+        'xmax',
+        'x-at-max',
+        'xmin',
+        'x-at-min',
+        'risetime',
+        'rise-time',
+        'falltime',
+        'fall-time',
+        'vamp',
+        'vtop',
+        'vbase',
+        'pwidth',
+        'positive-width',
+        'pwid',
+        'nwidth',
+        'negative-width',
+        'nwid',
+        'duty',
+        'dutycycle',
+        'duty-cycle',
+        'nduty',
+        'negative-duty',
+        'negative-duty-cycle',
+        'pedges',
+        'positive-edges',
+        'nedges',
+        'negative-edges',
+        'ppulses',
+        'positive-pulses',
+        'npulses',
+        'negative-pulses',
+        'yatx',
+        'y-at-x',
+        'vtime',
+        'y_at_time',
+        'y-at-time',
+        'tedge',
+        'time-at-edge',
+        'tvalue',
+        'time-at-value',
+        'time_at_level',
+        'time-at-level',
+    ],
+)
+def test_measurement_item_normalization_rejects_aliases(item):
+    with pytest.raises(ParameterValidationError):
+        normalize_measurement_item(item)
+
+
+def test_measurement_item_normalization_accepts_canonical_items():
     assert normalize_measurement_item("phase") == "phase"
     assert normalize_measurement_item("delay") == "delay"
     assert measurement_unit("frequency") == "Hz"

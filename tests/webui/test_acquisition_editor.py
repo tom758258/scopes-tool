@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import scopes_tool_webui.commands as commands_module
+import scopes_tool_webui.command_catalog as command_catalog_module
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +23,7 @@ def read_static(name: str) -> str:
     reason="Node.js is required for frontend behavior checks",
 )
 def test_acquisition_control_composite_dispatch_and_wiring(tmp_path: Path) -> None:
-    catalog_json = json.dumps(commands_module.command_catalog())
+    catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     bootstrap_source = read_static("editor-bootstrap.js")

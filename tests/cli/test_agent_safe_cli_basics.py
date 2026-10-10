@@ -142,7 +142,6 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
         "supports_advanced_fft": True,
         "supports_wgen": True,
         "wgen_scpi_root": ":WGEN1",
-        "supports_screenshot": True,
         "screenshot_formats": ["png", "bmp", "bmp8bit"],
         "supports_screenshot_hardcopy_controls": True,
         "supports_segmented_memory": True,
@@ -190,12 +189,18 @@ def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
     }
 
 
-def test_one_shot_live_flag_conflicts_with_simulate_and_dry_run(capsys):
-    for mode in ("--simulate", "--dry-run"):
-        assert cli.main(["identify", mode, "--live", "--json"]) == 1
-        payload = json.loads(capsys.readouterr().out)
-        assert payload["ok"] is False
-        assert "--live cannot be combined" in payload["error"]["message"]
+def test_one_shot_live_flag_is_rejected_before_backend_open(monkeypatch, capsys):
+    import pytest
+
+    def unexpected_open(*args, **kwargs):
+        raise AssertionError("parser rejection must precede backend open")
+
+    monkeypatch.setattr(runtime, "_open_scope", unexpected_open)
+    for mode in ([], ["--simulate"], ["--dry-run"]):
+        with pytest.raises(SystemExit) as exc:
+            cli.main(["identify", *mode, "--live", "--json"])
+        assert exc.value.code == 2
+        assert "unrecognized arguments: --live" in capsys.readouterr().err
 
 
 def test_simulate_json_error_is_single_json_object(capsys):

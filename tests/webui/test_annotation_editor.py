@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import scopes_tool_webui.command_execution as command_execution_module
-import scopes_tool_webui.commands as commands_module
+import scopes_tool_webui.command_catalog as command_catalog_module
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
 
 
@@ -22,13 +22,10 @@ def read_static(name: str) -> str:
 
 
 def test_annotation_commands_carry_annotation_editor_metadata() -> None:
-    legacy = next(
-        item for item in commands_module.COMMANDS if item["id"] == "annotation"
-    )
-    assert legacy.get("hidden") is True
+    assert "annotation" not in {entry["id"] for entry in command_catalog_module.COMMANDS}
 
     public = {
-        entry["id"]: entry for entry in commands_module.command_catalog()
+        entry["id"]: entry for entry in command_catalog_module.command_catalog()
     }
     assert {
         "annotation-query",
@@ -110,7 +107,7 @@ def test_annotation_live_slot_admission_uses_capabilities_not_static_options() -
 
 def test_annotation_model_projection_gates_slot_and_position() -> None:
     catalog = {
-        entry["id"]: entry for entry in commands_module.command_catalog()
+        entry["id"]: entry for entry in command_catalog_module.command_catalog()
     }
     for command_id in (
         "annotation-query",
@@ -168,52 +165,13 @@ def test_annotation_set_command_validation_requires_at_least_one_setter() -> Non
         })
 
 
-def test_annotation_set_validation_requires_at_least_one_setter() -> None:
-    request = validate_job_request({
-        "command": "annotation",
-        "mode": "simulate",
-        "model_id": MODEL_ID,
-        "parameters": {"action": "set", "slot": 1, "text": "hello"},
-    })
-
-    assert request["parameters"]["text"] == "hello"
-    with pytest.raises(WebUIRequestError, match="at least one"):
-        validate_job_request({
-            "command": "annotation",
-            "mode": "simulate",
-            "model_id": MODEL_ID,
-            "parameters": {"action": "set", "slot": 1},
-        })
-    with pytest.raises(WebUIRequestError, match="query, set, on, off, or clear"):
-        validate_job_request({
-            "command": "annotation",
-            "mode": "simulate",
-            "model_id": MODEL_ID,
-            "parameters": {"action": "run"},
-        })
-    with pytest.raises(WebUIRequestError, match="annotation clear cannot include"):
-        validate_job_request({
-            "command": "annotation",
-            "mode": "simulate",
-            "model_id": MODEL_ID,
-            "parameters": {"action": "clear", "slot": 1, "text": "hello"},
-        })
-    with pytest.raises(WebUIRequestError, match="annotation on cannot include"):
-        validate_job_request({
-            "command": "annotation",
-            "mode": "simulate",
-            "model_id": MODEL_ID,
-            "parameters": {"action": "on", "slot": 1, "x": 10},
-        })
-
-
 def test_annotation_position_rejected_before_execution_on_unsupported_model() -> None:
     with pytest.raises(WebUIRequestError, match="annotation position is not supported"):
         validate_job_request({
-            "command": "annotation",
+            "command": "annotation-set",
             "mode": "simulate",
             "model_id": "keysight-dsox2004a",
-            "parameters": {"action": "set", "slot": 1, "text": "hello", "x": 10},
+            "parameters": {"slot": 1, "text": "hello", "x": 10},
         })
 
 
@@ -294,68 +252,12 @@ def test_annotation_split_execution_applies_only_provided_setters(tmp_path: Path
     assert calls == [("query", 3)]
 
 
-def test_annotation_execution_applies_only_provided_setters(tmp_path: Path) -> None:
-    calls: list[tuple] = []
-
-    class FakeScope:
-        capabilities = object()
-
-        def set_annotation_text(self, text, *, slot):  # type: ignore[no-untyped-def]
-            calls.append(("text", text, slot))
-
-        def set_annotation_color(self, color, *, slot):  # type: ignore[no-untyped-def]
-            calls.append(("color", color, slot))
-
-        def set_annotation_background(self, background, *, slot):  # type: ignore[no-untyped-def]
-            calls.append(("background", background, slot))
-
-        def set_annotation_position(self, x, y, *, slot):  # type: ignore[no-untyped-def]
-            calls.append(("position", x, y, slot))
-
-        def set_annotation_enabled(self, enabled, *, slot):  # type: ignore[no-untyped-def]
-            calls.append(("enabled", enabled, slot))
-
-        def clear_annotation(self, *, slot):  # type: ignore[no-untyped-def]
-            calls.append(("clear", slot))
-
-        def query_annotation(self, *, slot):  # type: ignore[no-untyped-def]
-            calls.append(("query", slot))
-            return {
-                "slot": slot,
-                "enabled": True,
-                "text": "hello",
-                "color": "CH1",
-                "background": "OPAQ",
-                "x": None,
-                "y": None,
-            }
-
-    scope = FakeScope()
-    result = command_execution_module._execute_scope_command(
-        scope,
-        "annotation",
-        "SIM::INSTR",
-        {"action": "set", "slot": 1, "text": "hello"},
-        tmp_path,
-    )
-
-    assert calls == [("text", "hello", 1), ("query", 1)]
-    assert result["result"]["annotation"]["text"] == "hello"
-
-    calls.clear()
-    command_execution_module._execute_scope_command(
-        scope, "annotation", "SIM::INSTR", {"action": "clear", "slot": 2}, tmp_path
-    )
-
-    assert calls == [("clear", 2), ("query", 2)]
-
-
 @pytest.mark.skipif(
     subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
     reason="Node.js is required for frontend behavior checks",
 )
 def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
-    catalog_json = json.dumps(commands_module.command_catalog())
+    catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")
     chinese = read_static("locale_zh_tw.js")
     app_source = read_static("app.js")
@@ -709,3 +611,11 @@ def test_command_form_capability_disabled_contract(tmp_path: Path) -> None:
     )
     assert completed.returncode == 0, f"Form contract harness failed: {completed.stderr}"
     assert json.loads(completed.stdout) == {"ok": True}
+
+
+def test_retired_annotation_command_is_rejected():
+    with pytest.raises(WebUIRequestError, match="command"):
+        validate_job_request({
+            "command": "annotation", "mode": "simulate", "model_id": MODEL_ID,
+            "parameters": {"action": "query"},
+        })

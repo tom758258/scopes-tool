@@ -85,7 +85,7 @@ def test_scope_capabilities_preserves_existing_optional_positional_order():
         2,
     )
 
-    assert capabilities.supports_screenshot_hardcopy_controls is True
+    assert capabilities.supports_png_screenshot_hardcopy_controls is True
     assert capabilities.reference_waveforms == 2
     assert capabilities.math_function_count == 0
     assert capabilities.math_visualization_operations == frozenset()
@@ -110,7 +110,7 @@ def test_capabilities_for_supported_models(model, series, channels):
     assert capabilities.analog_channels == channels
     assert capabilities.default_waveform_points == 1000
     assert capabilities.safe_max_waveform_points == 10000
-    assert capabilities.supports_screenshot is True
+    assert capabilities.supports_png_screenshot is True
 
 
 @pytest.mark.parametrize(

@@ -561,8 +561,8 @@ such as `NaN` and `Infinity` are rejected. The supported action contract is:
 - `single` accepts no parameters.
 - `wait-trigger` requires positive finite `timeout_seconds` and waits for an
   acquisition already started by `single`; it does not arm or force a trigger.
-- `measure` requires `item` and accepts the existing `MeasureRequest` fields
-  `channel`, `source_channel`, `reference_channel`, `time_s`, `level`, `slope`,
+- `measure` requires `item` and `channel` and accepts `MeasureRequest` fields
+  `reference_channel`, `time_s`, `level`, `slope`,
   and `occurrence`.
 - `capture` requires `channels`; `points` defaults to `1000`,
   `waveform_format` to `byte`, and `allow_time_axis_tolerance` to `false`.
@@ -624,9 +624,9 @@ state = scope.query_hardcopy_state()
 An explicit format uses `:HCOPY:SDUMp:DATA? PNG|BMP|BMP8bit`. The query state
 contains canonical `area`, `ink_saver`, `palette`, `layout`, and `format`
 values plus the corresponding raw instrument readbacks. The existing
-`capture_screenshot_png(background=...)` API and its
-`:DISPlay:DATA? PNG, COLor` behavior remain available for 2000X, 3000X, and
-4000X compatibility.
+`capture_screenshot(background=...)` API with default options uses
+`:DISPlay:DATA? PNG, COLor` for 2000X, 3000X, and 4000X. Explicit options
+use the model-supported hardcopy controls through the same capture API.
 
 System and status operations are available through `Oscilloscope.clear_status()`,
 `query_operation_complete()`, `query_status_byte()`,

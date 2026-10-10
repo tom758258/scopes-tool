@@ -54,7 +54,7 @@ def test_display_label_command_uses_keysight_display_syntax():
 def test_display_common_commands_use_keysight_display_syntax():
     assert display_clear_command() == ":DISPlay:CLEar"
     assert display_persistence_command("minimum") == ":DISPlay:PERSistence MINimum"
-    assert display_persistence_command("inf") == ":DISPlay:PERSistence INFinite"
+    assert display_persistence_command("infinite") == ":DISPlay:PERSistence INFinite"
     assert display_persistence_command(0.5) == ":DISPlay:PERSistence 0.5"
     assert display_persistence_query() == ":DISPlay:PERSistence?"
     assert display_intensity_command(75) == ":DISPlay:INTensity:WAVeform 75"
@@ -77,7 +77,7 @@ def test_parse_display_persistence(raw, expected):
     assert parse_display_persistence(raw) == expected
 
 
-@pytest.mark.parametrize("value", ["min", "minimum", "inf", "infinite", 0.1, 60.0])
+@pytest.mark.parametrize("value", ["minimum", "infinite", 0.1, 60.0])
 def test_validate_display_persistence_accepts_supported_values(value):
     mode, seconds = validate_display_persistence(value)
     assert mode in {"minimum", "infinite", None}
@@ -320,3 +320,9 @@ def test_set_annotation_position_valid_x_invalid_y_does_no_write():
         controller.set_annotation_position(10, -5)
 
     assert backend.history == []
+
+
+@pytest.mark.parametrize("value", ["min", "inf"])
+def test_display_persistence_rejects_input_abbreviations(value):
+    with pytest.raises(ParameterValidationError):
+        validate_display_persistence(value)

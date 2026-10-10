@@ -503,10 +503,7 @@ def _model_command_presentation(
             override["options"] = subset
             if field.get("type") in {"integer", "number"}:
                 override["minimum"], override["maximum"] = min(subset), max(subset)
-        if entry["id"] == "cursor" and name == "action":
-            override["options"] = tuple(action for action in field.get("options", ())
-                if operation_supported(capabilities, "cursor-" + action))
-        if entry["id"] in {"cursor", "cursor-set"} and name == "function":
+        if entry["id"] == "cursor-set" and name == "function":
             # Only models that declare selectable cursor functions expose the choice.
             override["options"] = capabilities.cursor_functions
             override["hidden"] = not capabilities.cursor_functions
@@ -535,7 +532,6 @@ def _model_command_presentation(
             override["maximum"] = capabilities.reference_waveforms
             override["options"] = tuple(range(1, capabilities.reference_waveforms + 1))
         if entry["id"] in {
-            "annotation",
             "annotation-query",
             "annotation-set",
             "annotation-on",
@@ -547,7 +543,6 @@ def _model_command_presentation(
             if capabilities.annotation_slots <= 1:
                 override["hidden"] = True
         if entry["id"] in {
-            "annotation",
             "annotation-query",
             "annotation-set",
             "annotation-on",
@@ -682,7 +677,7 @@ def _model_command_presentation(
         if override:
             fields[name] = override
     result = {"supported": supported, "fields": fields}
-    if entry["id"] in {"cursor", "cursor-set"}:
+    if entry["id"] == "cursor-set":
         result["cursor_source_selection"] = capabilities.cursor_source_selection
     if entry["id"] == "timebase-position":
         result["timebase_position"] = {

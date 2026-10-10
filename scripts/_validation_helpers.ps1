@@ -55,7 +55,7 @@ function Get-LiveConnectionArguments {
         [string] $Backend
     )
 
-    $arguments = @("--live", "--resource", $Resource)
+    $arguments = @("--resource", $Resource)
     if ([string]::IsNullOrEmpty($Backend)) {
         return $arguments
     }

@@ -39,6 +39,7 @@ from scopes_tool_core.serial import (
 from scopes_tool_core.trigger import trigger_mode_query
 
 from . import preflight
+from . import _preflight_serial as preflight_serial_module
 from .commands import serial, trigger_search
 
 
@@ -252,7 +253,7 @@ def _plan_serial_search(
         }
         if not query:
             result.update(
-                preflight._serial_cli_values(
+                preflight_serial_module._serial_cli_values(
                     capabilities,
                     protocol=command,
                     **serial._serial_protocol_settings(args),

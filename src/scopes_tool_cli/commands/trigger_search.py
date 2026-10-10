@@ -88,6 +88,7 @@ from scopes_tool_core.trigger import (
 )
 
 from .. import preflight, runtime
+from .. import _preflight_serial as preflight_serial_module
 
 
 def _cmd_serial_search(args: argparse.Namespace) -> int:
@@ -122,7 +123,7 @@ def _cmd_serial_search(args: argparse.Namespace) -> int:
             for command in commands:
                 print(f"Command: {command}")
         else:
-            settings = preflight._canonical_serial_search_settings(args)
+            settings = preflight_serial_module._canonical_serial_search_settings(args)
             config_fn = getattr(scope, f"configure_serial_search_{protocol}")
             state = config_fn(args.bus, **settings)
             cmds_fn = getattr(scopes_tool_core.search, f"serial_search_{protocol}_configure_commands")
@@ -173,7 +174,7 @@ def _dry_run_serial_search_plan(
         }
         return [*cmds, ":SYSTem:ERRor?"], [], result
 
-    canonical_settings = preflight._canonical_serial_search_settings(args)
+    canonical_settings = preflight_serial_module._canonical_serial_search_settings(args)
 
     configure_builders = {
         "uart": serial_search_uart_configure_commands,

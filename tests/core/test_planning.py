@@ -49,7 +49,7 @@ def test_plan_measure_single_and_pair():
 
     single = plan_measure(MeasurePlanRequest(item="vpp", channel=1), caps)
     pair = plan_measure(
-        MeasurePlanRequest(item="phase", source_channel=1, reference_channel=2),
+        MeasurePlanRequest(item="phase", channel=1, reference_channel=2),
         caps,
     )
 

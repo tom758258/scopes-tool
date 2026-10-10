@@ -40,7 +40,7 @@ function channelLabel(value) {
 }
 
 function sequenceValueLabel(name, value) {
-  if (["channel", "source_channel", "reference_channel"].includes(name)) {
+  if (["channel", "reference_channel"].includes(name)) {
     return channelLabel(value);
   }
   if (typeof value === "boolean") return translate(`enum.${value}`);
@@ -171,9 +171,6 @@ export class SequenceEditor {
       if (predicatesMatch(field.visible_if, step.parameters)
           && step.parameters[field.name] === undefined
           && field.default !== undefined) {
-        if (step.action === "measure"
-            && field.name === "channel"
-            && step.parameters.source_channel !== undefined) continue;
         step.parameters[field.name] = defaultFieldValue(field);
       }
     }
@@ -582,13 +579,8 @@ export class SequenceEditor {
         }
       }
       if (step.action === "measure"
-          && ((step.parameters.channel === undefined || step.parameters.channel === "")
-              === (step.parameters.source_channel === undefined || step.parameters.source_channel === ""))) {
-        return translate("sequence.editor.measureSource", { index: index + 1 });
-      }
-      if (step.action === "measure"
           && ["phase", "delay"].includes(step.parameters.item)
-          && String(step.parameters.source_channel ?? step.parameters.channel)
+          && String(step.parameters.channel)
             === String(step.parameters.reference_channel)) {
         return translate("sequence.editor.distinctChannels", { index: index + 1 });
       }

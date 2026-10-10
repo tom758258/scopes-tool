@@ -369,7 +369,7 @@ function Invoke-CliRaw {
     return [pscustomobject]@{ Payload = $payload }
 }
 
-$script:LiveConnectionArguments = @("--live", "--resource", "TEST::INSTR")
+$script:LiveConnectionArguments = @("--resource", "TEST::INSTR")
 $singletonClean = Get-ErrorDrain -Stage "singleton-clean"
 $singletonError = Get-ErrorDrain -Stage "singleton-error"
 $multipleEntries = Get-ErrorDrain -Stage "multiple-entries"
@@ -1084,13 +1084,12 @@ sys.exit(9)
     (
         pytest.param(
             "",
-            ["--live", "--resource", "TEST::INSTR"],
+            ["--resource", "TEST::INSTR"],
             id="system-visa",
         ),
         pytest.param(
             "@py",
             [
-                "--live",
                 "--resource",
                 "TEST::INSTR",
                 "--visa-library",

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model_id, operation_supported
-from scopes_tool_webui.commands import COMMANDS, command_catalog
+from scopes_tool_webui.command_catalog import COMMANDS, command_catalog
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

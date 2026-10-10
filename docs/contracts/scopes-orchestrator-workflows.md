@@ -589,8 +589,8 @@ assert payload["result"]["status"] == "completed"
 ## Live Capture Workflow
 
 Live workflows must use an explicit operator-selected resource. For a one-shot
-command, `--resource <RESOURCE>` selects and opts in to that single instrument;
-the optional `--live` flag is retained for compatibility. Live worker startup
+command, `--resource <RESOURCE>` selects and opts in to that single instrument.
+Live worker startup
 still requires `--live --resource <RESOURCE>`.
 
 1. Optionally run `identify --resource <RESOURCE> --json`.

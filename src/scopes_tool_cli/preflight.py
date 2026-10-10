@@ -54,18 +54,11 @@ from scopes_tool_core.trigger import (
     validate_trigger_wait_config,
 )
 
-# This module stays the preflight facade. The private names below keep their
-# existing preflight.* call sites working after the per-domain split.
 from ._preflight_common import _pre_open_capabilities
 from ._preflight_math import _validate_math_args
 from ._preflight_serial import (
-    _canonical_serial_search_settings,
-    _extract_serial_search_settings,
-    _serial_cli_values,
     _validate_search_args,
     _validate_serial_args,
-    _validate_serial_lister_args,
-    _validate_serial_protocol_args,
     _validate_serial_search_args,
 )
 from ._preflight_trigger import (
@@ -514,9 +507,7 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
                 args.amplitude, series=capabilities.series
             )
         else:
-            # Normal one-shot live: avoid the legacy series=None 5 V / 2.5 V
-            # ceiling so model-valid values (e.g. 4000X 6 Vpp) are not
-            # rejected before the instrument session opens.
+            # Model-dependent limits are checked after live identity detection.
             value = float(args.amplitude)
             if not math.isfinite(value) or value <= 0:
                 raise ParameterValidationError(
@@ -528,8 +519,7 @@ def _validate_wgen_args(args: argparse.Namespace) -> None:
                 args.volts, series=capabilities.series
             )
         else:
-            # Normal one-shot live: avoid the legacy series=None +/-2.5 V
-            # ceiling; exact model/load/function limits remain deferred.
+            # Model-dependent limits are checked after live identity detection.
             value = float(args.volts)
             if not math.isfinite(value):
                 raise ParameterValidationError(

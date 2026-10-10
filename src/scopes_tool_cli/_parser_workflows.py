@@ -31,12 +31,6 @@ def _register_workflow_parsers(subparsers) -> None:
         help="analog channel number, validated against the detected scope model",
     )
     measure_parser.add_argument(
-        "--source-channel",
-        type=_positive_int,
-        default=None,
-        help="source analog channel number; --channel is a compatibility alias",
-    )
-    measure_parser.add_argument(
         "--reference-channel",
         type=_positive_int,
         default=None,

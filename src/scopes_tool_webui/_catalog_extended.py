@@ -505,8 +505,7 @@ TRIGGER_SEARCH_SERIAL_SEGMENTED_WORKFLOW_COMMANDS = (
                 "wait-trigger": ({"name": "timeout_seconds", "type": "number", "exclusive_minimum": 0, "default": 1, "required": True, "help_key": "workflow.trigger.timeout_seconds"},),
                 "measure": (
                     {"name": "item", "type": "enum", "options": SUPPORTED_MEASUREMENT_ITEMS, "default": "vpp", "required": True, "help_key": "workflow.sequence.measure.item"},
-                    {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "help_key": "measure.channel"},
-                    {"name": "source_channel", "type": "integer", "minimum": 1, "maximum": 4, "help_key": "workflow.sequence.measure.source_channel"},
+                    {"name": "channel", "type": "integer", "minimum": 1, "maximum": 4, "default": 1, "required": True, "help_key": "measure.channel"},
                     {"name": "reference_channel", "type": "integer", "options": (1, 2, 3, 4), "visible_if": [{"field": "item", "in": ("phase", "delay")}], "required_if": [{"field": "item", "in": ("phase", "delay")}], "help_key": "measure.reference_channel"},
                     {"name": "time_s", "type": "number", "visible_if": [{"field": "item", "equals": "y_at_x"}], "required_if": [{"field": "item", "equals": "y_at_x"}], "help_key": "measure.time_s"},
                     {"name": "level", "type": "number", "visible_if": [{"field": "item", "equals": "time_at_value"}], "required_if": [{"field": "item", "equals": "time_at_value"}], "help_key": "measure.level"},

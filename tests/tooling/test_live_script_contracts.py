@@ -590,7 +590,7 @@ def test_baseline_live_script_contains_trigger_math_generator_save_and_safety_wi
     )
     reference_readiness = script[reference_readiness_start:reference_readiness_end]
     assert 'Stage "reference-ch1-readiness"' in reference_readiness
-    assert '"--source-channel", "1"' in reference_readiness
+    assert '"--channel", "1"' in reference_readiness
     assert '"--item", "vpp"' in reference_readiness
     assert ':MEASure:VPP? CHANnel1' in reference_readiness
     assert "while ($elapsedMilliseconds -le $TimeoutMilliseconds)" in reference_readiness

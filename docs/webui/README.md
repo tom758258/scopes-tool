@@ -140,7 +140,9 @@ The Command workbench exposes:
 - Display: `display-label`, `display-clear`, `display-persistence`,
   `display-intensity`
 - Measurement: Single Measurement combines `measure` with the persistent
-  `measure-window` setting. Multiple Measurements runs selected measurements across
+  `measure-window` setting. Single Measurement uses the canonical `channel`
+  field and canonical measurement item names; `phase` and `delay` also require
+  `reference_channel`. Multiple Measurements runs selected measurements across
   model-projected analog channels and optional channel pairs, with Dry-run
   using the existing Core planner. Front Panel Measurements combines
   `measure-install`, `measure-results`, `measure-show`, and `measure-clear` for

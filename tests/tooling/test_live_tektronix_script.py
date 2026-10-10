@@ -136,7 +136,7 @@ def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     ]
     assert [inv["arguments"][0] for inv in report["invocations"]] == ["identify", "identify"]
     assert "--simulate" in report["invocations"][0]["arguments"]
-    assert "--live" in report["invocations"][1]["arguments"]
+    assert "--resource" in report["invocations"][1]["arguments"]
     assert all(inv["arguments"][0] == "identify" for inv in report["invocations"])
 
 

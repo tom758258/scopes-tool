@@ -2521,5 +2521,4 @@ connection error, timeout, invalid response, HTTP request failure, HTTP
 Live worker startup requires explicit `--resource`. Discovery is separate and
 must not happen inside active live workflows. The worker does not guess,
 rotate, or scan resources. This worker requirement is stricter than one-shot
-CLI live selection, where an explicit resource is sufficient and `--live` is
-only a compatibility flag.
+CLI live selection, where an explicit resource is sufficient.

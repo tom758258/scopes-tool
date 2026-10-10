@@ -13,7 +13,8 @@ from scopes_tool_core.planning import OperationPlan
 from scopes_tool_webui.app import app
 import scopes_tool_webui.command_execution as execution
 import scopes_tool_webui.command_execution_advanced as execution_advanced
-from scopes_tool_webui.commands import WebUIRequestError, command_catalog, validate_job_request
+from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
+from scopes_tool_webui.command_catalog import command_catalog
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -32,6 +33,10 @@ def _step(action="wait", **parameters):
 
 def test_sequence_catalog_and_request_validation_use_core_contract() -> None:
     definition = next(item for item in command_catalog() if item["id"] == "sequence")
+
+    measure_fields = {field["name"]: field for field in definition["sequence"]["parameters"]["measure"]}
+    assert measure_fields["channel"]["required"] is True
+    assert "source_channel" not in measure_fields
 
     assert definition["category"] == "Workflow"
     assert definition["editor"] == "sequence"
@@ -141,7 +146,7 @@ SEQUENCE_EDITOR_HARNESS = r'''
   const translations = {
     "sequence.action.measure": "\u91cf\u6e2c",
     "sequence.parameter.item": "\u91cf\u6e2c\u9805\u76ee",
-    "sequence.parameter.source_channel": "\u4f86\u6e90\u901a\u9053",
+    "sequence.parameter.channel": "\u901a\u9053",
     "sequence.parameter.slope": "\u659c\u7387",
     "sequence.editor.invalidParameter": "\u6b65\u9a5f {{index}} \u7684 {{name}} \u503c\u7121\u6548\u3002",
     "capture.existingWaveformRequired": "existing waveform required",
@@ -197,8 +202,7 @@ SEQUENCE_EDITOR_HARNESS = r'''
       "wait-trigger": [{ name: "timeout_seconds", type: "number", exclusive_minimum: 0, default: 1, required: true }],
       measure: [
         { name: "item", type: "enum", options: ["vpp"], default: "vpp", required: true },
-        { name: "channel", type: "integer", options: [1, 2, 3, 4], default: 1 },
-        { name: "source_channel", type: "integer", minimum: 1, maximum: 4 },
+        { name: "channel", type: "integer", options: [1, 2, 3, 4], default: 1, required: true },
         { name: "slope", type: "enum", options: ["positive", "negative"], default: "positive" },
       ],
       capture: [{ name: "channels", type: "multi-enum", options: ["all", 1, 2, 3, 4], default: [1], required: true }, { name: "allow_time_axis_tolerance", type: "boolean", default: false }],
@@ -297,7 +301,7 @@ def test_sequence_editor_localizes_presentation_but_submits_canonical_values() -
         const slopeField = metadata.parameters.measure.find((field) => field.name === "slope");
         const step = {
           action: "measure",
-          parameters: { item: "vpp", source_channel: "1", slope: "positive" },
+          parameters: { item: "vpp", channel: "1", slope: "positive" },
           expanded: true,
         };
         const rendered = editor.renderParameter(step, 0, slopeField);
@@ -314,9 +318,9 @@ def test_sequence_editor_localizes_presentation_but_submits_canonical_values() -
         assert.equal(helped.children.at(-1).textContent, "Slope helper");
 
         const summary = editor.stepSummary(step);
-        assert(summary.includes("\u4f86\u6e90\u901a\u9053: \u901a\u9053 1"));
+        assert(summary.includes("\u901a\u9053: \u901a\u9053 1"));
         assert(summary.includes("\u659c\u7387: \u6b63\u5411"));
-        assert.equal(summary.includes("source_channel="), false);
+        assert.equal(summary.includes("channel="), false);
         assert.equal(summary.includes("slope=positive"), false);
 
         const profileField = metadata.parameters.cleanup[0];
@@ -365,11 +369,11 @@ def test_sequence_editor_localizes_presentation_but_submits_canonical_values() -
 
         state.steps = [{
           action: "measure",
-          parameters: { item: "vpp", source_channel: "invalid", slope: "positive" },
+          parameters: { item: "vpp", channel: "", slope: "positive" },
           expanded: true,
         }];
-        assert(editor.validationError().includes("\u4f86\u6e90\u901a\u9053"));
-        assert.equal(editor.validationError().includes("source_channel"), false);
+        assert(editor.validationError().includes("\u901a\u9053"));
+        assert.equal(editor.validationError().includes("channel"), false);
         ''',
     )
 
@@ -437,7 +441,7 @@ SEQUENCE_EDITOR_VALIDATION_MESSAGE_HARNESS = r'''
       wait: [{ name: "seconds", type: "number", minimum: 0, default: 0, required: true }],
       single: [],
       "wait-trigger": [{ name: "timeout_seconds", type: "number", exclusive_minimum: 0, default: 1, required: true }],
-      measure: [{ name: "item", type: "enum", options: ["vpp"], default: "vpp", required: true }, { name: "channel", type: "integer", options: [1, 2, 3, 4], default: 1 }],
+      measure: [{ name: "item", type: "enum", options: ["vpp"], default: "vpp", required: true }, { name: "channel", type: "integer", options: [1, 2, 3, 4], default: 1, required: true }],
       capture: [{ name: "channels", type: "multi-enum", options: ["all", 1, 2, 3, 4], default: [1], required: true }, { name: "allow_time_axis_tolerance", type: "boolean", default: false }],
       screenshot: [{ name: "background", type: "enum", options: ["black", "white"], default: "black" }],
       cleanup: [{ name: "profile", type: "enum", options: ["minimal", "safe"], default: "minimal" }],
@@ -725,19 +729,15 @@ def test_sequence_capture_step_shows_existing_waveform_guidance_only_for_capture
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
-def test_sequence_optional_channel_choices_remain_optional() -> None:
+def test_sequence_measure_channel_is_required() -> None:
     run_editor_behavior(
         r'''
-        const field = metadata.parameters.measure.find((f) => f.name === "source_channel");
-        field.options = [1, 2];
-        state.steps = [{ action: "measure", parameters: { item: "vpp", channel: "1", slope: "positive" }, expanded: true }];
-        const control = editor.renderParameter(state.steps[0], 0, field).children[1];
-        assert.equal(control.children[0].value, "");
-        assert.equal(Object.hasOwn(editor.localDocument().steps[0].parameters, "source_channel"), false);
-        state.steps[0].parameters.source_channel = "";
-        assert.equal(Object.hasOwn(editor.localDocument().steps[0].parameters, "source_channel"), false);
-        delete state.steps[0].parameters.channel;
-        state.steps[0].parameters.source_channel = "2";
-        assert.equal(editor.localDocument().steps[0].parameters.source_channel, 2);
+        state.steps = [{ action: "measure", parameters: { item: "vpp", slope: "positive" }, expanded: true }];
+        assert(editor.validationError());
+        state.steps[0].parameters.channel = "";
+        assert(editor.validationError());
+        state.steps[0].parameters.channel = "2";
+        assert.equal(editor.validationError(), "");
+        assert.equal(editor.localDocument().steps[0].parameters.channel, 2);
         ''',
     )

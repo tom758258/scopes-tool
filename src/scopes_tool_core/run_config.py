@@ -22,7 +22,6 @@ RunMode = Literal["dry_run", "simulate", "live"]
 class RunModeOptions:
     simulate: bool = False
     dry_run: bool = False
-    live: bool = False
     planning_physical_model_id: str | None = None
     expected_physical_model_id: str | None = None
     simulate_signals: Sequence[str] = field(default_factory=tuple)
@@ -46,14 +45,10 @@ class ResolvedRunConfig:
 
 
 def resolve_run_mode(options: RunModeOptions) -> RunMode:
-    """Resolve compatible run-mode flags into one effective mode."""
+    """Resolve run-mode options into one effective mode."""
 
     if options.simulate and options.dry_run:
         raise OscilloscopeError("--simulate cannot be combined with --dry-run")
-    if options.live and options.simulate:
-        raise OscilloscopeError("--live cannot be combined with --simulate")
-    if options.live and options.dry_run:
-        raise OscilloscopeError("--live cannot be combined with --dry-run")
     if options.simulate_signals and not options.simulate:
         raise OscilloscopeError("--simulate-signal can only be used with --simulate")
     for value, option in (

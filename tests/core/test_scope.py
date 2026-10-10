@@ -575,7 +575,7 @@ def test_scope_screenshot_requires_known_capabilities():
     scope = Oscilloscope(FakeBackend())
 
     try:
-        scope.capture_screenshot_png()
+        scope.capture_screenshot()
     except ParameterValidationError as exc:
         assert "query_idn" in str(exc)
     else:
@@ -721,7 +721,7 @@ def test_scope_screenshot_uses_capabilities_from_idn():
     scope = Oscilloscope(backend)
 
     scope.query_idn()
-    capture = scope.capture_screenshot_png()
+    capture = scope.capture_screenshot()
 
     assert capture.data == png_bytes
     assert capture.background == "black"

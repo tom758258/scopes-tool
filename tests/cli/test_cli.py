@@ -3040,8 +3040,8 @@ def test_screenshot_cli_writes_png_then_checks_error(monkeypatch, capsys, tmp_pa
             self.capabilities = capabilities_for_model("DSOX4024A")
             return parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,07.20")
 
-        def capture_screenshot_png(self, *, background="black"):
-            self.calls.append(("capture_screenshot_png", background))
+        def capture_screenshot(self, *, options=None, background="black"):
+            self.calls.append(("capture_screenshot", background))
             self.backend.history += (
                 f":HARDcopy:INKSaver {'ON' if background == 'white' else 'OFF'}",
                 ":DISPlay:DATA? PNG, COLor",
@@ -3074,7 +3074,7 @@ def test_screenshot_cli_writes_png_then_checks_error(monkeypatch, capsys, tmp_pa
         == 0
     )
 
-    assert scope.calls == ["query_idn", ("capture_screenshot_png", "black"), "query_system_error"]
+    assert scope.calls == ["query_idn", ("capture_screenshot", "black"), "query_system_error"]
     assert output_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     out = capsys.readouterr().out
     assert "Resource: USB0::FAKE::INSTR" in out
@@ -3115,8 +3115,8 @@ def test_screenshot_cli_uses_timestamped_default_output_when_omitted(monkeypatch
             self.capabilities = capabilities_for_model("DSOX4024A")
             return parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,07.20")
 
-        def capture_screenshot_png(self, *, background="black"):
-            self.calls.append(("capture_screenshot_png", background))
+        def capture_screenshot(self, *, options=None, background="black"):
+            self.calls.append(("capture_screenshot", background))
             self.backend.history += (
                 f":HARDcopy:INKSaver {'ON' if background == 'white' else 'OFF'}",
                 ":DISPlay:DATA? PNG, COLor",
@@ -3139,7 +3139,7 @@ def test_screenshot_cli_uses_timestamped_default_output_when_omitted(monkeypatch
 
     assert cli.main(["screenshot", "--resource", "USB0::FAKE::INSTR"]) == 0
 
-    assert scope.calls == ["query_idn", ("capture_screenshot_png", "black"), "query_system_error"]
+    assert scope.calls == ["query_idn", ("capture_screenshot", "black"), "query_system_error"]
     assert default_output_path.exists()
     out = capsys.readouterr().out
     assert f"PNG: {default_output_path}" in out
@@ -3169,8 +3169,8 @@ def test_screenshot_cli_supports_white_background(monkeypatch, capsys, tmp_path)
             self.capabilities = capabilities_for_model("DSOX4024A")
             return parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,07.20")
 
-        def capture_screenshot_png(self, *, background="black"):
-            self.calls.append(("capture_screenshot_png", background))
+        def capture_screenshot(self, *, options=None, background="black"):
+            self.calls.append(("capture_screenshot", background))
             self.backend.history += (
                 f":HARDcopy:INKSaver {'ON' if background == 'white' else 'OFF'}",
                 ":DISPlay:DATA? PNG, COLor",
@@ -3205,7 +3205,7 @@ def test_screenshot_cli_supports_white_background(monkeypatch, capsys, tmp_path)
         == 0
     )
 
-    assert scope.calls == ["query_idn", ("capture_screenshot_png", "white"), "query_system_error"]
+    assert scope.calls == ["query_idn", ("capture_screenshot", "white"), "query_system_error"]
     out = capsys.readouterr().out
     assert "Planned capture: current screen PNG image with white background" in out
     assert "Command: :HARDcopy:INKSaver ON" in out
@@ -3242,8 +3242,8 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
             self.capabilities = capabilities_for_model("DSOX4024A")
             return parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,07.20")
 
-        def capture_screenshot_png(self, *, background="black"):
-            self.calls.append(("capture_screenshot_png", background))
+        def capture_screenshot(self, *, options=None, background="black"):
+            self.calls.append(("capture_screenshot", background))
             self.backend.history += (
                 f":HARDcopy:INKSaver {'ON' if background == 'white' else 'OFF'}",
                 ":DISPlay:DATA? PNG, COLor",
@@ -3263,7 +3263,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
         raise PermissionError(13, "Permission denied", str(path))
 
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
-    monkeypatch.setattr(workflows, "write_screenshot_png", fake_write_screenshot_png)
+    monkeypatch.setattr(workflows, "write_screenshot", fake_write_screenshot_png)
 
     assert (
         cli.main(
@@ -3278,7 +3278,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
         == 1
     )
 
-    assert scope.calls == ["query_idn", ("capture_screenshot_png", "black")]
+    assert scope.calls == ["query_idn", ("capture_screenshot", "black")]
     captured = capsys.readouterr()
     assert "Traceback" not in captured.err
     assert "could not write screenshot PNG file" in captured.err
@@ -3308,7 +3308,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
             "Value V: 1.2",
         ),
         (
-            "pwidth",
+            "positive_width",
             "positive_width",
             0.000002,
             "2.00E-6",
@@ -3317,7 +3317,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
             "Value s: 2e-06",
         ),
         (
-            "duty-cycle",
+            "duty_cycle",
             "duty_cycle",
             48.0,
             "4.80E+1",
@@ -3335,7 +3335,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
             "Value V*s: 1.2e-06",
         ),
         (
-            "acrms",
+            "ac_rms",
             "ac_rms",
             0.6,
             "6.00E-1",
@@ -3344,7 +3344,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
             "Value V: 0.6",
         ),
         (
-            "x-at-max",
+            "x_at_max",
             "x_at_max",
             0.00000125,
             "1.25E-6",
@@ -3353,7 +3353,7 @@ def test_screenshot_cli_reports_png_permission_error_without_traceback(monkeypat
             "Value s: 1.25e-06",
         ),
         (
-            "pedges",
+            "positive_edges",
             "positive_edges",
             4.0,
             "4.0E+0",
@@ -3510,7 +3510,7 @@ def test_measure_results_cli_json_includes_statistics_items(monkeypatch, capsys)
             "time=0.0",
         ),
         (
-            ["--item", "tedge", "--slope", "negative", "--occurrence", "2"],
+            ["--item", "time_at_edge", "--slope", "negative", "--occurrence", "2"],
             "time_at_edge",
             {"slope": "negative", "occurrence": 2},
             "s",
@@ -3518,7 +3518,7 @@ def test_measure_results_cli_json_includes_statistics_items(monkeypatch, capsys)
             "slope=negative, occurrence=2",
         ),
         (
-            ["--item", "time-at-value", "--level", "0.5"],
+            ["--item", "time_at_value", "--level", "0.5"],
             "time_at_value",
             {"level": 0.5, "slope": "positive", "occurrence": 1},
             "s",
@@ -3614,7 +3614,7 @@ def test_measure_cli_queries_pair_items_then_checks_error(
                 "measure",
                 "--resource",
                 "USB0::FAKE::INSTR",
-                "--source-channel",
+                "--channel",
                 "1",
                 "--reference-channel",
                 "2",
@@ -3642,7 +3642,7 @@ def test_measure_cli_queries_pair_items_then_checks_error(
     assert 'System error: +0, "No error"' in out
 
 
-def test_measure_cli_treats_channel_as_source_alias_for_pair_item(monkeypatch, capsys):
+def test_measure_cli_uses_channel_for_pair_item(monkeypatch, capsys):
     scope = _install_measurement_scope(monkeypatch, 90.0, "9.0E+1", "deg")
 
     assert (
@@ -3669,28 +3669,6 @@ def test_measure_cli_treats_channel_as_source_alias_for_pair_item(monkeypatch, c
         "query_system_error",
     ]
     assert "Command: :MEASure:PHASe? CHANnel1,CHANnel2" in capsys.readouterr().out
-
-
-def test_measure_cli_accepts_source_channel_for_single_item(monkeypatch, capsys):
-    scope = _install_measurement_scope(monkeypatch, 0.5, "5.0E-1", "V")
-
-    assert (
-        cli.main(
-            [
-                "measure",
-                "--resource",
-                "USB0::FAKE::INSTR",
-                "--source-channel",
-                "1",
-                "--item",
-                "vpp",
-            ]
-        )
-        == 0
-    )
-
-    assert scope.calls == ["query_idn", "query_system_error", ("query_measurement", 1, "vpp"), "query_system_error"]
-    assert "Command: :MEASure:VPP? CHANnel1" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -3730,27 +3708,23 @@ def test_measure_cli_rejects_invalid_parameterized_args_without_query(
     ("argv", "expected_error"),
     [
         (
-            ["--channel", "1", "--source-channel", "2", "--item", "vpp"],
-            "cannot be combined",
+            ["--channel", "1", "--item", "phase"],
+            "requires --channel",
         ),
         (
-            ["--source-channel", "1", "--item", "phase"],
-            "requires --source-channel",
-        ),
-        (
-            ["--source-channel", "1", "--reference-channel", "1", "--item", "phase"],
+            ["--channel", "1", "--reference-channel", "1", "--item", "phase"],
             "must be different",
         ),
         (
-            ["--source-channel", "5", "--reference-channel", "1", "--item", "phase"],
+            ["--channel", "5", "--reference-channel", "1", "--item", "phase"],
             "channel 5 is not available",
         ),
         (
-            ["--source-channel", "1", "--reference-channel", "2", "--item", "phase", "--time", "0"],
+            ["--channel", "1", "--reference-channel", "2", "--item", "phase", "--time", "0"],
             "cannot be used with phase or delay",
         ),
         (
-            ["--source-channel", "1", "--reference-channel", "2", "--item", "vpp"],
+            ["--channel", "1", "--reference-channel", "2", "--item", "vpp"],
             "can only be used with phase or delay",
         ),
     ],
@@ -3781,7 +3755,7 @@ def test_measure_cli_rejects_delay_pair_when_capability_is_unsupported(monkeypat
                 "measure",
                 "--resource",
                 "USB0::FAKE::INSTR",
-                "--source-channel",
+                "--channel",
                 "1",
                 "--reference-channel",
                 "2",
@@ -3812,7 +3786,7 @@ def test_measure_cli_reports_invalid_sentinel_for_pair_item(monkeypatch, capsys)
                 "measure",
                 "--resource",
                 "USB0::FAKE::INSTR",
-                "--source-channel",
+                "--channel",
                 "1",
                 "--reference-channel",
                 "2",
@@ -3845,7 +3819,7 @@ def test_measure_cli_reports_invalid_sentinel_for_pair_item(monkeypatch, capsys)
         ("positive_width", "positive_width", "s", ":MEASure:PWIDth? CHANnel1"),
         ("area", "area", "V*s", ":MEASure:AREA? CHANnel1"),
         ("x_at_min", "x_at_min", "s", ":MEASure:XMIN? CHANnel1"),
-        ("negative-edges", "negative_edges", "count", ":MEASure:NEDGes? CHANnel1"),
+        ("negative_edges", "negative_edges", "count", ":MEASure:NEDGes? CHANnel1"),
     ],
 )
 def test_measure_cli_reports_invalid_sentinel_for_new_items(
@@ -4023,145 +3997,6 @@ def test_measure_cli_queries_vrms_then_checks_error(monkeypatch, capsys):
     assert "Value V: 0.707" in out
     assert "Raw response: 7.07E-1" in out
     assert 'System error: +0, "No error"' in out
-
-
-def test_measure_cli_accepts_risetime_alias_then_checks_error(monkeypatch, capsys):
-    class DummyBackend:
-        backend = "backend"
-        timeout = 2000
-
-    class DummyScope(_DriverContractDummy):
-        backend = DummyBackend()
-
-        def __init__(self):
-            self.capabilities = None
-            self.calls = []
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            del exc_type, exc, traceback
-
-        def query_idn(self):
-            self.calls.append("query_idn")
-            self.capabilities = capabilities_for_model("DSOX4024A")
-            return parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,07.20")
-
-        def query_measurement(self, channel, item):
-            self.calls.append(("query_measurement", channel, item))
-            return MeasurementResult(
-                item=item,
-                channel=channel,
-                value=0.000001,
-                raw_value="1.00E-6",
-                valid=True,
-                unit="s",
-            )
-
-        def query_system_error(self):
-            self.calls.append("query_system_error")
-            return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
-
-    scope = DummyScope()
-    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
-
-    assert (
-        cli.main(
-            [
-                "measure",
-                "--resource",
-                "USB0::FAKE::INSTR",
-                "--channel",
-                "1",
-                "--item",
-                "risetime",
-            ]
-        )
-        == 0
-    )
-
-    assert scope.calls == [
-        "query_idn",
-        "query_system_error",
-        ("query_measurement", 1, "rise_time"),
-        "query_system_error",
-    ]
-    out = capsys.readouterr().out
-    assert "Planned query: CH1 rise_time measurement" in out
-    assert "Command: :MEASure:RISetime? CHANnel1" in out
-    assert "Measurement: rise_time" in out
-    assert "Value s: 1e-06" in out
-    assert "Raw response: 1.00E-6" in out
-    assert 'System error: +0, "No error"' in out
-
-
-def test_measure_cli_accepts_freq_alias(monkeypatch, capsys):
-    class DummyBackend:
-        backend = "backend"
-        timeout = None
-
-    class DummyScope(_DriverContractDummy):
-        backend = DummyBackend()
-
-        def __init__(self):
-            self.capabilities = None
-            self.calls = []
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            del exc_type, exc, traceback
-
-        def query_idn(self):
-            self.calls.append("query_idn")
-            self.capabilities = capabilities_for_model("DSOX4024A")
-            return parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,07.20")
-
-        def query_measurement(self, channel, item):
-            self.calls.append(("query_measurement", channel, item))
-            return MeasurementResult(
-                item=item,
-                channel=channel,
-                value=1000.0,
-                raw_value="1.0E+3",
-                valid=True,
-                unit="Hz",
-            )
-
-        def query_system_error(self):
-            self.calls.append("query_system_error")
-            return SystemErrorEntry(code=0, message="No error", raw='+0,"No error"')
-
-    scope = DummyScope()
-    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(lambda resource, visa_library=None: scope))
-
-    assert (
-        cli.main(
-            [
-                "measure",
-                "--resource",
-                "USB0::FAKE::INSTR",
-                "--channel",
-                "1",
-                "--item",
-                "freq",
-            ]
-        )
-        == 0
-    )
-
-    assert scope.calls == [
-        "query_idn",
-        "query_system_error",
-        ("query_measurement", 1, "frequency"),
-        "query_system_error",
-    ]
-    out = capsys.readouterr().out
-    assert "Planned query: CH1 frequency measurement" in out
-    assert "Command: :MEASure:FREQuency? CHANnel1" in out
-    assert "Measurement: frequency" in out
 
 
 def test_measure_cli_reports_invalid_sentinel_without_losing_raw(monkeypatch, capsys):

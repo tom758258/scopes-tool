@@ -21,8 +21,6 @@ from scopes_tool_core.identity import physical_model_for_id
 from . import cli as scope_cli
 
 from .worker_client import (
-    _http_request,
-    _validate_client_response,
     client_get,
     client_post,
     client_send_command,

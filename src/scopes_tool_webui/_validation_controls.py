@@ -432,84 +432,9 @@ def _validate_control_parameters(
             )
         except Exception as exc:
             raise WebUIRequestError(str(exc)) from exc
-    elif command == "cursor":
-        action = parameters.setdefault("action", "query")
-        if action not in {"query", "set", "off"}:
-            raise WebUIRequestError("cursor action must be query, set, or off")
-        if action == "set":
-            function = _cursor_function(parameters, capabilities)
-            _validate_cursor_set_parameters(parameters, command, capabilities, function)
-        else:
-            if "function" in parameters:
-                raise WebUIRequestError(f"cursor {action} cannot include function")
-            unexpected = next(
-                (
-                    name
-                    for name in ("source_channel", "x1", "x2", "y1", "y2")
-                    if name in parameters
-                ),
-                None,
-            )
-            if unexpected is not None:
-                raise WebUIRequestError(f"cursor {action} cannot include {unexpected}")
     elif command == "cursor-set":
         function = _cursor_function(parameters, capabilities)
         _validate_cursor_set_parameters(parameters, command, capabilities, function)
-    elif command == "annotation":
-        action = parameters.setdefault("action", "query")
-        if action not in {"query", "set", "on", "off", "clear"}:
-            raise WebUIRequestError(
-                "annotation action must be query, set, on, off, or clear"
-            )
-        try:
-            parameters["slot"] = validate_annotation_slot(
-                _integer(parameters.get("slot", 1), "slot"), capabilities
-            )
-        except Exception as exc:
-            raise WebUIRequestError(str(exc)) from exc
-        setter_names = ("text", "color", "background", "x", "y")
-        if action == "set":
-            if (
-                parameters.get("x") is not None
-                or parameters.get("y") is not None
-            ) and not capabilities.supports_annotation_position:
-                raise WebUIRequestError(
-                    "annotation position is not supported by this model"
-                )
-            provided = [
-                name for name in setter_names if parameters.get(name) is not None
-            ]
-            if not provided:
-                raise WebUIRequestError(
-                    "annotation set requires at least one of text, color, background, x, or y"
-                )
-            try:
-                if parameters.get("text") is not None:
-                    parameters["text"] = validate_annotation_text(parameters["text"])
-                if parameters.get("color") is not None:
-                    parameters["color"] = normalize_annotation_color(parameters["color"])
-                if parameters.get("background") is not None:
-                    parameters["background"] = normalize_annotation_background(
-                        parameters["background"]
-                    )
-                if parameters.get("x") is not None:
-                    parameters["x"] = validate_annotation_x(
-                        _integer(parameters["x"], "x")
-                    )
-                if parameters.get("y") is not None:
-                    parameters["y"] = validate_annotation_y(
-                        _integer(parameters["y"], "y")
-                    )
-            except Exception as exc:
-                raise WebUIRequestError(str(exc)) from exc
-        else:
-            unexpected = next(
-                (name for name in setter_names if name in parameters), None
-            )
-            if unexpected is not None:
-                raise WebUIRequestError(
-                    f"annotation {action} cannot include {unexpected}"
-                )
     elif command in {
         "annotation-query",
         "annotation-set",

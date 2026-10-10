@@ -513,7 +513,7 @@ def _normalize_step_parameters(
         return {"timeout_seconds": timeout}
     if action == "measure":
         allowed = {
-            "item", "channel", "source_channel", "reference_channel",
+            "item", "channel", "reference_channel",
             "time_s", "level", "slope", "occurrence",
         }
         _require_exact_fields(parameters, required={"item"}, optional=allowed - {"item"}, label=f"{label} parameters")
@@ -522,7 +522,7 @@ def _normalize_step_parameters(
             raise ParameterValidationError(f"{label} measure item must be a string")
         item = normalize_measurement_item(item_value)
         normalized: dict[str, object] = {"item": item}
-        for name in ("channel", "source_channel", "reference_channel", "occurrence"):
+        for name in ("channel", "reference_channel", "occurrence"):
             if name in parameters:
                 value = _strict_integer(parameters[name], f"{label} {name}")
                 if value < 1:
@@ -538,17 +538,15 @@ def _normalize_step_parameters(
             normalized["slope"] = slope
         request = _measure_plan_request(normalized)
         measurement_query_kwargs(request, item)
-        if request.channel is not None and request.source_channel is not None:
-            raise ParameterValidationError(f"{label} channel cannot be combined with source_channel")
-        source = request.source_channel if request.source_channel is not None else request.channel
+        source = request.channel
         if is_pair_measurement_item(item):
             if source is None or request.reference_channel is None:
-                raise ParameterValidationError(f"{label} {item} requires source/channel and reference_channel")
+                raise ParameterValidationError(f"{label} {item} requires channel and reference_channel")
             if source == request.reference_channel:
                 raise ParameterValidationError(f"{label} source and reference channels must differ")
         else:
             if source is None:
-                raise ParameterValidationError(f"{label} measure requires channel or source_channel")
+                raise ParameterValidationError(f"{label} measure requires channel")
             if request.reference_channel is not None:
                 raise ParameterValidationError(f"{label} reference_channel is only valid for phase or delay")
         return normalized
@@ -751,7 +749,7 @@ def _execute_step(
     if step.action == "screenshot":
         assert output_dir is not None
         output_path = _screenshot_path(output_dir, document, loop_index, step_index)
-        capture = scope.capture_screenshot_png(background=str(step.parameters["background"]))
+        capture = scope.capture_screenshot(background=str(step.parameters["background"]))
         written = write_screenshot_png_file(capture, output_path)
         entry = scope.workflow_status()
         system_error = _system_error_json(entry)
@@ -855,7 +853,6 @@ def _measure_plan_request(parameters: Mapping[str, object]) -> MeasurePlanReques
     return MeasurePlanRequest(
         item=str(parameters["item"]),
         channel=_optional_int(parameters.get("channel")),
-        source_channel=_optional_int(parameters.get("source_channel")),
         reference_channel=_optional_int(parameters.get("reference_channel")),
         time_s=_optional_float(parameters.get("time_s")),
         level=_optional_float(parameters.get("level")),
@@ -869,7 +866,6 @@ def _measure_request(parameters: Mapping[str, object]) -> MeasureRequest:
     return MeasureRequest(
         item=plan.item,
         channel=plan.channel,
-        source_channel=plan.source_channel,
         reference_channel=plan.reference_channel,
         time_s=plan.time_s,
         level=plan.level,

@@ -176,7 +176,6 @@ def _execute_dry_run(
             MeasurePlanRequest(
                 item=request.item,
                 channel=request.channel,
-                source_channel=request.source_channel,
                 reference_channel=request.reference_channel,
                 time_s=request.time_s,
                 level=request.level,

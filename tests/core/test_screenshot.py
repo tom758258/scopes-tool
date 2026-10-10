@@ -2,7 +2,7 @@ import pytest
 
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.errors import ParameterValidationError, ScreenshotResponseError
-from scopes_tool_core.fake_backend import FakeBackend
+from scopes_tool_core.fake_backend import FakeBackend, FakeBackendError
 from scopes_tool_core.scpi import SCPIClient
 from scopes_tool_core.screenshot import (
     BMP_SIGNATURE,
@@ -148,7 +148,7 @@ def test_screenshot_controller_captures_png_data_with_temporary_timeout():
     )
     controller = ScreenshotController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
 
-    capture = controller.capture_png()
+    capture = controller.capture()
 
     assert capture.format_name == "PNG"
     assert capture.palette == "COLor"
@@ -172,7 +172,7 @@ def test_screenshot_controller_supports_white_background():
     )
     controller = ScreenshotController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
 
-    capture = controller.capture_png(background="white")
+    capture = controller.capture(background="white")
 
     assert capture.background == "white"
     assert backend.history == [
@@ -271,7 +271,7 @@ def test_screenshot_controller_rejects_disabled_capability():
         supports_raw_points_mode=capabilities.supports_raw_points_mode,
         supports_measurements=capabilities.supports_measurements,
         supports_delay_measurement=capabilities.supports_delay_measurement,
-        supports_screenshot=False,
+        screenshot_formats=(),
         supports_segmented_memory=capabilities.supports_segmented_memory,
         supports_serial_decode=capabilities.supports_serial_decode,
     )
@@ -279,7 +279,7 @@ def test_screenshot_controller_rejects_disabled_capability():
     controller = ScreenshotController(SCPIClient(backend), disabled)
 
     with pytest.raises(ParameterValidationError):
-        controller.capture_png()
+        controller.capture()
 
     assert backend.history == []
 
@@ -297,3 +297,19 @@ def test_screenshot_export_writes_png(tmp_path):
 
     assert written == output_path
     assert output_path.read_bytes() == PNG_BYTES
+
+
+@pytest.mark.parametrize("options, query", [
+    (ScreenshotOptions(), ":DISPlay:DATA? PNG, COLor"),
+    (ScreenshotOptions(format="bmp"), ":HCOPY:SDUMp:DATA? BMP"),
+])
+def test_screenshot_capture_failure_restores_background_and_timeout(options, query):
+    backend = FakeBackend(responses={":HARDcopy:INKSaver?": "0"}, timeout=2345)
+    controller = ScreenshotController(SCPIClient(backend), capabilities_for_model("DSOX4024A"))
+    with pytest.raises(FakeBackendError):
+        controller.capture(options=options, background="white")
+    assert backend.history == [
+        ":HARDcopy:INKSaver?", ":HARDcopy:INKSaver ON", query, ":HARDcopy:INKSaver OFF",
+    ]
+    assert backend.timeout_history == [10000, 2345]
+    assert backend.timeout == 2345

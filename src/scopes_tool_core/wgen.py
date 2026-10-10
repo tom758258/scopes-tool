@@ -447,15 +447,10 @@ def validate_wgen_function(function: str) -> str:
 def validate_wgen_frequency(
     frequency_hz: float,
     *,
-    series: str | None = None,
+    series: str,
     function: str | None = None,
 ) -> float:
     value = _validate_wgen_numeric(frequency_hz, "frequency")
-    if series is None:
-        # Legacy context-free validation.
-        if value <= 0.0:
-            raise ParameterValidationError("WGEN frequency must be greater than zero.")
-        return value
     limits = _wgen_series_table(series, _WGEN_FREQUENCY_LIMITS_HZ, "frequency")
     if function is None:
         # Series planning envelope across the supported common functions.
@@ -502,19 +497,12 @@ def wgen_frequency_limits(series: str) -> dict[str, dict[str, object]]:
 def validate_wgen_amplitude(
     amplitude_volts: float,
     *,
-    series: str | None = None,
+    series: str,
     function: str | None = None,
     load: str | None = None,
     offset: float | None = None,
 ) -> float:
     value = _validate_wgen_numeric(amplitude_volts, "amplitude")
-    if series is None:
-        # Legacy context-free validation.
-        if not 0.0 < value <= 5.0:
-            raise ParameterValidationError(
-                "WGEN amplitude must be greater than zero and at most 5.0 volts."
-            )
-        return value
     if function == "dc":
         raise ParameterValidationError(
             "WGEN amplitude is not applicable to the DC waveform; "
@@ -546,19 +534,12 @@ def validate_wgen_amplitude(
 def validate_wgen_offset(
     offset_volts: float,
     *,
-    series: str | None = None,
+    series: str,
     function: str | None = None,
     load: str | None = None,
     amplitude: float | None = None,
 ) -> float:
     value = _validate_wgen_numeric(offset_volts, "offset")
-    if series is None:
-        # Legacy context-free validation.
-        if not -2.5 <= value <= 2.5:
-            raise ParameterValidationError(
-                "WGEN offset must be between -2.5 and 2.5 volts."
-            )
-        return value
     bound = _wgen_offset_bound(series, function, load)
     if not -bound <= value <= bound:
         raise ParameterValidationError(

@@ -63,7 +63,6 @@ class CaptureBatchRequest:
 class MeasureRequest:
     item: str
     channel: int | None = None
-    source_channel: int | None = None
     reference_channel: int | None = None
     time_s: float | None = None
     level: float | None = None

@@ -63,7 +63,6 @@ class CapturePlanRequest:
 class MeasurePlanRequest:
     item: str
     channel: int | None = None
-    source_channel: int | None = None
     reference_channel: int | None = None
     time_s: float | None = None
     level: float | None = None
@@ -552,12 +551,6 @@ def measurement_query_kwargs(
     return {}
 
 
-def resolve_measurement_source_channel(request: MeasurePlanRequest) -> int | None:
-    if request.channel is not None and request.source_channel is not None:
-        raise OscilloscopeError("--channel cannot be combined with --source-channel")
-    return request.source_channel if request.source_channel is not None else request.channel
-
-
 def resolve_single_measurement_channel(
     request: MeasurePlanRequest,
     capabilities: ScopeCapabilities,
@@ -566,9 +559,9 @@ def resolve_single_measurement_channel(
         raise OscilloscopeError(
             "--reference-channel can only be used with phase or delay measurements"
         )
-    channel = resolve_measurement_source_channel(request)
+    channel = request.channel
     if channel is None:
-        raise OscilloscopeError("measure requires --channel or --source-channel")
+        raise OscilloscopeError("measure requires --channel")
     return validate_analog_channel(channel, capabilities)
 
 
@@ -577,10 +570,10 @@ def resolve_pair_measurement_channels(
     capabilities: ScopeCapabilities,
     item: str,
 ) -> tuple[int, int]:
-    source_channel = resolve_measurement_source_channel(request)
+    source_channel = request.channel
     if source_channel is None or request.reference_channel is None:
         raise OscilloscopeError(
-            f"{item} measurement requires --source-channel or --channel, "
+            f"{item} measurement requires --channel, "
             "plus --reference-channel"
         )
     source_channel = validate_analog_channel(source_channel, capabilities)

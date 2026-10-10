@@ -9,14 +9,13 @@ from scopes_tool_cli._worker_commands_math import (
     _MATH_WORKER_ARGUMENTS,
 )
 from scopes_tool_cli.worker_commands import DOMAIN_COMMANDS, _NON_MATH_DOMAIN_COMMANDS
-from scopes_tool_core.advanced import (
-    FFT_OPERATIONS,
+from scopes_tool_core.fft import FFT_OPERATIONS, fft_configure_commands
+from scopes_tool_core.math import (
     MATH_COMPOSITE_OPERATIONS,
     MATH_FILTER_OPERATIONS,
     MATH_OPERATIONS,
     MATH_TRANSFORMS,
     MATH_VISUALIZATION_OPERATIONS,
-    fft_configure_commands,
     math_filter_commands,
     math_function_scpi_prefix,
     math_operator_commands,

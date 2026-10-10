@@ -10,9 +10,9 @@ SCPI or model-name branches.
 2. Define the profile in `capabilities.py`. List supported operations and their
    actual channel, measurement, acquisition, waveform, screenshot and sequence
    subsets. For screenshots, specify `screenshot_formats` explicitly (empty for
-   no capture); Core derives the legacy PNG flag. Use
-   `supported_screenshot_formats`, `supports_any_screenshot` and
-   `supports_png_screenshot` for their distinct meanings. Preserve the existing
+   no capture). This tuple is the sole format capability source;
+   `supports_any_screenshot` and `supports_png_screenshot` are derived
+   predicates. Preserve the existing
    command's default format and the sequence action subset. A shared series
    does not imply identical model capabilities. An
    operation may use multiple native commands to satisfy the existing public

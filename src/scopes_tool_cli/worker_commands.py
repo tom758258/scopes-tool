@@ -391,7 +391,7 @@ def parse_domain_command(
     if runtime.mode == "simulate":
         argv += ["--simulate", "--model", runtime.model]
     else:
-        argv += ["--live", "--resource", runtime.resource or "", "--model", runtime.model]
+        argv += ["--resource", runtime.resource or "", "--model", runtime.model]
     argv.append("--json")
     parser = cli_parser._build_parser()
     try:
@@ -403,7 +403,7 @@ def parse_domain_command(
     cli_runtime._resolve_cli_mode(parsed)
     preflight.validate_pre_open_args(parsed)
     dry_args = argparse.Namespace(
-        **{**vars(parsed), "dry_run": True, "simulate": False, "live": False}
+        **{**vars(parsed), "dry_run": True, "simulate": False}
     )
     scope_cli._dry_run_payload(dry_args)
     return parsed

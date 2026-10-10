@@ -135,7 +135,7 @@ def test_capability_subset_and_unsupported_leaks(model_id, _, __):
                       else ("cursor-set", "trigger-tv", "save-image-ink-saver")):
         assert operation_supported(capabilities, operation)
     assert not capabilities.supports_measure_results_dump
-    assert capabilities.supports_screenshot is is_tbs2000
+    assert capabilities.supports_png_screenshot is is_tbs2000
     assert operation_supported(capabilities, "screenshot") is (model_id != "tektronix-tbs1052b")
     assert operation_supported(capabilities, "display-vectors") is (
         model_id in {"tektronix-tds2024b", "tektronix-tbs1052b"}
@@ -583,7 +583,7 @@ def test_measurement_results_and_png_stay_fail_closed(model_id, _, __):
     scope, backend = make_scope(model_id)
     actions = [scope.query_measurement_results, scope.query_hardcopy_state]
     if model_id != "tektronix-tbs2074":
-        actions.extend([scope.capture_screenshot_png,
+        actions.extend([scope.capture_screenshot,
                         lambda: scope.capture_screenshot(options=ScreenshotOptions()),
                         lambda: scope.capture_screenshot(options=ScreenshotOptions(format="png"))])
     for action in actions:
@@ -1023,9 +1023,9 @@ def test_tbs_native_png_sequence_and_restoration(failure, monkeypatch):
         monkeypatch.setattr(scope.scpi, "query", query)
         if failure:
             with pytest.raises((OscilloscopeError, SimulatorBackendError)):
-                scope.capture_screenshot_png()
+                scope.capture_screenshot()
         else:
-            capture = scope.capture_screenshot_png()
+            capture = scope.capture_screenshot()
             assert capture.format_name == "PNG" and capture.data.startswith(b"\x89PNG\r\n\x1a\n")
             history = scope.backend.history
             saved = next(command for command in history if command.startswith('SAVe:IMAge "'))
@@ -1039,7 +1039,7 @@ def test_tbs_native_png_sequence_and_restoration(failure, monkeypatch):
             assert not scope.backend.image_files
         scope.backend.history.clear()
         with pytest.raises(ParameterValidationError):
-            scope.capture_screenshot_png(background="white")
+            scope.capture_screenshot(background="white")
         assert not scope.backend.history
 
 

@@ -85,7 +85,6 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
     if command == "single-wait":
         _single_wait_config(normalized)
     if command in {
-        "annotation",
         "annotation-query",
         "annotation-set",
         "annotation-on",
