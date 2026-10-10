@@ -546,7 +546,12 @@ def _print_live_resources(
                 continue
 
         live_count += 1
-        live_resources.append({"resource": resource, "idn": runtime._idn_object_json(idn)})
+        idn_json = runtime._idn_object_json(idn, include_model_id=True)
+        live_resources.append({
+            "resource": resource,
+            "model_id": idn_json.pop("model_id"),
+            "idn": idn_json,
+        })
         print(f"  {resource}")
         print(f"    IDN: {idn.raw}")
 

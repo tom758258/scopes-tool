@@ -33,8 +33,8 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 
     with runtime._open_scope(args, resource) as scope:
         idn = scope.query_idn()
-        runtime._json_record_scope(scope, idn)
-        runtime._json_update_result(idn=runtime._idn_object_json(idn), capabilities=runtime._capabilities_json(scope.capabilities), **runtime._scope_backend_json(scope))
+        runtime._json_record_scope(scope, idn, include_model_id=True)
+        runtime._json_update_result(idn=runtime._idn_object_json(idn, include_model_id=True), capabilities=runtime._capabilities_json(scope.capabilities), **runtime._scope_backend_json(scope))
         runtime._print_session_header(scope, resource)
         print(f"Raw IDN: {idn.raw}")
         print(f"Vendor: {idn.vendor}")

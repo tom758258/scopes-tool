@@ -784,7 +784,7 @@ def test_worker_terminal_result_flows_to_job_finished_and_status_last_job(tmp_pa
     assert finished["ok"] is True
     assert finished["exit_code"] == 0
     assert isinstance(finished["result"], dict)
-    assert finished["result"]["idn"]
+    assert finished["result"]["idn"]["model_id"] == runtime.model
     assert finished["result"]["capabilities"]
     assert finished["files"] == []
     assert finished["error"] is None

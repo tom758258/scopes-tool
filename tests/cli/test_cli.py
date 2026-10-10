@@ -505,6 +505,7 @@ def test_list_resources_live_only_json_reports_asrl_verification_failures(
     assert result["live_resources"] == [
         {
             "resource": "TCPIP0::LIVE::INSTR",
+            "model_id": "keysight-dsox4034a",
             "idn": {
                 "raw": "KEYSIGHT TECHNOLOGIES,DSOX4034A,SN2,FW2",
                 "vendor": "KEYSIGHT TECHNOLOGIES",

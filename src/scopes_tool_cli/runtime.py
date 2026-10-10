@@ -284,15 +284,15 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         "search_modes": [mode for mode in SEARCH_MODES if mode in capabilities.search_modes],
     }
 
-def _json_record_scope(scope: Oscilloscope, idn) -> None:
+def _json_record_scope(scope: Oscilloscope, idn, *, include_model_id: bool = False) -> None:
     if _JSON_RECORD is None:
         return
-    _JSON_RECORD["idn"] = _idn_object_json(idn)
+    _JSON_RECORD["idn"] = _idn_object_json(idn, include_model_id=include_model_id)
     _JSON_RECORD["capabilities"] = _capabilities_json(scope.capabilities)
     _JSON_RECORD["backend"] = getattr(scope.backend, "backend", None)
 
-def _idn_object_json(idn) -> dict[str, str | None]:
-    return {
+def _idn_object_json(idn, *, include_model_id: bool = False) -> dict[str, str | None]:
+    payload = {
         "raw": idn.raw,
         "vendor": idn.vendor,
         "model": idn.model,
@@ -300,6 +300,12 @@ def _idn_object_json(idn) -> dict[str, str | None]:
         "firmware": idn.firmware,
         "series": idn.series,
     }
+    if include_model_id:
+        try:
+            payload["model_id"] = idn.model_id
+        except UnsupportedModelError:
+            payload["model_id"] = None
+    return payload
 
 def _json_update_result(**values: object) -> None:
     if _JSON_RECORD is None:

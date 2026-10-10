@@ -117,7 +117,8 @@ def test_one_shot_live_idn_parse_failure_closes_backend(monkeypatch, capsys):
     capsys.readouterr()
 
 
-def test_one_shot_identify_rejects_unknown_tek_model(monkeypatch, capsys):
+@pytest.mark.parametrize("json_args", [[], ["--json"]])
+def test_one_shot_identify_rejects_unknown_tek_model(monkeypatch, capsys, json_args):
     backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS9999B,SN1,1.0"})
     monkeypatch.setattr(
         runtime.Oscilloscope,
@@ -125,10 +126,59 @@ def test_one_shot_identify_rejects_unknown_tek_model(monkeypatch, capsys):
         staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
     )
 
-    assert cli.main(["identify", "--resource", "USB0::FAKE::INSTR"]) == 1
+    assert cli.main(["identify", "--resource", "USB0::FAKE::INSTR", *json_args]) == 1
     assert backend.history == ["*IDN?"]
     assert backend.closed is True
-    assert "Unsupported physical oscilloscope model" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    if json_args:
+        payload = json.loads(captured.out)
+        assert payload["ok"] is False
+        assert "Unsupported physical oscilloscope model" in payload["error"]["message"]
+    else:
+        assert "Unsupported physical oscilloscope model" in captured.err
+
+
+@pytest.mark.parametrize("vendor,model,series,model_id", [
+    ("KEYSIGHT TECHNOLOGIES", "DSOX4024A", "4000X", "keysight-dsox4024a"),
+    ("TEKTRONIX", "TBS2074", "TBS2000", "tektronix-tbs2074"),
+    ("KEYSIGHT TECHNOLOGIES", "DSOX4999A", "4000X", None),
+    ("UNKNOWN VENDOR", "UNKNOWN1000", None, None),
+    ("UNKNOWN VENDOR", "DSOX4024A", "4000X", None),
+])
+def test_one_shot_identify_json_model_id(monkeypatch, capsys, vendor, model, series, model_id):
+    raw_idn = f"{vendor},{model},SN1,FW1"
+    backend = FakeBackend(responses={"*IDN?": raw_idn})
+    opened = []
+
+    def fake_open(resource, visa_library=None):
+        opened.append((resource, visa_library))
+        return Oscilloscope(backend)
+
+    monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fake_open))
+
+    assert cli.main(["identify", "--resource", "USB0::FAKE::INSTR", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    idn = payload["idn"]
+    assert payload["schema_version"] == 2
+    assert payload["ok"] is True
+    assert idn == payload["result"]["idn"]
+    assert idn == {
+        "raw": raw_idn,
+        "vendor": vendor,
+        "model": model,
+        "serial": "SN1",
+        "firmware": "FW1",
+        "series": series,
+        "model_id": model_id,
+    }
+    assert payload["capabilities"] == payload["result"]["capabilities"]
+    if model_id is None:
+        assert payload["capabilities"] is None
+    else:
+        assert payload["capabilities"]["analog_channels"] == 4
+    assert opened == [("USB0::FAKE::INSTR", None)]
+    assert backend.history == ["*IDN?"]
+    assert backend.closed is True
 
 
 def test_tek_simulator_uses_tek_driver_and_status_path(monkeypatch, capsys):
@@ -264,8 +314,15 @@ def test_tds2000b_display_vectors_metadata_matches_sent_command(monkeypatch, cap
     assert payload["result"]["command"] == "DISPlay:STYle VECtors"
 
 
-def test_live_resource_discovery_lists_unregistered_tek_model(monkeypatch, capsys):
-    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2072,FAKE_SERIAL,FW1"})
+@pytest.mark.parametrize("vendor,model,series,model_id", [
+    ("KEYSIGHT TECHNOLOGIES", "DSOX4024A", "4000X", "keysight-dsox4024a"),
+    ("TEKTRONIX", "TBS2074", "TBS2000", "tektronix-tbs2074"),
+    ("TEKTRONIX", "TBS2072", None, None),
+    ("UNKNOWN VENDOR", "UNKNOWN1000", None, None),
+])
+def test_live_resource_discovery_model_id(monkeypatch, capsys, vendor, model, series, model_id):
+    raw_idn = f"{vendor},{model},FAKE_SERIAL,FW1"
+    backend = FakeBackend(responses={"*IDN?": raw_idn})
     monkeypatch.setattr(
         cli, "list_visa_resources",
         lambda visa_library=None: VisaResourceListing(resources=("USB0::FAKE::INSTR",), backend="test"),
@@ -283,15 +340,21 @@ def test_live_resource_discovery_lists_unregistered_tek_model(monkeypatch, capsy
         {
             "resource": "USB0::FAKE::INSTR",
             "idn": {
-                "raw": "TEKTRONIX,TBS2072,FAKE_SERIAL,FW1",
-                "vendor": "TEKTRONIX",
-                "model": "TBS2072",
-                "series": None,
+                "raw": raw_idn,
+                "vendor": vendor,
+                "model": model,
+                "series": series,
                 "serial": "FAKE_SERIAL",
                 "firmware": "FW1",
             },
+            "model_id": model_id,
         }
     ]
+    assert payload["schema_version"] == 2
+    assert payload["backend"] == payload["result"]["backend"] == "test"
+    assert payload["result"]["resources"] == ["USB0::FAKE::INSTR"]
+    assert payload["result"]["live_only"] is True
+    assert backend.closed is True
     assert "verification_failures" not in payload["result"]
 
 

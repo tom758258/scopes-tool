@@ -198,7 +198,17 @@ Discovery and identification:
 - `capabilities`: offline registered-model capability object; see
   [Offline Tool Introspection](#offline-tool-introspection).
 - `list-resources`: `backend`, `resources`, `live_only`, `live_resources`.
+  With `--live-only --json`, each `result.live_resources[]` entry preserves
+  `resource` and `idn` and adds `model_id`: the Core registry's canonical physical
+  model ID string for a registered vendor/model, or `null` for an unknown or
+  unregistered identity. Unknown responders remain listed. Ordinary discovery
+  remains passive; this field requires no additional `*IDN?` query.
 - `identify`: `idn`, `capabilities`, `backend`, `timeout_ms`.
+  With `--json`, both top-level `idn` and `result.idn` additionally contain
+  canonical `model_id`, resolved by Core from the IDN already obtained.
+  When existing identify policy permits an unknown or unregistered identity,
+  `model_id` is `null`; existing rejection and exit-code behavior is unchanged.
+  These additions retain Common schema version `2` and all existing fields.
 - `check-error`: `drain`, `max_reads`, `entries`; top-level `system_error`
   records the latest queried entry.
 - `system-clear-status`: `operation: "clear"`, `command: "*CLS"`, and
