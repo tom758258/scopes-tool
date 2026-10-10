@@ -60,10 +60,13 @@ def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monk
     assert [Path(item.scripts[0]).name for item in analyses] == [
         "windows_cli_entry.py", "windows_launcher_entry.py", "windows_host_entry.py",
     ]
+    assert [call.kwargs["name"] for call in api.EXE.call_args_list] == [
+        "scopes-tool", "scopes-tool-webui-launcher", "scopes-tool-webui-host",
+    ]
+    assert [call.kwargs["console"] for call in api.EXE.call_args_list] == [True, False, True]
     for call in api.EXE.call_args_list:
         assert call.kwargs["exclude_binaries"] is True
         assert call.kwargs["contents_directory"] == "_internal"
-        assert call.kwargs["console"] is True
     hooks.copy_metadata.assert_any_call("scopes-tool", recursive=True)
     hooks.copy_metadata.assert_any_call("fastapi", recursive=True)
     hooks.copy_metadata.assert_any_call("uvicorn", recursive=True)

@@ -47,7 +47,7 @@ launcher_exe = EXE(
     launcher_analysis.scripts,
     exclude_binaries=True,
     name="scopes-tool-webui-launcher",
-    console=True,
+    console=False,
     contents_directory="_internal",
     icon=str(SCOPES_ICON),
 )
