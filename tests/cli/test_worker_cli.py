@@ -3138,3 +3138,240 @@ def test_worker_cursor_remains_a_formal_command():
     assert parsed.command == "cursor"
     assert parsed.source_channel == 1
     assert parsed.x1 == 0.0
+
+
+def test_simulation_worker_retains_settings_with_independent_sessions(monkeypatch):
+    sessions = []
+    make_backend = cli_runtime._make_simulator_backend
+
+    def tracked_backend(args, resource):
+        backend = make_backend(args, resource)
+        sessions.append(backend)
+        return backend
+
+    monkeypatch.setattr(cli_runtime, "_make_simulator_backend", tracked_backend)
+    runtime = _runtime()
+    for command, arguments in (
+        ("acquisition", {"type": "average", "count": 16}),
+        ("channel-invert", {"channel": 1, "on": True}),
+        ("channel-units", {"channel": 1, "units": "amp"}),
+        ("identify", {}),
+    ):
+        _, result = _execute_worker_job(runtime, command, arguments)
+        assert result["state"] == "succeeded", result
+    _, acquisition = _execute_worker_job(runtime, "acquisition", {"query": True})
+    _, invert = _execute_worker_job(runtime, "channel-invert", {"channel": 1, "query": True})
+    _, units = _execute_worker_job(runtime, "channel-units", {"channel": 1, "query": True})
+    assert acquisition["result"]["type"] == "average"
+    assert acquisition["result"]["count"] == 16
+    assert invert["result"]["invert"] is True
+    assert units["result"]["units"] == "amp"
+    assert len(sessions) == 7
+    assert len({id(session) for session in sessions}) == 7
+    assert all(session.closed for session in sessions)
+    assert runtime.simulator_state.physical_model_id == runtime.model
+
+
+@contextmanager
+def _simulation_worker_process(command=None):
+    import os
+    import time
+    command = command or [sys.executable, "-m", "scopes_tool_cli"]
+    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2] / "src"))
+    process = subprocess.Popen(command + ["worker", "--simulate", "--port", "0", "--format", "jsonl"],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    events = queue.Queue()
+    records = []
+
+    def read_events():
+        for line in process.stdout:
+            event = json.loads(line)
+            records.append(event)
+            events.put(event)
+
+    reader = threading.Thread(target=read_events, daemon=True)
+    reader.start()
+    ready = None
+    try:
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            event = events.get(timeout=20)
+            if event.get("event") == "ready":
+                ready = event
+                break
+        assert ready is not None
+        yield ready, records
+    finally:
+        try:
+            if ready is not None and process.poll() is None:
+                request = urlrequest.Request(ready["stop_url"], data=b"{}", method="POST",
+                                             headers={"Content-Type": "application/json"})
+                with urlrequest.urlopen(request, timeout=5) as response:
+                    assert response.status == 202
+                process.wait(timeout=15)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+            reader.join(timeout=5)
+            stderr = process.stderr.read()
+            process.stdout.close()
+            process.stderr.close()
+        assert process.returncode == 0, stderr
+        assert records[-1]["event"] == "summary"
+        assert records[-1]["ok"] is True
+
+
+def _submit_simulation_job(ready, command, arguments, job_id):
+    import time
+    request = urlrequest.Request(ready["command_url"], method="POST",
+        data=json.dumps({"schema_version": 2, "command": command,
+                         "arguments": arguments, "job_id": job_id}).encode(),
+        headers={"Content-Type": "application/json"})
+    with urlrequest.urlopen(request, timeout=5) as response:
+        assert response.status == 202
+        accepted = json.load(response)
+    assert accepted["job_id"] == job_id
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        with urlrequest.urlopen(ready["status_url"], timeout=5) as response:
+            status = json.load(response)
+        job = status.get("last_job")
+        if job and job["worker_job_id"] == accepted["worker_job_id"]:
+            assert job["job_id"] == job_id
+            assert job["state"] == "succeeded", job
+            assert job["ok"] is True
+            return job
+        time.sleep(0.01)
+    raise AssertionError(f"job did not complete: {accepted}")
+
+
+def _assert_simulation_defaults(ready):
+    acquisition = _submit_simulation_job(ready, "acquisition", {"query": True}, "default-acquisition")
+    invert = _submit_simulation_job(ready, "channel-invert", {"channel": 1, "query": True}, "default-invert")
+    units = _submit_simulation_job(ready, "channel-units", {"channel": 1, "query": True}, "default-units")
+    assert acquisition["result"]["type"] == "normal"
+    assert acquisition["result"]["count"] == 8
+    assert invert["result"]["invert"] is False
+    assert units["result"]["units"] == "volt"
+
+
+def test_real_simulation_worker_retains_settings_isolates_and_restarts():
+    with _simulation_worker_process() as (first, records):
+        for index, (command, arguments) in enumerate((
+            ("acquisition", {"type": "average", "count": 16}),
+            ("channel-invert", {"channel": 1, "on": True}),
+            ("channel-units", {"channel": 1, "units": "amp"}),
+            ("identify", {}),
+        )):
+            _submit_simulation_job(first, command, arguments, f"set-{index}")
+        with _simulation_worker_process() as (second, _):
+            assert second["run_id"] != first["run_id"]
+            _assert_simulation_defaults(second)
+        acquisition = _submit_simulation_job(first, "acquisition", {"query": True}, "query-acquisition")
+        invert = _submit_simulation_job(first, "channel-invert", {"channel": 1, "query": True}, "query-invert")
+        units = _submit_simulation_job(first, "channel-units", {"channel": 1, "query": True}, "query-units")
+        assert acquisition["result"]["type"] == "average"
+        assert acquisition["result"]["count"] == 16
+        assert invert["result"]["invert"] is True
+        assert units["result"]["units"] == "amp"
+    finished = [record for record in records if record["event"] == "job_finished"]
+    assert len(finished) == 7
+    assert all(record["state"] == "succeeded" for record in finished)
+    with _simulation_worker_process() as (restarted, _):
+        assert restarted["run_id"] != first["run_id"]
+        _assert_simulation_defaults(restarted)
+
+
+@pytest.mark.parametrize("failure", ["export", "restore", "export-model", "restore-model"])
+def test_simulation_worker_state_errors_fail_job_and_close_session(monkeypatch, failure):
+    from dataclasses import replace
+    from scopes_tool_core.simulator_backend import SimulatorBackend
+
+    runtime = _runtime()
+    _execute_worker_job(runtime, "acquisition", {"type": "average", "count": 16})
+    retained = runtime.simulator_state
+    if failure == "restore-model":
+        runtime.simulator_state = replace(retained, physical_model_id="keysight-dsox2004a")
+        retained = runtime.simulator_state
+    with monkeypatch.context() as patch:
+        if failure in {"export", "restore"}:
+            def fail_state(*args):
+                raise OscilloscopeError(f"simulator state {failure} failed")
+            patch.setattr(SimulatorBackend, f"{failure}_instrument_state", fail_state)
+        elif failure == "export-model":
+            patch.setattr(SimulatorBackend, "export_instrument_state",
+                          lambda self: replace(retained, physical_model_id="keysight-dsox2004a"))
+        job, result = _execute_worker_job(runtime, "acquisition", {"query": True})
+    assert result["state"] == "failed"
+    assert result["ok"] is False
+    assert result["error"]["message"]
+    if failure.endswith("model"):
+        assert "model" in result["error"]["message"]
+    else:
+        assert failure in result["error"]["message"]
+    assert cli_runtime._LAST_BACKEND.closed
+    assert runtime.simulator_state is retained
+    assert job.exit_code != 0
+
+
+@pytest.mark.parametrize("terminal_state", ["failed", "cancelled"])
+def test_simulation_worker_unsuccessful_jobs_do_not_replace_state(monkeypatch, terminal_state):
+    runtime = _runtime()
+    _execute_worker_job(runtime, "acquisition", {"type": "average", "count": 16})
+    retained = runtime.simulator_state
+    dispatch = cli._dispatch_command
+
+    def unsuccessful_dispatch(args, *, stop_requested=None):
+        code = dispatch(args, stop_requested=stop_requested)
+        assert code == 0
+        if terminal_state == "cancelled":
+            runtime.jobs[runtime.active_job_id].cancel_requested = True
+            return code
+        return 1
+
+    with monkeypatch.context() as patch:
+        patch.setattr(cli, "_dispatch_command", unsuccessful_dispatch)
+        _, result = _execute_worker_job(runtime, "acquisition", {"type": "normal"})
+    assert result["state"] == terminal_state
+    assert runtime.simulator_state is retained
+    _, result = _execute_worker_job(runtime, "acquisition", {"query": True})
+    assert result["state"] == "succeeded"
+    assert result["result"]["type"] == "average"
+    assert result["result"]["count"] == 16
+
+
+def test_standalone_cli_simulation_uses_defaults_after_worker_job(capsys):
+    _execute_worker_job(_runtime(), "acquisition", {"type": "average", "count": 16})
+    capsys.readouterr()
+    assert cli.main(["acquisition", "--simulate", "--query", "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)["result"]
+    assert result["type"] == "normal"
+    assert result["count"] == 8
+
+
+def test_live_worker_does_not_pass_simulator_state(monkeypatch):
+    runtime = _live_runtime()
+
+    def execute(parsed, *, stop_requested=None):
+        assert not hasattr(parsed, "_simulator_state")
+        assert not hasattr(parsed, "_simulator_state_reporter")
+        return {"ok": True, "result": {}, "files": [], "error": None}, 0
+
+    monkeypatch.setattr(cli, "_execute_json_command", execute)
+    _, result = _execute_worker_job(runtime, "identify", {})
+    assert result["state"] == "succeeded"
+    assert runtime.simulator_state is None
+
+
+def test_simulation_worker_runtimes_in_same_process_do_not_share_state():
+    first = _runtime()
+    second = _runtime()
+    _execute_worker_job(first, "acquisition", {"type": "average", "count": 16})
+    _, result = _execute_worker_job(second, "acquisition", {"query": True})
+    assert result["result"]["type"] == "normal"
+    assert result["result"]["count"] == 8
+    _execute_worker_job(second, "acquisition", {"type": "peak"})
+    _, result = _execute_worker_job(first, "acquisition", {"query": True})
+    assert result["result"]["type"] == "average"
+    assert result["result"]["count"] == 16

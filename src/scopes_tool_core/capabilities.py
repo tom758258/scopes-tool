@@ -299,6 +299,8 @@ _CAPABILITY_PROFILES = {
     ),
     "keysight-infiniivision-2000x": ScopeCapabilities(
         series="2000X",
+        acquisition_modes=("normal", "peak", "average", "high_resolution"),
+        average_counts=tuple(range(2, 65537)),
         analog_channels=4,
         default_waveform_points=1000,
         safe_max_waveform_points=10000,
@@ -337,6 +339,8 @@ _CAPABILITY_PROFILES = {
     ),
     "keysight-infiniivision-3000x": ScopeCapabilities(
         series="3000X",
+        acquisition_modes=("normal", "peak", "average", "high_resolution"),
+        average_counts=tuple(range(2, 65537)),
         analog_channels=4,
         default_waveform_points=1000,
         safe_max_waveform_points=10000,
@@ -380,6 +384,8 @@ _CAPABILITY_PROFILES = {
     ),
     "keysight-infiniivision-4000x": ScopeCapabilities(
         series="4000X",
+        acquisition_modes=("normal", "peak", "average", "high_resolution"),
+        average_counts=tuple(range(2, 65537)),
         analog_channels=4,
         default_waveform_points=1000,
         safe_max_waveform_points=10000,

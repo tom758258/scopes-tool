@@ -175,3 +175,30 @@ def test_introspection_commands_do_not_open_scopes(monkeypatch, command):
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert cli.main(command + ["--json"]) == 0
+
+
+@pytest.mark.parametrize("model", [
+    "keysight-dsox2004a", "keysight-dsox3024a", "keysight-dsox4024a",
+    "keysight-dsox4034a", "tektronix-tbs2074", "tektronix-tds2024b",
+    "tektronix-tbs1052b",
+])
+def test_capabilities_json_exposes_core_acquisition_values(model, monkeypatch, capsys, tmp_path):
+    _forbid_visa(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    before = _snapshot_files(tmp_path)
+    assert cli.main(["capabilities", "--model", model, "--json"]) == 0
+    payload = _json_stdout(capsys)
+    profile = capabilities_for_model_id(model)
+    assert payload["schema_version"] == 2
+    assert payload["capabilities"]["acquisition_modes"] == list(profile.acquisition_modes)
+    assert payload["capabilities"]["average_counts"] == list(profile.average_counts)
+    _assert_no_files_created(tmp_path, before)
+
+
+def test_capabilities_json_unknown_acquisition_information_is_null():
+    from dataclasses import replace
+    profile = replace(capabilities_for_model_id("keysight-dsox4024a"),
+                      acquisition_modes=None, average_counts=None)
+    payload = runtime._capabilities_json(profile)
+    assert payload["acquisition_modes"] is None
+    assert payload["average_counts"] is None

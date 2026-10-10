@@ -815,6 +815,17 @@ Math additionally reports `supports_math_goft`, `supports_math_cascade`, and
 ordered canonical operation lists. WGEN additionally reports `supports_wgen`
 and the model's `wgen_scpi_root`.
 
+Acquisition additionally reports `acquisition_modes` (an array of canonical
+string mode names) and `average_counts` (an array of supported integer average
+counts). Both come solely from the registered model's Core Capability Profile.
+These lists describe supported values, not the current instrument settings.
+For integer ranges, `average_counts` enumerates every supported integer; it
+does not report only bounds or suggested presets. Missing or `null` fields
+mean capability information is unknown, not that all values are supported.
+Consumers should allow user selections only when supported by the published
+capability data. These are backward-compatible additions under schema version
+`2`; consumers must continue to ignore unknown fields.
+
 `screenshot_formats` lists the supported host image encodings; an empty list
 means no screenshot capture. This list is the sole format capability source.
 PNG workflows require PNG support, while the screenshot command can

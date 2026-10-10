@@ -291,3 +291,23 @@ def test_registered_model_missing_capability_profile_fails_clearly(monkeypatch):
 
     with pytest.raises(UnsupportedModelError, match="missing capability profile"):
         capabilities_for_model_id("keysight-dsox4024a")
+
+
+@pytest.mark.parametrize("model", ["DSOX2004A", "DSOX3024A", "DSOX4024A", "DSOX4034A"])
+def test_keysight_acquisition_profile_matches_programmer_guides(model):
+    capabilities = capabilities_for_model(model)
+    assert capabilities.acquisition_modes == ("normal", "peak", "average", "high_resolution")
+    assert capabilities.average_counts == tuple(range(2, 65537))
+    assert 1 not in capabilities.average_counts
+    assert 65537 not in capabilities.average_counts
+
+
+@pytest.mark.parametrize("model, counts", [
+    ("tektronix-tbs2074", (2, 4, 8, 16, 32, 64, 128, 256, 512)),
+    ("tektronix-tds2024b", (4, 16, 64, 128)),
+    ("tektronix-tbs1052b", (4, 16, 64, 128)),
+])
+def test_tektronix_acquisition_profile_matches_supported_models(model, counts):
+    capabilities = capabilities_for_model_id(model)
+    assert capabilities.acquisition_modes == ("normal", "peak", "average")
+    assert capabilities.average_counts == counts

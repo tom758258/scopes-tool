@@ -279,7 +279,12 @@ def acquisition_check_planned_scpi(
     restore_type: bool = False,
     capabilities: ScopeCapabilities | None = None,
 ) -> list[str]:
-    if capabilities is not None and capabilities.acquisition_modes is not None:
+    from .scope import Oscilloscope
+    if (
+        capabilities is not None
+        and driver_for_capabilities(capabilities) is not Oscilloscope
+        and capabilities.acquisition_modes is not None
+    ):
         if average_count not in capabilities.average_counts:
             raise OscilloscopeError("Unsupported acquisition count for this model")
         status = workflow_step_scpi(capabilities, "status")

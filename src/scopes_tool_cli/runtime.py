@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import AbstractContextManager, contextmanager
 import logging
 import os
 import sys
+from typing import Callable, Iterator
 
 from scopes_tool_core.capabilities import (
     ScopeCapabilities,
@@ -19,7 +21,7 @@ from scopes_tool_core.run_config import RunModeOptions, make_simulator_backend, 
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.search import SEARCH_MODES
 from scopes_tool_core.serial import SERIAL_MODES
-from scopes_tool_core.simulator_backend import SimulatorBackend
+from scopes_tool_core.simulator_backend import SimulatorBackend, SimulatorInstrumentState
 
 WORKER_IDN_TIMEOUT_MS = 2000
 _DRIVER_OPTIONAL_LIVE_COMMANDS = {"identify"}
@@ -104,7 +106,7 @@ def _validate_measure_log_args(args: argparse.Namespace) -> None:
         if source == reference:
             raise OscilloscopeError("--pair source and reference channels must differ")
 
-def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope:
+def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope | AbstractContextManager[Oscilloscope]:
     global _LAST_BACKEND
     mode = _resolve_cli_mode(args)
     if mode == "simulate":
@@ -114,6 +116,11 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope:
         scope.capabilities = capabilities_for_model_id(args.model)
         if _JSON_RECORD is not None:
             _JSON_RECORD["backend"] = backend.backend
+        reporter = getattr(args, "_simulator_state_reporter", None)
+        if reporter is not None:
+            return _simulator_scope_session(
+                scope, getattr(args, "_simulator_state", None), reporter
+            )
         return scope
     opened_scope = Oscilloscope.open(
         resource,
@@ -135,6 +142,19 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope:
         except Exception:
             pass
         raise
+
+@contextmanager
+def _simulator_scope_session(
+    scope: Oscilloscope,
+    state: SimulatorInstrumentState | None,
+    reporter: Callable[[SimulatorInstrumentState], None],
+) -> Iterator[Oscilloscope]:
+    with scope:
+        if state is not None:
+            scope.backend.restore_instrument_state(state)
+        yield scope
+        reporter(scope.backend.export_instrument_state())
+
 
 def _select_one_shot_live_driver(
     args: argparse.Namespace,
@@ -236,6 +256,14 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
         return None
     return {
         "series": capabilities.series,
+        "acquisition_modes": (
+            list(capabilities.acquisition_modes)
+            if capabilities.acquisition_modes is not None else None
+        ),
+        "average_counts": (
+            list(capabilities.average_counts)
+            if capabilities.average_counts is not None else None
+        ),
         "analog_channels": capabilities.analog_channels,
         "default_waveform_points": capabilities.default_waveform_points,
         "safe_max_waveform_points": capabilities.safe_max_waveform_points,

@@ -17,6 +17,7 @@ from uuid import uuid4
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.identity import physical_model_for_id
+from scopes_tool_core.simulator_backend import SimulatorInstrumentState
 
 from . import cli as scope_cli
 
@@ -72,6 +73,7 @@ class WorkerRuntime:
     run_id: str = field(default_factory=lambda: uuid4().hex)
     queue: Queue[WorkerJob] = field(init=False)
     jobs: dict[str, WorkerJob] = field(default_factory=dict)
+    simulator_state: SimulatorInstrumentState | None = field(default=None, init=False)
     active_job_id: str | None = None
     last_job_id: str | None = None
     fatal_error: str | None = None
@@ -334,6 +336,18 @@ def _job_loop(runtime: WorkerRuntime) -> None:
         try:
             parsed = parse_domain_command(job.command, job.arguments, runtime)
             _guard_no_overwrite(parsed)
+            simulator_states: list[SimulatorInstrumentState] = []
+            if runtime.mode == "simulate":
+                def report_simulator_state(state: SimulatorInstrumentState) -> None:
+                    if state.physical_model_id != runtime.model:
+                        raise OscilloscopeError(
+                            "Simulator state model does not match the Worker model: "
+                            f"{state.physical_model_id!r} != {runtime.model!r}."
+                        )
+                    simulator_states.append(state)
+
+                parsed._simulator_state = runtime.simulator_state
+                parsed._simulator_state_reporter = report_simulator_state
             payload, exit_code = scope_cli._execute_json_command(
                 parsed,
                 stop_requested=lambda: job.cancel_requested or runtime.stopping,
@@ -353,6 +367,8 @@ def _job_loop(runtime: WorkerRuntime) -> None:
                     if job.cancel_requested or runtime.stopping
                     else "succeeded" if exit_code == 0 else "failed"
                 )
+            if job.state == "succeeded" and simulator_states:
+                runtime.simulator_state = simulator_states[-1]
             if job.state == "cancelled":
                 job.exit_code = 3
                 job.error = {"type": "cancelled", "message": "cancelled by stop"}

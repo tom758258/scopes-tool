@@ -97,6 +97,15 @@ simulator or VISA session. Live jobs always use the startup `--resource` and
 `--model`; command arguments cannot override them. Request validation happens
 before enqueue, artifact creation, session open, or SCPI.
 
+Each simulator job closes its independent session after execution. Successful
+jobs export instrument state before closing and retain it in that Worker
+runtime for restoration into later jobs' fresh sessions. The state must match
+the startup simulation model. Failed or cancelled jobs do not replace the
+retained state; state export or restoration errors fail the job explicitly.
+Different Workers have isolated simulation states. Restarting a Worker uses
+the default simulation state; no instrument state is persisted to disk. Live
+sessions and standalone CLI simulation retain their existing behavior.
+
 ## Startup-Bound Execution Context
 
 Scopes uses a startup-bound execution context. For live workers, startup

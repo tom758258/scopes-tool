@@ -458,6 +458,20 @@ conversions, filesystem helpers, or support decisions.
 
 ## Keysight InfiniiVision Model Support
 
+### Acquisition
+
+The 2000X, 3000X, and 4000X profiles support `normal`, `peak`, `average`, and
+`high_resolution`. Average counts are all integers from 2 through 65536,
+inclusive, as specified by each series' Programmer's Guide under
+`:ACQuire:COUNt` and `:ACQuire:TYPE`:
+[2000 X-Series](https://www.keysight.com/ca/en/assets/9018-06893/programming-guides/9018-06893.pdf),
+[3000 X-Series](https://www.keysight.com/us/en/assets/9018-06894/programming-guides/9018-06894.pdf),
+and [4000 X-Series](https://www.keysight.com/us/en/assets/9023-40025/miscellaneous/4k_X-Series_prog_guide.pdf).
+The deprecated count of 1 is excluded. These are programmed count values,
+not just the powers-of-two choices on the front panel. The existing
+`average_counts` tuple and JSON array enumerate the entire supported range.
+The profiles describe model support; current acquisition configuration and
+instrument errors still govern combinations such as segmented acquisition.
 
 ### Instrument-Side Math Matrix
 
