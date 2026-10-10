@@ -170,7 +170,7 @@ $script:Target = switch ([string]$fixture.idn.model.ToUpperInvariant()) {
 $script:Connection = "usb"
 $script:IsTektronix = $true
 $script:BackendName = "system_visa"
-$script:LiveConnectionArguments = @("--live", "--resource", "USB0::FAKE::INSTR")
+$script:LiveConnectionArguments = @(Get-LiveConnectionArguments -Resource "USB0::FAKE::INSTR")
 $script:CliInvocationIndex = 0
 $script:CaseResults = [ordered]@{}
 $script:Diagnostics = [ordered]@{}
@@ -264,7 +264,7 @@ for ($index = 0; $index -lt $arguments.Count; $index++) {
     }
 }
 $script:Connection = $connection
-$script:LiveConnectionArguments = @("--live", "--resource", $resource)
+$script:LiveConnectionArguments = @(Get-LiveConnectionArguments -Resource $resource)
 $Resource = $resource
 $IncludeAcquisitionActions = [bool]$parameterValues["IncludeAcquisitionActions"]
 $IncludeAutoscale = [bool]$parameterValues["IncludeAutoscale"]

@@ -134,7 +134,8 @@ def test_worker_trigger_delay_live_route_builds_cli_args(tmp_path):
     )
 
     assert parsed.command == "trigger-delay"
-    assert parsed.live is True
+    assert parsed.simulate is False
+    assert parsed.dry_run is False
     assert parsed.resource == "USB0::SIM::INSTR"
     assert parsed.arm_channel == 1
     assert parsed.arm_slope == "positive"

@@ -130,7 +130,8 @@ def test_worker_trigger_setup_hold_live_route_builds_cli_args(tmp_path):
     )
 
     assert parsed.command == "trigger-setup-hold"
-    assert parsed.live is True
+    assert parsed.simulate is False
+    assert parsed.dry_run is False
     assert parsed.resource == "USB0::SIM::INSTR"
     assert parsed.clock_channel == 1
     assert parsed.data_channel == 2

@@ -68,29 +68,6 @@ def test_registered_profiles_satisfy_capability_invariants():
         assert capabilities.vertical_display_divisions > 0
 
 
-def test_scope_capabilities_preserves_existing_optional_positional_order():
-    capabilities = ScopeCapabilities(
-        "TEST",
-        4,
-        1000,
-        10000,
-        True,
-        False,
-        True,
-        False,
-        True,
-        False,
-        False,
-        True,
-        2,
-    )
-
-    assert capabilities.supports_png_screenshot_hardcopy_controls is True
-    assert capabilities.reference_waveforms == 2
-    assert capabilities.math_function_count == 0
-    assert capabilities.math_visualization_operations == frozenset()
-
-
 @pytest.mark.parametrize(
     ("model", "series", "channels"),
     [

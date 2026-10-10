@@ -275,7 +275,7 @@ def test_simulate_json_scenario_drives_measurement(capsys, tmp_path):
                 "--json",
                 "--simulate-scenario",
                 str(scenario_path),
-                "--source-channel",
+                "--channel",
                 "1",
                 "--reference-channel",
                 "2",

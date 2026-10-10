@@ -965,12 +965,12 @@ def test_generated_arguments_match_parser_contract(tmp_path: Path, target: str, 
         parsed = parser.parse_args(argv)
         assert parsed.command == argv[0]
         assert parsed.json_output is True
+        assert "--live" not in argv
         if parsed.simulate:
             assert parsed.model == target
             assert parsed.resource is None
-            assert parsed.live is False
         else:
-            assert parsed.live is True
+            assert parsed.simulate is False
             assert parsed.resource == "USB0::FAKE::INSTR"
             assert "--model" not in argv
 
