@@ -817,6 +817,19 @@ def measurement_query(
     return _MEASUREMENT_QUERY_TEMPLATES[item].format(channel=channel)
 
 
+def direct_measurement_items(capabilities: ScopeCapabilities) -> tuple[str, ...]:
+    """Return canonical items accepted with only a channel and item."""
+
+    items = []
+    for item in _MEASUREMENT_QUERY_TEMPLATES:
+        try:
+            measurement_query(item, 1, capabilities=capabilities)
+        except ParameterValidationError:
+            continue
+        items.append(item)
+    return tuple(items)
+
+
 def pair_measurement_query(
     item: str,
     source_channel: int,

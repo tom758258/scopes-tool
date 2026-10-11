@@ -37,6 +37,7 @@ _SLOPE_READBACKS = {
     "ALT": "alternate",
     "ALTERNATE": "alternate",
 }
+EDGE_TRIGGER_SLOPE_CHOICES = tuple(dict.fromkeys(_SLOPE_READBACKS.values()))
 
 _GLITCH_POLARITY_COMMANDS = {
     "positive": "POSitive",

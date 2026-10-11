@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Callable, Literal
+from typing import Callable, Literal, get_args
 
 from .capabilities import ScopeCapabilities
 from .errors import ChannelResponseError, ParameterValidationError
@@ -12,6 +12,8 @@ from .scpi import SCPIClient
 
 ChannelImpedance = Literal["one_meg", "fifty"]
 ChannelUnits = Literal["volt", "amp"]
+CHANNEL_COUPLING_CHOICES = ("ac", "dc")
+CHANNEL_UNITS_CHOICES = get_args(ChannelUnits)
 _IMPEDANCE_NOT_SUPPORTED_2000X = (
     "DSO-X 2000X only supports one-meg input impedance; 50 ohm is not supported "
     "by the 2000X channel impedance spec."
@@ -361,7 +363,7 @@ def normalize_channel_coupling(coupling: str) -> str:
     """Normalize a supported analog channel input coupling."""
 
     normalized = str(coupling).strip().lower()
-    if normalized in {"ac", "dc"}:
+    if normalized in CHANNEL_COUPLING_CHOICES:
         return normalized
     raise ParameterValidationError("channel coupling must be 'ac' or 'dc'.")
 

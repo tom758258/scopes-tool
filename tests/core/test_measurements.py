@@ -2,12 +2,13 @@ import pytest
 
 from dataclasses import replace
 
-from scopes_tool_core.capabilities import capabilities_for_model
+from scopes_tool_core.capabilities import capabilities_for_model, capabilities_for_model_id
 from scopes_tool_core.errors import MeasurementResponseError, ParameterValidationError
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.measurements import (
     INVALID_MEASUREMENT_REASON,
     MeasurementController,
+    direct_measurement_items,
     measurement_install_command,
     measurement_query,
     measurement_statistics_max_count_command,
@@ -25,6 +26,38 @@ from scopes_tool_core.measurements import (
 from scopes_tool_core.scpi import SCPIClient
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
+
+
+@pytest.mark.parametrize("model, count, has_area", [
+    ("keysight-dsox2004a", 25, False),
+    ("keysight-dsox3024a", 26, True),
+    ("keysight-dsox4024a", 26, True),
+    ("tektronix-tbs2074", 23, True),
+    ("tektronix-tds2024b", 10, False),
+    ("tektronix-tbs1052b", 23, True),
+])
+def test_direct_measurement_items_follow_existing_validation(model, count, has_area):
+    profile = capabilities_for_model_id(model)
+    items = direct_measurement_items(profile)
+    assert len(items) == count
+    assert "vpp" in items
+    assert ("area" in items) is has_area
+    assert not {"phase", "delay", "y_at_x", "time_at_edge", "time_at_value"}.intersection(items)
+    for item in items:
+        assert measurement_query(item, 1, capabilities=profile)
+    if profile.measurement_items is not None:
+        assert set(items) <= set(profile.measurement_items)
+
+
+@pytest.mark.parametrize("overrides, expected", [
+    ({"supports_measurements": False}, ()),
+    ({"measurement_items": ()}, ()),
+    ({"measurement_items": ("vpp", "phase", "time_at_value")}, ("vpp",)),
+    ({"measurement_items": ("area",), "supports_area_measurement": False}, ("area",)),
+])
+def test_direct_measurement_items_respect_capability_overrides(overrides, expected):
+    profile = replace(capabilities_for_model("DSOX4024A"), **overrides)
+    assert direct_measurement_items(profile) == expected
 
 
 def test_measurement_query_uses_keysight_measure_syntax():

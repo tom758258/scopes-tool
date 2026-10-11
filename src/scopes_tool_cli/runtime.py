@@ -15,13 +15,17 @@ from scopes_tool_core.capabilities import (
 )
 from scopes_tool_core.drivers import scope_for_physical_model
 from scopes_tool_core.capabilities import operation_supported
+from scopes_tool_core.channel import CHANNEL_COUPLING_CHOICES, CHANNEL_UNITS_CHOICES
 from scopes_tool_core.errors import OscilloscopeError, UnsupportedModelError
 from scopes_tool_core.identity import identify_requires_registered_model, physical_model_for_id
+from scopes_tool_core.measurements import direct_measurement_items
 from scopes_tool_core.run_config import RunModeOptions, make_simulator_backend, resolve_resource, resolve_run_mode
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.search import SEARCH_MODES
 from scopes_tool_core.serial import SERIAL_MODES
 from scopes_tool_core.simulator_backend import SimulatorBackend, SimulatorInstrumentState
+from scopes_tool_core.trigger import EDGE_TRIGGER_SLOPE_CHOICES
+from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
 
 WORKER_IDN_TIMEOUT_MS = 2000
 _DRIVER_OPTIONAL_LIVE_COMMANDS = {"identify"}
@@ -265,11 +269,33 @@ def _capabilities_json(capabilities: ScopeCapabilities | None) -> dict[str, obje
             if capabilities.average_counts is not None else None
         ),
         "analog_channels": capabilities.analog_channels,
+        "supported_operations": (
+            sorted(capabilities.supported_operations)
+            if capabilities.supported_operations is not None else None
+        ),
+        "trigger_edge_slopes": list(
+            capabilities.trigger_edge_slopes
+            if capabilities.trigger_edge_slopes is not None else EDGE_TRIGGER_SLOPE_CHOICES
+        ),
+        "trigger_edge_slopes_source": (
+            "model_profile" if capabilities.trigger_edge_slopes is not None else "core_validation"
+        ),
+        "channel_coupling_choices": list(CHANNEL_COUPLING_CHOICES),
+        "channel_units_choices": list(CHANNEL_UNITS_CHOICES),
+        "channel_units_channels": (
+            list(capabilities.channel_units_channels)
+            if capabilities.channel_units_channels is not None else None
+        ),
         "default_waveform_points": capabilities.default_waveform_points,
         "safe_max_waveform_points": capabilities.safe_max_waveform_points,
+        "capture_point_options": [
+            points for points in SUPPORTED_WAVEFORM_POINTS
+            if points <= capabilities.safe_max_waveform_points
+        ],
         "supports_word_format": capabilities.supports_word_format,
         "supports_raw_points_mode": capabilities.supports_raw_points_mode,
         "supports_measurements": capabilities.supports_measurements,
+        "direct_measurement_items": list(direct_measurement_items(capabilities)),
         **({"measurement_items": list(capabilities.measurement_items)} if capabilities.measurement_items is not None else {}),
         **({"pulse_width_qualifiers": list(capabilities.pulse_width_qualifiers)} if capabilities.pulse_width_qualifiers is not None else {}),
         "supports_delay_measurement": capabilities.supports_delay_measurement,

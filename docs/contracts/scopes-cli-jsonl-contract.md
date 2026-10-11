@@ -826,6 +826,60 @@ Consumers should allow user selections only when supported by the published
 capability data. These are backward-compatible additions under schema version
 `2`; consumers must continue to ignore unknown fields.
 
+Setup and workflow choices additionally report:
+
+- `direct_measurement_items`: an array of canonical string items from Core's
+  direct single-channel query definitions, filtered through the existing
+  measurement validation for the selected profile. Each item needs only
+  `channel` and `item` for `measure`. Pair and parameterized measurements are
+  excluded, including parameterized items that have internal defaults.
+  `supports_measurements`, model-specific `measurement_items`, and applicable
+  area restrictions retain their existing validation meanings. An empty array
+  means no direct items are available. A Core `measurement_items` value of
+  `None` means no explicit item allowlist, not that measurements are unsupported;
+  the existing JSON field remains omitted in that case.
+- `capture_point_options`: an array of integers from Core's
+  `SUPPORTED_WAVEFORM_POINTS`, retaining only values at or below
+  `safe_max_waveform_points`. Capture validation and the existing default point
+  count are unchanged.
+- `trigger_edge_slopes`: an array of canonical strings using the profile's
+  explicit slope subset when present, otherwise Core's general canonical edge
+  slope choices. `trigger_edge_slopes_source` is `"model_profile"` for an
+  explicit subset (including an empty array), or `"core_validation"` for the
+  general choices. General choices describe parameter legality; they do not
+  guarantee support on the selected physical instrument.
+- `channel_coupling_choices`: an array of Core's canonical input coupling
+  strings (`"ac"`, `"dc"`). `channel_units_choices`: an array of Core's
+  canonical channel unit strings (`"volt"`, `"amp"`). Both describe general
+  parameter legality, not independently confirmed per-model hardware support.
+- `channel_units_channels`: an array of integers or `null`, preserving the
+  profile's existing channel restriction for channel units. An explicit array
+  restricts the operation to those channels; an empty array admits none.
+  `null` means no additional units-channel restriction is declared, not a
+  hardware support guarantee. Channel numbers still use `analog_channels`.
+- `supported_operations`: a sorted array of operation name strings or `null`,
+  directly from the Core profile used by `operation_supported()`. An explicit
+  array admits only listed operations; an empty array admits none. `null`
+  means this profile imposes no operation allowlist restriction. It is neither
+  an empty list nor a complete set of confirmed supported operations. Admission
+  remains subject to feature and parameter validation; screenshot additionally
+  requires a non-empty `screenshot_formats` list.
+
+Channel display, bandwidth limit, and waveform invert retain boolean controls.
+Channel scale, probe ratio, and timebase scale retain Core's finite positive
+number validation. Channel offset, timebase position, and trigger level retain
+finite number validation; atomic Edge Trigger level also requires a real
+numeric value rather than a boolean. These rules do not assert physical
+instrument bounds, and no per-model numeric limits are added.
+
+These fields are additive under schema version `2`, in the existing shared
+Capability JSON object. Existing fields and their meanings are preserved;
+consumers must ignore unknown fields. Offline capabilities are registered
+planning and validation data, not evidence of live identity detection or
+physical instrument validation. Use operation admission, feature restrictions,
+and option data together; general legal choices alone do not establish model
+support.
+
 `screenshot_formats` lists the supported host image encodings; an empty list
 means no screenshot capture. This list is the sole format capability source.
 PNG workflows require PNG support, while the screenshot command can
