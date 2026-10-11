@@ -62,136 +62,39 @@ def test_unregistered_series_shaped_model_id_is_rejected(capsys, mode):
 
 
 def test_verify_dry_run_json_does_not_open_scope(monkeypatch, capsys):
-    def fail_open(resource, visa_library=None):
-        del resource, visa_library
-        raise AssertionError("dry-run must not open a VISA scope")
+    import pyvisa
 
+    def fail_open(*args, **kwargs):
+        raise AssertionError("dry-run must not access VISA")
+
+    monkeypatch.setattr(pyvisa, "ResourceManager", fail_open)
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(fail_open))
 
     assert cli.main(["identify", "--dry-run", "--json", "--model", "keysight-dsox4024a"]) == 0
 
     payload = _json_stdout(capsys)
+    assert isinstance(payload, dict)
+    assert type(payload["schema_version"]) is int
+    assert payload["schema_version"] == 2
     assert payload["ok"] is True
+    assert payload["command"] == "identify"
     assert payload["mode"] == "dry_run"
     assert payload["scpi"]["planned"] == ["*IDN?"]
     assert payload["scpi"]["sent"] == []
-    capabilities = dict(payload["capabilities"])
-    assert capabilities.pop("acquisition_modes") == [
-        "normal", "peak", "average", "high_resolution"
-    ]
-    assert capabilities.pop("average_counts") == list(range(2, 65537))
-    assert capabilities == {
-        "series": "4000X",
-        "analog_channels": 4,
-        "default_waveform_points": 1000,
-        "safe_max_waveform_points": 10000,
-        "supports_word_format": True,
-        "supports_raw_points_mode": False,
-        "supports_measurements": True,
-        "supports_delay_measurement": True,
-        "supports_measure_results_dump": True,
-        "supports_area_measurement": True,
-        "supports_measure_statistics": True,
-        "supports_demo": True,
-        "demo_functions": [
-            "am",
-            "arinc",
-            "burst",
-            "can",
-            "can-lin",
-            "clock",
-            "coupling",
-            "edge-then-edge",
-            "flexray",
-            "fm-burst",
-            "glitch",
-            "harmonics",
-            "i2c",
-            "i2s",
-            "lf-sine",
-            "lin",
-            "mil",
-            "mil2",
-            "mso",
-            "noisy",
-            "phase",
-            "rf-burst",
-            "ringing",
-            "runt",
-            "setup-hold",
-            "sine",
-            "single",
-            "spi",
-            "transition",
-            "uart",
-        ],
-        "math_function_count": 4,
-        "supports_math_goft": False,
-        "supports_math_cascade": True,
-        "math_filter_operations": [
-            "average",
-            "envelope",
-            "high-pass",
-            "low-pass",
-            "smooth",
-        ],
-        "math_visualization_operations": [
-            "magnify",
-            "max-hold",
-            "maximum",
-            "min-hold",
-            "minimum",
-            "peak",
-            "trend",
-        ],
-        "supports_advanced_fft": True,
-        "supports_wgen": True,
-        "wgen_scpi_root": ":WGEN1",
-        "screenshot_formats": ["png", "bmp", "bmp8bit"],
-        "supports_screenshot_hardcopy_controls": True,
-        "supports_segmented_memory": True,
-        "segmented_max_segments": 1000,
-        "supports_segmented_waveform_all": True,
-        "supports_serial_decode": True,
-        "serial_bus_count": 2,
-        "serial_modes": [
-            "a429",
-            "can",
-            "cxpi",
-            "flexray",
-            "i2s",
-            "i2c",
-            "lin",
-            "m1553",
-            "manchester",
-            "nrz",
-            "sent",
-            "spi",
-            "uart",
-            "usb",
-            "usb-pd",
-        ],
-        "reference_waveforms": 2,
-        "supports_channel_label": True,
-        "channel_label_max_length": 32,
-        "supports_display_label": True,
-        "supports_annotation": True,
-        "supports_annotation_position": True,
-        "annotation_slots": 10,
-        "supports_indexed_annotation": True,
-        "supports_50_ohm_impedance": True,
-        "supports_search_basic": True,
-        "supports_search_event_navigation": True,
-        "search_modes": [
-            "serial1",
-            "serial2",
-            "edge",
-            "glitch",
-            "runt",
-            "transition",
-            "peak",
-        ],
-    }
+    assert payload["files"] == []
+    assert payload["system_error"] is None
+    assert payload["error"] is None
+    assert isinstance(payload["idn"], dict)
+    assert payload["idn"]["model"] == "DSOX4024A"
+    assert payload["backend"] is None
+    # Capability details are covered by test_introspection_cli.py.
+    assert isinstance(payload["capabilities"], dict)
+    assert isinstance(payload["result"], dict)
+    assert isinstance(payload["result"]["idn"], dict)
+    assert payload["result"]["idn"]["model"] == "DSOX4024A"
+    assert isinstance(payload["result"]["capabilities"], dict)
+    assert payload["result"]["backend"] is None
+    assert payload["result"]["timeout_ms"] is None
 
 
 def test_one_shot_live_flag_is_rejected_before_backend_open(monkeypatch, capsys):
