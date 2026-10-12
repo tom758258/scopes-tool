@@ -915,3 +915,74 @@ $failDetail = $script:CaseResults["demo-fail"].Detail
     assert result["fail_drain_stage"] == "demo-fail-error-drain"
     assert result["fail_drain_case"] == "demo-fail"
     assert "Post-case error queue contained" in result["fail_detail"]
+
+
+@requires_windows
+def test_shareable_large_numeric_arrays_keep_values_and_redact_strings(tmp_path):
+    """Regression: live invocation capability ranges must not stall redaction."""
+    private_root = tmp_path / "private"
+    shareable_root = tmp_path / "shareable"
+    private_root.mkdir()
+    resource = "USB0::1::2::SYNTH12345::INSTR"
+    body = r"""
+$privateRoot = @PRIVATE@
+$shareableRoot = @SHAREABLE@
+$resource = @RESOURCE@
+$repoRoot = @REPO@
+$values = @(2..65536)
+$raw = [ordered]@{
+    ok = $true
+    capabilities = [ordered]@{ average_counts = $values }
+    resource = $resource
+    mixed = @('safe', $resource, 42)
+}
+Write-Utf8NoBomText -LiteralPath (Join-Path $privateRoot 'cli-001.json') -Text (
+    $raw | ConvertTo-Json -Depth 20 -Compress
+)
+Write-Utf8NoBomText -LiteralPath (Join-Path $privateRoot 'summary.md') -Text (
+    '# Summary' + [Environment]::NewLine
+)
+$report = [ordered]@{
+    status = 'passed'
+    resource = $resource
+    invocations = @()
+}
+$null = New-ShareableArtifactSet -PrivateReport $report `
+    -PrivateSummaryPath (Join-Path $privateRoot 'summary.md') `
+    -RunRoot (Split-Path -Parent $privateRoot) `
+    -PrivateRoot $privateRoot -ShareableRoot $shareableRoot `
+    -RepoRoot $repoRoot -Resource $resource
+$mirror = Get-Content -LiteralPath (
+    Join-Path $shareableRoot 'cli-001.json'
+) -Raw | ConvertFrom-Json
+$sharedReport = Get-Content -LiteralPath (
+    Join-Path $shareableRoot 'report.json'
+) -Raw | ConvertFrom-Json
+[ordered]@{
+    count = @($mirror.capabilities.average_counts).Count
+    first = $mirror.capabilities.average_counts[0]
+    last = $mirror.capabilities.average_counts[-1]
+    resource = $mirror.resource
+    mixed_resource = $mirror.mixed[1]
+    report_resource = $sharedReport.resource
+    summary_exists = Test-Path (Join-Path $shareableRoot 'summary.md')
+} | ConvertTo-Json -Compress
+"""
+    replacements = {
+        "@PRIVATE@": ps_quote(private_root),
+        "@SHAREABLE@": ps_quote(shareable_root),
+        "@RESOURCE@": ps_quote(resource),
+        "@REPO@": ps_quote(REPO_ROOT),
+    }
+    for marker, value in replacements.items():
+        body = body.replace(marker, value)
+    result = run_live_cli_harness(body, timeout=120)
+    assert result.returncode == 0, result.stderr
+    values = json.loads(result.stdout.strip().splitlines()[-1])
+    assert values["count"] == 65535
+    assert values["first"] == 2
+    assert values["last"] == 65536
+    assert values["resource"] == "<redacted-resource>"
+    assert resource not in values["mixed_resource"]
+    assert values["report_resource"] == "<redacted-resource>"
+    assert values["summary_exists"] is True
