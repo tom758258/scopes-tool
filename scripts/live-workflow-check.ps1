@@ -235,7 +235,8 @@ function Invoke-CliRaw {
         -StdOutPath $stdoutPath `
         -StdErrPath $stderrPath `
         -JsonPath $jsonPath `
-        -WorkingDirectory $RepoRoot
+        -WorkingDirectory $RepoRoot `
+        -CaptureInMemory:(-not $DebugArtifacts)
 
     $exitCode = [int]$record["exit_code"]
     $invocationRecord = [pscustomobject]@{
@@ -258,16 +259,11 @@ function Invoke-CliRaw {
     }
     $script:Invocations.Add($invocationRecord) | Out-Null
 
-    $stdoutText = ""
-    if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) {
-        $stdoutText = [System.Convert]::ToString((Get-Content -LiteralPath $stdoutPath -Raw)).Trim()
-    }
-    $stderrText = ""
-    if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"]) -and
-        (Test-Path -LiteralPath ([string]$record["stderr"]) -PathType Leaf)) {
-        $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath ([string]$record["stderr"]) -Raw)).Trim()
-    }
-    $artifactHint = "stdout=${stdoutPath}"
+    $stdoutText = [string]$record["stdout_text"]
+    $stderrText = [string]$record["stderr_text"]
+    $stdoutText = $stdoutText.Trim()
+    $stderrText = $stderrText.Trim()
+    $artifactHint = if ($DebugArtifacts) { "stdout=${stdoutPath}" } else { "in-memory CLI output" }
     if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"])) {
         $artifactHint += "; stderr=$($record['stderr'])"
     } else {
@@ -290,7 +286,7 @@ function Invoke-CliRaw {
         Stderr = $stderrText
         Command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
         DurationMs = $record["duration_ms"]
-        StdOutPath = $stdoutPath
+        StdOutPath = [string]$record["stdout"]
         StdErrPath = [string]$record["stderr"]
         JsonPath = [string]$record["json"]
     }
@@ -605,11 +601,28 @@ function Invoke-WorkflowCase {
                 throw "Post-case error queue did not reach code 0 within 30 reads after ${Name}."
             }
         }
+        if ((Get-Variable -Name DebugArtifacts -ErrorAction SilentlyContinue) -and -not $DebugArtifacts) {
+            $caseOutput = Join-Path (Join-Path $script:RunRoot "workflows") $Name
+            Remove-TemporaryValidationPath -Path $caseOutput -AllowedRoot $script:RunRoot
+            if ($Name -eq "sequence") {
+                Remove-TemporaryValidationPath `
+                    -Path (Join-Path (Join-Path $script:RunRoot "workflows") "sequence.json") `
+                    -AllowedRoot $script:RunRoot
+            }
+        }
         Add-CaseResult -Name $Name -Status "PASS"
     } catch {
         $script:FunctionalFailed = $true
         Add-CaseResult -Name $Name -Status "FAIL" -Detail $_.Exception.Message
         Drain-AfterFailure -Stage "${Name}-error-drain" -CaseName $Name
+        if ((Get-Variable -Name DebugArtifacts -ErrorAction SilentlyContinue) -and -not $DebugArtifacts) {
+            try {
+                $caseOutput = Join-Path (Join-Path $script:RunRoot "workflows") $Name
+                Remove-TemporaryValidationPath -Path $caseOutput -AllowedRoot $script:RunRoot
+            } catch {
+                Add-Diagnostic -Name $Name -Message ("Temporary cleanup failed: " + $_.Exception.Message)
+            }
+        }
     }
 }
 
@@ -818,7 +831,14 @@ Write-Host ""
 Write-Host ""
 
 try {
-    Invoke-HardwareFreePreflight
+    try {
+        Invoke-HardwareFreePreflight
+    } finally {
+        if (-not $DebugArtifacts) {
+            Remove-TemporaryValidationPath `
+                -Path (Join-Path $script:RunRoot "preflight") -AllowedRoot $script:RunRoot
+        }
+    }
     Add-CaseResult -Name "preflight" -Status "PASS"
 } catch {
     Add-CaseResult -Name "preflight" -Status "FAIL" -Detail $_.Exception.Message

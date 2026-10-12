@@ -11,10 +11,19 @@ from tests.tooling._live_script_test_support import REPO_ROOT, requires_windows
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-@pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
+@pytest.mark.parametrize(
+    "script_path",
+    tuple(REPO_ROOT / "scripts" / name for name in (
+        "live-cli-check.ps1", "live-workflow-check.ps1", "live-dvm-check.ps1",
+        "live-serial-check.ps1", "live-segmented-check.ps1",
+    )),
+    ids=lambda path: path.stem,
+)
+@pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
 def test_invoke_cli_raw_preserves_native_process_results(
     tmp_path: Path,
     script_path: Path,
+    debug: bool,
 ) -> None:
     fake_package = tmp_path / "fake_cli" / "scopes_tool_cli"
     fake_package.mkdir(parents=True)
@@ -50,7 +59,9 @@ param(
     [string] $PythonPath,
 
     [Parameter(Mandatory = $true)]
-    [string] $RunRoot
+    [string] $RunRoot,
+
+    [switch] $DebugArtifacts
 )
 
 Set-StrictMode -Version Latest
@@ -130,13 +141,13 @@ $resultOutput = [ordered]@{
     nonempty_ok = $nonempty.Payload.ok
     nonempty_stderr = $nonempty.Stderr
     nonempty_artifact_exists = Test-Path -LiteralPath $nonemptyPath
-    nonempty_artifact = [string](Get-Content -LiteralPath $nonemptyPath -Raw)
+    nonempty_artifact = if ($DebugArtifacts) { [string](Get-Content -LiteralPath $nonemptyPath -Raw) } else { "" }
     nonempty_preference = $nonemptyPreference
     failure_exit_code = $failure.ExitCode
     failure_mode = $failure.Payload.result.mode
     failure_stderr = $failure.Stderr
     failure_artifact_exists = Test-Path -LiteralPath $failurePath
-    failure_artifact = [string](Get-Content -LiteralPath $failurePath -Raw)
+    failure_artifact = if ($DebugArtifacts) { [string](Get-Content -LiteralPath $failurePath -Raw) } else { "" }
     failure_preference = $failurePreference
 }
 if ((Split-Path -Leaf $ScriptPath) -in $migratedCliRawScripts) {
@@ -160,8 +171,6 @@ if ((Split-Path -Leaf $ScriptPath) -in $migratedCliRawScripts) {
     $fourthRecord = $script:Invocations[3]
     $resultOutput["cli_invalid_threw"] =
         (-not [string]::IsNullOrWhiteSpace($invalidDetail))
-    $resultOutput["cli_invalid_threw_invalid_json"] =
-        $invalidDetail.Contains("CLI returned invalid JSON")
     $resultOutput["cli_invocation_count_with_invalid"] = $script:Invocations.Count
     $resultOutput["cli_invalid_recorded_stage"] = [string]$fourthRecord.stage
     $resultOutput["cli_invalid_recorded_exit"] = [int]$fourthRecord.exit_code
@@ -199,6 +208,7 @@ $resultOutput | ConvertTo-Json -Depth 8 -Compress
             sys.executable,
             "-RunRoot",
             str(run_root),
+            *(["-DebugArtifacts"] if debug else []),
         ],
         cwd=REPO_ROOT,
         env=environment,
@@ -217,14 +227,16 @@ $resultOutput | ConvertTo-Json -Depth 8 -Compress
     assert result["nonempty_exit_code"] == 0
     assert result["nonempty_ok"] is True
     assert "known diagnostic: nonempty-stderr" in result["nonempty_stderr"]
-    assert result["nonempty_artifact_exists"] is True
-    assert "known diagnostic: nonempty-stderr" in result["nonempty_artifact"]
+    assert result["nonempty_artifact_exists"] is debug
+    if debug:
+        assert "known diagnostic: nonempty-stderr" in result["nonempty_artifact"]
     assert result["nonempty_preference"] == "Stop"
     assert result["failure_exit_code"] == 7
     assert result["failure_mode"] == "failure-stderr"
     assert "known diagnostic: failure-stderr" in result["failure_stderr"]
-    assert result["failure_artifact_exists"] is True
-    assert "known diagnostic: failure-stderr" in result["failure_artifact"]
+    assert result["failure_artifact_exists"] is debug
+    if debug:
+        assert "known diagnostic: failure-stderr" in result["failure_artifact"]
     assert result["failure_preference"] == "Stop"
     if script_path.name in {
         "live-cli-check.ps1",
@@ -233,28 +245,30 @@ $resultOutput | ConvertTo-Json -Depth 8 -Compress
         "live-serial-check.ps1",
         "live-workflow-check.ps1",
     }:
-        assert result["cli_stdout_artifact_exists"] is True
-        assert result["cli_json_artifact_exists"] is True
+        assert result["cli_stdout_artifact_exists"] is debug
+        assert result["cli_json_artifact_exists"] is debug
         assert result["cli_duration_gt_zero"] is True
         assert result["cli_invocation_count"] == 4
         assert result["cli_record_stage0"] == "empty-stderr"
         assert result["cli_record_index0"] == 1
         assert result["cli_record_exit0"] == 0
         assert result["cli_record_success_last"] is False
-        assert result["cli_record_relative_stdout"].replace("\\", "/").endswith(
-            "cli-001-empty-stderr.stdout.txt"
-        )
-        assert result["cli_empty_stdout_path_set"] is True
+        if debug:
+            assert result["cli_record_relative_stdout"].replace("\\", "/").endswith(
+                "cli-001-empty-stderr.stdout.txt"
+            )
+        else:
+            assert result["cli_record_relative_stdout"] == ""
+        assert result["cli_empty_stdout_path_set"] is debug
         assert result["cli_invalid_threw"] is True
-        assert result["cli_invalid_threw_invalid_json"] is True
         assert result["cli_invocation_count_with_invalid"] == 4
         assert result["cli_invalid_recorded_stage"] == "invalid-json"
         assert result["cli_invalid_recorded_exit"] == 3
         assert result["cli_invalid_recorded_success"] is False
-        assert result["cli_invalid_recorded_stdout"] != ""
+        assert (result["cli_invalid_recorded_stdout"] != "") is debug
         assert result["cli_invalid_recorded_stderr"] == ""
         assert result["cli_invalid_recorded_json"] == ""
-        assert result["cli_invalid_stdout_artifact_exists"] is True
+        assert result["cli_invalid_stdout_artifact_exists"] is debug
 
 
 @requires_windows

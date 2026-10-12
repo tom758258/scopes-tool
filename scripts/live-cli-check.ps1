@@ -334,9 +334,25 @@ function Invoke-CliRaw {
     $startedAt = Get-Date
     $previousErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
+    $stderrText = ""
+    $stderrRecorded = ""
     try {
-        $stdoutLines = @(& $Python -m scopes_tool_cli.cli @Arguments 2> $stderrPath)
-        $exitCode = $LASTEXITCODE
+        if ($DebugArtifacts) {
+            # Keep the original native invocation for detailed evidence.
+            $stdoutLines = @(& $Python -m scopes_tool_cli.cli @Arguments 2> $stderrPath)
+            $exitCode = $LASTEXITCODE
+        } else {
+            # Native stderr becomes ErrorRecord with 2>&1 on Windows PowerShell.
+            # Keep the two streams separate without writing either to disk.
+            $captured = @(& $Python -m scopes_tool_cli.cli @Arguments 2>&1)
+            $exitCode = $LASTEXITCODE
+            $stdoutLines = @($captured | Where-Object {
+                $_ -isnot [System.Management.Automation.ErrorRecord]
+            } | ForEach-Object { [string]$_ })
+            $stderrText = (@($captured | Where-Object {
+                $_ -is [System.Management.Automation.ErrorRecord]
+            } | ForEach-Object { [string]$_ }) -join [Environment]::NewLine).Trim()
+        }
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
@@ -344,20 +360,19 @@ function Invoke-CliRaw {
     $durationMs = [math]::Round(($finishedAt - $startedAt).TotalMilliseconds, 3)
 
     $stdoutText = ($stdoutLines -join [Environment]::NewLine).Trim()
-    Write-Utf8NoBomText -LiteralPath $stdoutPath `
-        -Text ($stdoutLines -join [Environment]::NewLine)
-
-    $stderrRecorded = $stderrPath
-    if ((Test-Path -LiteralPath $stderrRecorded) -and
-        [string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $stderrRecorded -Raw))) {
-        Remove-Item -LiteralPath $stderrRecorded -Force
-        $stderrRecorded = ""
-    }
-    $stderrText = ""
-    if (-not [string]::IsNullOrWhiteSpace($stderrRecorded)) {
-        $stderrText = [System.Convert]::ToString(
-            (Get-Content -LiteralPath $stderrRecorded -Raw)
-        ).Trim()
+    if ($DebugArtifacts) {
+        Write-Utf8NoBomText -LiteralPath $stdoutPath `
+            -Text ($stdoutLines -join [Environment]::NewLine)
+        $stderrRecorded = $stderrPath
+        if ((Test-Path -LiteralPath $stderrRecorded) -and
+            [string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $stderrRecorded -Raw))) {
+            Remove-Item -LiteralPath $stderrRecorded -Force
+            $stderrRecorded = ""
+        }
+        if (-not [string]::IsNullOrWhiteSpace($stderrRecorded)) {
+            $stderrText = [string](Get-Content -LiteralPath $stderrRecorded -Raw)
+            $stderrText = $stderrText.Trim()
+        }
     }
 
     $invocationRecord = [pscustomobject]@{
@@ -368,7 +383,7 @@ function Invoke-CliRaw {
         exit_code = $exitCode
         duration_ms = $durationMs
         success = ($exitCode -eq 0)
-        stdout = Get-ArtifactRelativePath -Path $stdoutPath -BaseRoot $RepoRoot
+        stdout = if ($DebugArtifacts) { Get-ArtifactRelativePath -Path $stdoutPath -BaseRoot $RepoRoot } else { "" }
         stderr = Get-ArtifactRelativePath -Path $stderrRecorded -BaseRoot $RepoRoot
         json = ""
     }
@@ -377,8 +392,7 @@ function Invoke-CliRaw {
     if ([string]::IsNullOrWhiteSpace($stdoutText)) {
         throw (
             "${Stage}: CLI returned no JSON (exit ${exitCode}). ${stderrText} " +
-            "[artifacts: stdout=${stdoutPath}; stderr=" +
-            "$(if ($stderrRecorded) { $stderrRecorded } else { '(empty)' })]"
+            "$(if ($DebugArtifacts) { '[artifacts: stdout=' + $stdoutPath + '; stderr=' + $stderrRecorded + ']' } else { '[in-memory CLI output]' })"
         )
     }
 
@@ -387,14 +401,15 @@ function Invoke-CliRaw {
     } catch {
         throw (
             "${Stage}: CLI returned invalid JSON (exit ${exitCode}). ${stderrText} " +
-            "[artifacts: stdout=${stdoutPath}; stderr=" +
-            "$(if ($stderrRecorded) { $stderrRecorded } else { '(empty)' })]"
+            "$(if ($DebugArtifacts) { '[artifacts: stdout=' + $stdoutPath + '; stderr=' + $stderrRecorded + ']' } else { '[in-memory CLI output]' })"
         )
     }
 
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $jsonPath) | Out-Null
-    Write-JsonReport -LiteralPath $jsonPath -Report $payload
-    $invocationRecord.json = Get-ArtifactRelativePath -Path $jsonPath -BaseRoot $RepoRoot
+    if ($DebugArtifacts) {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $jsonPath) | Out-Null
+        Write-JsonReport -LiteralPath $jsonPath -Report $payload
+        $invocationRecord.json = Get-ArtifactRelativePath -Path $jsonPath -BaseRoot $RepoRoot
+    }
 
     return [pscustomobject]@{
         ExitCode = $exitCode
@@ -402,9 +417,9 @@ function Invoke-CliRaw {
         Stderr = $stderrText
         Command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
         DurationMs = $durationMs
-        StdOutPath = $stdoutPath
+        StdOutPath = if ($DebugArtifacts) { $stdoutPath } else { "" }
         StdErrPath = $stderrRecorded
-        JsonPath = $jsonPath
+        JsonPath = if ($DebugArtifacts) { $jsonPath } else { "" }
     }
 }
 
@@ -1290,6 +1305,24 @@ function Invoke-BaselineCase {
         $script:FunctionalFailed = $true
         Add-CaseResult -Name $Name -Passed $false -Detail $_.Exception.Message
         Drain-AfterFailure -Stage "${Name}-error-drain" -CaseName $Name
+    } finally {
+        if ((Get-Variable -Name DebugArtifacts -ErrorAction SilentlyContinue) -and
+            -not $DebugArtifacts -and $Name -in @(
+            "capture-wait-trigger", "waveform-byte", "waveform-word",
+            "screenshot", "screenshot-bmp", "waveform-amp"
+        )) {
+            try {
+                $caseRoot = Join-Path $script:RunRoot "live"
+                if (Test-Path -LiteralPath $caseRoot) {
+                    foreach ($file in @(Get-ChildItem -LiteralPath $caseRoot -File)) {
+                        Remove-TemporaryValidationPath -Path $file.FullName -AllowedRoot $script:RunRoot
+                    }
+                }
+            } catch {
+                $script:FunctionalFailed = $true
+                Add-CaseResult -Name $Name -Passed $false -Detail ("Temporary cleanup failed: " + $_.Exception.Message)
+            }
+        }
     }
 }
 
@@ -1400,7 +1433,8 @@ function Invoke-HardwareFreePreflight {
     & $preflightCli `
         -Target $script:Target `
         -Python $Python `
-        -OutputRoot (Join-Path $PreflightRoot "preflight-cli")
+        -OutputRoot (Join-Path $PreflightRoot "preflight-cli") `
+        -DebugArtifacts:$DebugArtifacts
     if ($LASTEXITCODE -ne 0) {
         throw "CLI preflight failed with exit code ${LASTEXITCODE}."
     }
@@ -2196,7 +2230,13 @@ Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
 Write-Host ""
 
 try {
-    Invoke-HardwareFreePreflight -PreflightRoot $preflightRoot
+    try {
+        Invoke-HardwareFreePreflight -PreflightRoot $preflightRoot
+    } finally {
+        if (-not $DebugArtifacts) {
+            Remove-TemporaryValidationPath -Path $preflightRoot -AllowedRoot $script:RunDirectory
+        }
+    }
     Add-CaseResult -Name "preflight" -Passed $true
 } catch {
     Add-CaseResult -Name "preflight" -Passed $false -Detail $_.Exception.Message

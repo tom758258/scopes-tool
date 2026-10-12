@@ -564,11 +564,10 @@ $script:CaseResults['identity'] = [pscustomobject]@{
     Passed = $true; Status = 'PASS'; Detail = '' }
 Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result 'PASS'
 
-$s2ReportRaw =
-    [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'report.json'))
-$s2SummaryText =
-    [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'summary.md'))
-$s2Report = $s2ReportRaw | ConvertFrom-Json
+$s2ErrorText =
+    [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'error-summary.md'))
+$s2Files = @((Get-ChildItem -LiteralPath $script:RunDirectory -Recurse -File) |
+    ForEach-Object { $_.FullName })
 
 [ordered]@{
     s1_status = [string]$privateReport.status
@@ -595,12 +594,11 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
         ForEach-Object { [string]$_.status })
     s1_shareable_status = [string]$shareableReport.status
     s2_flag = $script:ShareableGenerationFailed
-    s2_status = [string]$s2Report.status
-    s2_backend = [string]$s2Report.backend
-    s2_summary_has_backend = $s2SummaryText.Contains('Backend: pyvisa_py')
-    s2_error = [string]$s2Report.shareable_generation_error
-    s2_summary_reason = $s2SummaryText.Contains(
-        'Shareable artifact generation failed:')
+    s2_status_is_fail = $s2ErrorText.Contains('Result: FAIL')
+    s2_error = $s2ErrorText.Contains('simulated shareable artifact generation failure')
+    s2_only_compact = ($s2Files.Count -eq 1 -and
+        $s2Files[0].EndsWith('error-summary.md'))
+    s2_resource_redacted = (-not $s2ErrorText.Contains('SYNTH12345'))
 } | ConvertTo-Json -Depth 8 -Compress
 """.replace("@RESOURCE@", resource).replace("@REPO@", str(REPO_ROOT)).replace(
         "@RUNS@", str(runs_root)
@@ -653,11 +651,10 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
 
     # Scenario 2: all cases passed, but shareable generation failed.
     assert payload["s2_flag"] is True
-    assert payload["s2_status"] == "failed"
-    assert payload["s2_backend"] == "pyvisa_py"
-    assert payload["s2_summary_has_backend"] is True
-    assert payload["s2_error"] == "simulated shareable artifact generation failure"
-    assert payload["s2_summary_reason"] is True
+    assert payload["s2_status_is_fail"] is True
+    assert payload["s2_error"] is True
+    assert payload["s2_only_compact"] is True
+    assert payload["s2_resource_redacted"] is True
 
 
 @requires_windows
@@ -833,8 +830,37 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
 
 
 @requires_windows
+def test_temporary_artifact_cleanup_cannot_delete_sibling_run(tmp_path):
+    root = tmp_path / "run"
+    sibling = tmp_path / "other-run"
+    body = extract_live_cli_functions_ps(("Write-Summary",)) + """
+$runRoot = '@ROOT@'
+$sibling = '@SIBLING@'
+$caseDir = Join-Path $runRoot 'workflows/measure-log'
+New-Item -ItemType Directory -Force -Path $caseDir, $sibling | Out-Null
+Write-Utf8NoBomText -LiteralPath (Join-Path $caseDir 'measurements.csv') -Text 'sample'
+Write-Utf8NoBomText -LiteralPath (Join-Path $sibling 'previous.txt') -Text 'keep'
+Remove-TemporaryValidationPath -Path $caseDir -AllowedRoot $runRoot
+$rejected = $false
+try {
+    Remove-TemporaryValidationPath -Path $sibling -AllowedRoot $runRoot
+} catch { $rejected = $true }
+[ordered]@{
+    removed = (-not (Test-Path -LiteralPath $caseDir))
+    outside_preserved = (Test-Path -LiteralPath (Join-Path $sibling 'previous.txt'))
+    rejected = $rejected
+} | ConvertTo-Json -Compress
+""".replace("@ROOT@", str(root)).replace("@SIBLING@", str(sibling))
+    completed = run_live_cli_harness(body)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    result = json.loads(completed.stdout.splitlines()[-1])
+    assert result == {"removed": True, "outside_preserved": True, "rejected": True}
+
+
+@requires_windows
 @pytest.mark.parametrize("failure", ("throw", "missing-report", "missing-summary", "empty-summary", "invalid-report", "private-report", "private-summary"))
-def test_live_artifact_generation_failure_retains_raw_evidence(tmp_path, failure):
+@pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
+def test_live_artifact_generation_failure_retains_only_small_summary(tmp_path, failure, debug):
     body = extract_live_cli_functions_ps(("Write-Summary",)) + """
 $Resource = 'USB0::1::2::SYNTH12345::INSTR'
 $RepoRoot = '@REPO@'
@@ -874,24 +900,23 @@ if ('@FAILURE@' -eq 'private-report') {
         Write-Utf8NoBomText -LiteralPath $LiteralPath -Text ($Report | ConvertTo-Json -Depth 20)
     }
 }
-Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result 'PASS'
+Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result 'PASS' @DEBUG@
 [ordered]@{ run_root = $layout.Root; failed = $script:ShareableGenerationFailed } | ConvertTo-Json -Compress
-""".replace("@REPO@", str(REPO_ROOT)).replace("@RUNS@", str(tmp_path)).replace("@FAILURE@", failure)
+""".replace("@REPO@", str(REPO_ROOT)).replace("@RUNS@", str(tmp_path)).replace("@FAILURE@", failure).replace("@DEBUG@", "-DebugArtifacts" if debug else "")
     completed = run_live_cli_harness(body)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     payload = json.loads(completed.stdout.splitlines()[-1])
     assert payload["failed"] is True
-    assert "Artifact Generation Failure" in completed.stdout
     root = Path(payload["run_root"])
-    assert (root / "private/raw.stdout.txt").read_text(encoding="utf-8") == "unique raw evidence SYNTH12345"
-    report = json.loads((root / "private/report.json").read_text(encoding="utf-8"))
-    assert report["status"] == "failed"
-    assert report["shareable_generation_error"]
-    summary = (root / "private/summary.md").read_text(encoding="utf-8")
-    assert "Shareable artifact generation failed:" in summary
-    assert "Result: PASS" not in summary
-    assert not (root / "shareable/report.json").exists()
-    assert not (root / "shareable/summary.md").exists()
+    files = {path.relative_to(root).as_posix()
+             for path in root.rglob("*") if path.is_file()}
+    assert files == {"private/error-summary.md"}
+    summary = (root / "private/error-summary.md").read_text(encoding="utf-8")
+    assert "Result: FAIL" in summary
+    assert "Cause:" in summary
+    assert "unique raw evidence" not in summary
+    assert "SYNTH12345" not in summary
+    assert len(summary) < 4500
 
 
 LIVE_VALIDATOR_FINALIZATION_CASES = (

@@ -286,7 +286,10 @@ function New-ShareableArtifactSet {
             @(Get-DistinctiveSensitiveTokens -Resource ([string]$Resource)) + @($ExtraSensitiveValues)
         )
     }
-    Copy-ShareableArtifactTree -Context $context
+    # Minimal mode never mirrors raw CLI or workflow artifacts, even temporarily.
+    if (-not $MinimalArtifacts) {
+        Copy-ShareableArtifactTree -Context $context
+    }
 
     $report = ConvertTo-ShareableArtifactValue -Value $PrivateReport -PrivateRoot $context.PrivateRoot -ShareableRoot $context.ShareableRoot -RepoRoot $context.RepoRoot -Resource $context.Resource -SensitiveValues $context.SensitiveValues -GeneratedRootArtifacts $context.GeneratedRootArtifacts -MinimalArtifacts:$MinimalArtifacts
     $report.artifact_visibility = 'shareable'
@@ -300,9 +303,11 @@ function New-ShareableArtifactSet {
     if ($MinimalArtifacts) {
         $report.artifact_paths.report = 'shareable/report.json'
         $report.artifact_paths.summary = 'shareable/summary.md'
-        foreach ($invocation in $report.invocations) {
-            foreach ($field in @('stdout', 'stderr', 'json')) {
-                if ($invocation.Contains($field)) { $invocation[$field] = $null }
+        if ($report.Contains('invocations')) {
+            foreach ($invocation in $report.invocations) {
+                foreach ($field in @('stdout', 'stderr', 'json')) {
+                    if ($invocation.Contains($field)) { $invocation[$field] = $null }
+                }
             }
         }
     }

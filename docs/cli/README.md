@@ -2709,13 +2709,19 @@ specified. Pass `-Backend "@py"` to run the same validation with pyvisa-py:
 System VISA and pyvisa-py are separate backend selections for each live
 validation run.
 
-All five live validation runners default to minimal artifact retention. After
-either PASS or FAIL, a completed run retains only `shareable/report.json` and
+All five live validation runners default to minimal artifact generation.
+Normal CLI stdout/stderr and per-invocation JSON are validated in memory rather
+than written to disk. Required waveform, screenshot, and workflow test files
+are created only for validation and cleaned up after their checks. After either
+PASS or FAIL, a completed run retains only `shareable/report.json` and
 `shareable/summary.md`. These redacted reports preserve case results, execution
 metadata, and failure diagnostics. Pass `-DebugArtifacts` to retain the existing
 private raw output, stdout/stderr, CLI JSON, workflow, preflight, and shareable
-debug artifacts. If report generation fails, raw diagnostics remain available
-and the run fails. Forced termination or Ctrl+C may leave intermediate files.
+debug artifacts. If shareable report generation fails in either mode, the run
+fails and retains only `private/error-summary.md` (a bounded, redacted error
+summary), not raw diagnostic files. Forced termination or Ctrl+C can still leave
+necessary temporary test files. The standalone `preflight-cli.ps1` also defaults
+to minimal mode; use `-DebugArtifacts` when complete preflight evidence is needed.
 
 ```powershell
 # Default: minimal artifacts

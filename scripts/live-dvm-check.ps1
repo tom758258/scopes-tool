@@ -219,7 +219,8 @@ function Invoke-CliRaw {
         -StdOutPath $stdoutPath `
         -StdErrPath $stderrPath `
         -JsonPath $jsonPath `
-        -WorkingDirectory $RepoRoot
+        -WorkingDirectory $RepoRoot `
+        -CaptureInMemory:(-not $DebugArtifacts)
 
     $exitCode = [int]$record["exit_code"]
     $invocationRecord = [pscustomobject]@{
@@ -242,16 +243,11 @@ function Invoke-CliRaw {
     }
     $script:Invocations.Add($invocationRecord) | Out-Null
 
-    $stdoutText = ""
-    if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) {
-        $stdoutText = [System.Convert]::ToString((Get-Content -LiteralPath $stdoutPath -Raw)).Trim()
-    }
-    $stderrText = ""
-    if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"]) -and
-        (Test-Path -LiteralPath ([string]$record["stderr"]) -PathType Leaf)) {
-        $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath ([string]$record["stderr"]) -Raw)).Trim()
-    }
-    $artifactHint = "stdout=${stdoutPath}"
+    $stdoutText = [string]$record["stdout_text"]
+    $stderrText = [string]$record["stderr_text"]
+    $stdoutText = $stdoutText.Trim()
+    $stderrText = $stderrText.Trim()
+    $artifactHint = if ($DebugArtifacts) { "stdout=${stdoutPath}" } else { "in-memory CLI output" }
     if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"])) {
         $artifactHint += "; stderr=$($record['stderr'])"
     } else {
@@ -274,7 +270,7 @@ function Invoke-CliRaw {
         Stderr = $stderrText
         Command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
         DurationMs = $record["duration_ms"]
-        StdOutPath = $stdoutPath
+        StdOutPath = [string]$record["stdout"]
         StdErrPath = [string]$record["stderr"]
         JsonPath = [string]$record["json"]
     }

@@ -94,6 +94,7 @@ def successful_single_target_run():
             "keysight-dsox3024a",
             "-OutputRoot",
             str(output_root),
+            "-DebugArtifacts",
         )
         assert completed.returncode == 0, completed.stderr + completed.stdout
         run_dir = newest_run_dir(output_root)
@@ -275,6 +276,29 @@ class TestSuccessfulSingleTargetPreflight:
 
 
 @requires_windows
+def test_preflight_defaults_to_two_minimal_reports() -> None:
+    output_root = REPO_ROOT / ".tmp_tests" / f"preflight_cli_tests_{uuid.uuid4().hex[:8]}"
+    try:
+        completed = run_preflight(
+            "-Target", "keysight-dsox3024a", "-OutputRoot", str(output_root)
+        )
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        run_dir = newest_run_dir(output_root)
+        files = {path.relative_to(run_dir).as_posix()
+                 for path in run_dir.rglob("*") if path.is_file()}
+        assert files == {"shareable/report.json", "shareable/summary.md"}
+        report = read_json(run_dir / "shareable/report.json")
+        assert report["artifact_mode"] == "minimal"
+        assert report["summary_counts"]["cases"] == len(report["cases"])
+        assert report["summary_counts"]["failed"] == 0
+        assert report["cases"]
+        assert all(case["passed"] for case in report["cases"])
+        assert all(not case["artifacts"] for case in report["cases"])
+    finally:
+        shutil.rmtree(output_root, ignore_errors=True)
+
+
+@requires_windows
 def test_failed_command_preserves_artifacts_and_fails_preflight(tmp_path: Path) -> None:
     stub = tmp_path / "failing_python.cmd"
     stub.write_text(
@@ -293,6 +317,7 @@ def test_failed_command_preserves_artifacts_and_fails_preflight(tmp_path: Path) 
             str(stub),
             "-OutputRoot",
             str(output_root),
+            "-DebugArtifacts",
         )
         assert completed.returncode == 1
         run_dir = newest_run_dir(output_root)
@@ -332,6 +357,7 @@ def test_target_all_runs_every_registered_model() -> None:
             "all",
             "-OutputRoot",
             str(output_root),
+            "-DebugArtifacts",
             timeout=600,
         )
         assert completed.returncode == 0, completed.stderr + completed.stdout
@@ -353,7 +379,8 @@ def test_target_all_runs_every_registered_model() -> None:
 
 
 @requires_windows
-def test_shareable_generation_failure_fails_preflight(tmp_path: Path) -> None:
+@pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
+def test_shareable_generation_failure_fails_preflight(tmp_path: Path, debug: bool) -> None:
     # Minimal substitution: run a patched copy of the preflight script whose
     # privacy helper re-defines New-ShareableArtifactSet to throw, so all
     # validation cases pass but shareable artifact generation fails.
@@ -399,6 +426,7 @@ def test_shareable_generation_failure_fails_preflight(tmp_path: Path) -> None:
                 "keysight-dsox4024a",
                 "-OutputRoot",
                 str(output_root),
+                *(["-DebugArtifacts"] if debug else []),
             ],
             cwd=REPO_ROOT,
             text=True,
@@ -415,16 +443,12 @@ def test_shareable_generation_failure_fails_preflight(tmp_path: Path) -> None:
         )
 
         run_dir = newest_run_dir(output_root)
-        assert (run_dir / "private" / "report.json").is_file()
-        assert (run_dir / "private" / "summary.md").is_file()
-        report = read_json(run_dir / "private" / "report.json")
-        assert all(case["passed"] is True for case in report["cases"])
-        assert report["status"] == "failed"
-        assert report.get("shareable_generation_error") == (
-            "simulated shareable artifact generation failure"
-        )
-        summary = (run_dir / "private" / "summary.md").read_text(encoding="utf-8")
-        assert "Shareable artifact generation failed:" in summary
+        files = {file.relative_to(run_dir).as_posix()
+                 for file in run_dir.rglob("*") if file.is_file()}
+        assert files == {"private/error-summary.md"}
+        summary = (run_dir / "private" / "error-summary.md").read_text(encoding="utf-8")
+        assert "Result: FAIL" in summary
+        assert "simulated shareable artifact generation failure" in summary
     finally:
         shutil.rmtree(output_root, ignore_errors=True)
 
