@@ -210,7 +210,8 @@ function Invoke-CliRaw {
         -StdOutPath $stdoutPath `
         -StdErrPath $stderrPath `
         -JsonPath $jsonPath `
-        -WorkingDirectory $RepoRoot
+        -WorkingDirectory $RepoRoot `
+        -CaptureInMemory:(-not $DebugArtifacts)
 
     $exitCode = [int]$record["exit_code"]
     $invocationRecord = [pscustomobject]@{
@@ -233,16 +234,11 @@ function Invoke-CliRaw {
     }
     $script:Invocations.Add($invocationRecord) | Out-Null
 
-    $stdoutText = ""
-    if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) {
-        $stdoutText = [System.Convert]::ToString((Get-Content -LiteralPath $stdoutPath -Raw)).Trim()
-    }
-    $stderrText = ""
-    if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"]) -and
-        (Test-Path -LiteralPath ([string]$record["stderr"]) -PathType Leaf)) {
-        $stderrText = [System.Convert]::ToString((Get-Content -LiteralPath ([string]$record["stderr"]) -Raw)).Trim()
-    }
-    $artifactHint = "stdout=${stdoutPath}"
+    $stdoutText = [string]$record["stdout_text"]
+    $stderrText = [string]$record["stderr_text"]
+    $stdoutText = $stdoutText.Trim()
+    $stderrText = $stderrText.Trim()
+    $artifactHint = if ($DebugArtifacts) { "stdout=${stdoutPath}" } else { "in-memory CLI output" }
     if (-not [string]::IsNullOrWhiteSpace([string]$record["stderr"])) {
         $artifactHint += "; stderr=$($record['stderr'])"
     } else {
@@ -265,7 +261,7 @@ function Invoke-CliRaw {
         Stderr = $stderrText
         Command = "$Python -m scopes_tool_cli.cli $($Arguments -join ' ')"
         DurationMs = $record["duration_ms"]
-        StdOutPath = $stdoutPath
+        StdOutPath = [string]$record["stdout"]
         StdErrPath = [string]$record["stderr"]
         JsonPath = [string]$record["json"]
     }
@@ -994,6 +990,9 @@ if ($configurationPassed -and -not $script:FunctionalFailed) {
                 "--poll-interval-ms", "100", "--output-dir", $liveCaptureRoot
             )
         Assert-SegmentedCapture -Payload $capture
+        if ((Get-Variable -Name DebugArtifacts -ErrorAction SilentlyContinue) -and -not $DebugArtifacts) {
+            Remove-TemporaryValidationPath -Path $liveCaptureRoot -AllowedRoot $script:RunRoot
+        }
         Add-CaseResult -Name "segmented finite capture" -Status "PASS"
     } catch {
         $script:FunctionalFailed = $true
@@ -1001,6 +1000,14 @@ if ($configurationPassed -and -not $script:FunctionalFailed) {
             -Detail $_.Exception.Message
         Drain-AfterFailure -Stage "segmented-finite-capture-error-drain" `
             -CaseName "segmented finite capture"
+        if ((Get-Variable -Name DebugArtifacts -ErrorAction SilentlyContinue) -and -not $DebugArtifacts) {
+            try {
+                Remove-TemporaryValidationPath `
+                    -Path (Join-Path $script:RunRoot "segmented-capture") -AllowedRoot $script:RunRoot
+            } catch {
+                Add-Diagnostic -Name "segmented finite capture" -Message ("Temporary cleanup failed: " + $_.Exception.Message)
+            }
+        }
     }
 }
 

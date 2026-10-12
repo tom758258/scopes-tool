@@ -124,8 +124,10 @@ function Invoke-TektronixCliValidation {
         } else { $timedOut = $false }
         $stdout = $stdoutTask.GetAwaiter().GetResult()
         $stderr = $stderrTask.GetAwaiter().GetResult()
-        Write-Utf8NoBomText -LiteralPath $stdoutPath -Text $stdout
-        Write-Utf8NoBomText -LiteralPath $stderrPath -Text $stderr
+        if ($DebugArtifacts) {
+            Write-Utf8NoBomText -LiteralPath $stdoutPath -Text $stdout
+            Write-Utf8NoBomText -LiteralPath $stderrPath -Text $stderr
+        }
         $record = [ordered]@{
             exit_code = $process.ExitCode
             duration_ms = [math]::Round(((Get-Date) - $start).TotalMilliseconds, 3)
@@ -141,12 +143,14 @@ function Invoke-TektronixCliValidation {
                     throw 'CLI JSON payload is null.'
                 }
                 $serializedJson = $parsed | ConvertTo-Json -Depth 20
-                Write-Utf8NoBomText -LiteralPath $jsonPath -Text $serializedJson
-                $record.json = $jsonPath
+                if ($DebugArtifacts) {
+                    Write-Utf8NoBomText -LiteralPath $jsonPath -Text $serializedJson
+                    $record.json = $jsonPath
+                }
             } catch { }
         }
         $cliErrorDetail = ""
-        if ($record.json) { $cliErrorDetail = Get-CliErrorDetail -Payload $parsed }
+        if ($null -ne $parsed) { $cliErrorDetail = Get-CliErrorDetail -Payload $parsed }
         if (-not [string]::IsNullOrWhiteSpace($cliErrorDetail)) { $cliErrorDetail = "; $cliErrorDetail" }
         $invocation = [ordered]@{
             index = $script:CliInvocationIndex
@@ -157,12 +161,12 @@ function Invoke-TektronixCliValidation {
             duration_ms = $record.duration_ms
             success = $record.success
             result = if ($record.success) { "PASS" } else { "FAIL" }
-            stdout = Get-ArtifactRelativePath -Path $stdoutPath -BaseRoot $RepoRoot
-            stderr = Get-ArtifactRelativePath -Path ([string]$record.stderr) -BaseRoot $RepoRoot
+            stdout = if ($DebugArtifacts) { Get-ArtifactRelativePath -Path $stdoutPath -BaseRoot $RepoRoot } else { "" }
+            stderr = if ($DebugArtifacts) { Get-ArtifactRelativePath -Path ([string]$record.stderr) -BaseRoot $RepoRoot } else { "" }
             json = Get-ArtifactRelativePath -Path ([string]$record.json) -BaseRoot $RepoRoot
         }
         $script:Invocations.Add($invocation)
-        if ($AllowCurrentStateNA -and -not $timedOut -and $record.exit_code -eq 1 -and $record.json -and
+        if ($AllowCurrentStateNA -and -not $timedOut -and $record.exit_code -eq 1 -and $null -ne $parsed -and
             $parsed.ok -eq $false -and $null -ne $parsed.PSObject.Properties["error"]) {
             $cliError = $parsed.error
             # Only these Core preconditions indicate an inapplicable current state.
@@ -177,7 +181,7 @@ function Invoke-TektronixCliValidation {
             }
         }
         if ($ExpectHiddenCaptureRejection) {
-            if (-not $timedOut -and $record.exit_code -eq 1 -and $record.json -and
+            if (-not $timedOut -and $record.exit_code -eq 1 -and $null -ne $parsed -and
                 $parsed.ok -eq $false -and $null -ne $parsed.PSObject.Properties["error"] -and
                 $parsed.error.type -ceq "WaveformResponseError" -and
                 $parsed.error.message -ceq "CH$($Options[1]) is not displayed; waveform capture requires a displayed analog channel") {
@@ -187,7 +191,7 @@ function Invoke-TektronixCliValidation {
             $invocation.result = "FAIL"
             throw "$Stage did not return the expected hidden-channel capture rejection."
         }
-        if (-not $record.success -or -not $record.json) {
+        if (-not $record.success -or $null -eq $parsed) {
             $invocation.result = "FAIL"
             throw "$Stage failed (exit $($record.exit_code), timeout=$timedOut)$cliErrorDetail; see $stdoutPath and $stderrPath"
         }
@@ -222,11 +226,23 @@ print(json.dumps({
     "average_counts": list(capabilities.average_counts or ()),
 }))
 '@
-        Write-Utf8NoBomText -LiteralPath $probePath -Text $source
         $stderrPath = Join-Path $script:RunPaths.Private "core-profile-probe.stderr.txt"
-        $output = & $pythonPath $probePath $script:Target 2> $stderrPath
-        if ($LASTEXITCODE -ne 0) { throw "Core profile probe failed; see $stderrPath" }
-        Write-Utf8NoBomText -LiteralPath (Join-Path $script:RunPaths.Private "core-profile.json") -Text ($output -join "`n")
+        if ($DebugArtifacts) {
+            Write-Utf8NoBomText -LiteralPath $probePath -Text $source
+            $output = & $pythonPath $probePath $script:Target 2> $stderrPath
+            if ($LASTEXITCODE -ne 0) { throw "Core profile probe failed; see $stderrPath" }
+            Write-Utf8NoBomText -LiteralPath (Join-Path $script:RunPaths.Private "core-profile.json") -Text ($output -join "`n")
+        } else {
+            # Avoid PowerShell 5.1's native argument quoting for multiline -c source.
+            $probe = Invoke-CapturedCommand -Name "core-profile-probe" `
+                -FilePath $pythonPath -Arguments @("-c", $source, $script:Target) `
+                -StdOutPath (Join-Path $script:RunPaths.Private "core-profile.stdout.txt") `
+                -StdErrPath $stderrPath -WorkingDirectory $RepoRoot -CaptureInMemory
+            if (-not $probe["success"]) {
+                throw "Core profile probe failed (exit $($probe['exit_code'])): $($probe['stderr_text'])"
+            }
+            $output = @([string]$probe["stdout_text"])
+        }
         return ($output -join "`n" | ConvertFrom-Json)
     }
 
@@ -813,6 +829,10 @@ print(json.dumps({
                             }
                             $previousTime = $time
                         }
+                        if (-not $DebugArtifacts) {
+                            Remove-TemporaryValidationPath -Path $csv -AllowedRoot $script:RunRoot
+                            Remove-TemporaryValidationPath -Path $meta -AllowedRoot $script:RunRoot
+                        }
                         Add-Case "capture-byte" "PASS" "Displayed CH1; positive point count, finite values, increasing time axis; transfer settings may change"
                     } else {
                         Add-Case "measure" "N/A" "CH1 is hidden; display state is not changed"
@@ -1045,7 +1065,10 @@ print(json.dumps({
                         $bytes = [IO.File]::ReadAllBytes($path)
                         if ($bytes.Length -lt 8 -or
                             [BitConverter]::ToString($bytes, 0, 8) -cne "89-50-4E-47-0D-0A-1A-0A") { throw "Missing PNG signature." }
-                        Add-Case "screenshot-png" "PASS" "Native PNG host artifact; temporary file and settings cleaned by Core"
+                        if (-not $DebugArtifacts) {
+                        Remove-TemporaryValidationPath -Path $path -AllowedRoot $script:RunRoot
+                    }
+                    Add-Case "screenshot-png" "PASS" "Native PNG host artifact; temporary file and settings cleaned by Core"
                     } catch { Add-Case "screenshot-png" "FAIL" $_.Exception.Message }
                 }
             }
@@ -1064,6 +1087,9 @@ print(json.dumps({
                         [string](Get-Readback $capture "image_path") -cne $path) { throw "Invalid BMP artifact metadata." }
                     $bytes = [IO.File]::ReadAllBytes($path)
                     if ($bytes.Length -lt 2 -or $bytes[0] -ne 66 -or $bytes[1] -ne 77) { throw "Missing BMP signature." }
+                    if (-not $DebugArtifacts) {
+                        Remove-TemporaryValidationPath -Path $path -AllowedRoot $script:RunRoot
+                    }
                     Add-Case "screenshot-bmp" "PASS" "Explicit BMP host artifact; temporary settings restored by Core"
                 } catch { Add-Case "screenshot-bmp" "FAIL" $_.Exception.Message }
             }

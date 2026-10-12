@@ -6,7 +6,9 @@ param(
 
     [string]$Python = ".\.venv\Scripts\python.exe",
 
-    [string]$OutputRoot = ".tmp_tests\cli_preflight"
+    [string]$OutputRoot = ".tmp_tests\cli_preflight",
+
+    [switch]$DebugArtifacts
 )
 
 Set-StrictMode -Version Latest
@@ -134,20 +136,16 @@ function Invoke-PreflightCliCase {
         -StdOutPath $StdOutPath `
         -StdErrPath $StdErrPath `
         -JsonPath $JsonPath `
-        -WorkingDirectory $RepoRoot
+        -WorkingDirectory $RepoRoot `
+        -CaptureInMemory:(-not $DebugArtifacts)
 
     $failures = [System.Collections.Generic.List[string]]::new()
     if (-not $invocation["success"]) {
         $failures.Add("exit code $($invocation['exit_code'])") | Out-Null
     }
 
-    $payload = $null
+    $payload = $invocation["payload"]
     if (-not [string]::IsNullOrWhiteSpace($JsonPath)) {
-        $jsonArtifact = [string]$invocation["json"]
-        if (-not [string]::IsNullOrWhiteSpace($jsonArtifact) -and
-            (Test-Path -LiteralPath $jsonArtifact -PathType Leaf)) {
-            $payload = Get-Content -LiteralPath $jsonArtifact -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
-        }
         if ($null -eq $payload) {
             $failures.Add("stdout did not contain valid CLI JSON") | Out-Null
         } elseif ((Get-JsonField -Object $payload -Path "ok") -ne $true) {
@@ -269,17 +267,11 @@ foreach ($target in $targets) {
             }
         }
 
-    # Case 3: hardware-report renders the simulated acquisition report to a
-    # markdown summary (existing preflight-acquisition summary coverage).
-    $simReportPath = ""
-    $simJsonArtifact = [string]$simInvocation["json"]
-    if (-not [string]::IsNullOrWhiteSpace($simJsonArtifact) -and
-        (Test-Path -LiteralPath $simJsonArtifact -PathType Leaf)) {
-        $simPayload = Get-Content -LiteralPath $simJsonArtifact -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
-        if ($null -ne $simPayload) {
-            $simReportPath = [string](Get-JsonField -Object $simPayload -Path "result.report_path")
-        }
-    }
+    # Case 3 consumes the simulator report before it is removed in minimal mode.
+    $simPayload = $simInvocation["payload"]
+    $simReportPath = if ($null -ne $simPayload) {
+        [string](Get-JsonField -Object $simPayload -Path "result.report_path")
+    } else { "" }
     if ([string]::IsNullOrWhiteSpace($simReportPath) -or -not (Test-Path -LiteralPath $simReportPath -PathType Leaf)) {
         $record = New-PreflightCaseRecord `
             -Name "hardware-report-render" -Target $target -Invocation $null `
@@ -300,9 +292,7 @@ foreach ($target in $targets) {
             -PostCheck {
                 param($Invocation, [System.Collections.Generic.List[string]]$Failures)
                 # hardware-report writes markdown to stdout (not JSON).
-                $summaryPath = [string]$Invocation["stdout"]
-                if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf) -or
-                    (Get-Item -LiteralPath $summaryPath).Length -le 0) {
+                if ([string]::IsNullOrWhiteSpace([string]$Invocation["stdout_text"])) {
                     $Failures.Add("rendered markdown summary is missing or empty") | Out-Null
                 }
             }
@@ -372,26 +362,22 @@ try {
         -RunRoot $runRoot `
         -PrivateRoot $privateRoot `
         -ShareableRoot $shareableRoot `
-        -RepoRoot $RepoRoot
+        -RepoRoot $RepoRoot `
+        -MinimalArtifacts:(-not $DebugArtifacts)
 } catch {
     $shareableError = $_.Exception.Message
 }
 
 if ($null -ne $shareableError) {
     Write-Host "[preflight][cli] shareable artifact generation failed: ${shareableError}"
-    Write-Host "[preflight][cli] private artifacts retained: $(ConvertTo-RepoRelativePath -Path $privateRoot)"
-    $report["status"] = "failed"
-    $report["shareable_generation_error"] = $shareableError
-    Write-JsonReport -LiteralPath $privateReportPath -Report $report
-    $summaryLines += @(
-        "",
-        "- Shareable artifact generation failed: ${shareableError}"
-    )
-    Write-Utf8NoBomLines -LiteralPath $privateSummaryPath -Lines $summaryLines
+    Remove-MinimalValidationArtifacts -RunDirectory $runRoot -RepoRoot $RepoRoot `
+        -ShareableFailed -Resource "" -FailureDetail $shareableError
+} elseif (-not $DebugArtifacts) {
+    Remove-MinimalValidationArtifacts -RunDirectory $runRoot -RepoRoot $RepoRoot
 }
 
 Write-Host "[preflight][cli] $($report.status): $($failed.Count) of $($cases.Count) cases failed"
-Write-Host "[preflight][cli] report: $($report.artifact_paths.report)"
+Write-Host "[preflight][cli] report: $(if ($null -ne $shareableError) { 'private/error-summary.md' } elseif ($DebugArtifacts) { $report.artifact_paths.report } else { 'shareable/report.json' })"
 if ($failed.Count -gt 0 -or $null -ne $shareableError) {
     exit 1
 }

@@ -277,6 +277,8 @@ if ($listerCommands.Count -ne 1) {
     throw "Expected one production UART Lister export command."
 }
 
+# This fixture validates detailed acquisition evidence in the opt-in debug mode.
+$DebugArtifacts = $true
 $script:CaseStatus = ""
 $script:CaseDetail = ""
 $script:Invocations = New-Object System.Collections.Generic.List[object]

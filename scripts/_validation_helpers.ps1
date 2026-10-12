@@ -264,12 +264,15 @@ function Invoke-CapturedCommand {
         [Parameter(Mandatory = $true)][string]$StdOutPath,
         [Parameter(Mandatory = $true)][string]$StdErrPath,
         [string]$JsonPath = "",
-        [string]$WorkingDirectory = $RepoRoot
+        [string]$WorkingDirectory = $RepoRoot,
+        [switch]$CaptureInMemory
     )
 
-    foreach ($requiredDir in @((Split-Path -Parent $StdOutPath), (Split-Path -Parent $StdErrPath))) {
-        if (-not [string]::IsNullOrWhiteSpace($requiredDir)) {
-            New-Item -ItemType Directory -Force -Path $requiredDir | Out-Null
+    if (-not $CaptureInMemory) {
+        foreach ($requiredDir in @((Split-Path -Parent $StdOutPath), (Split-Path -Parent $StdErrPath))) {
+            if (-not [string]::IsNullOrWhiteSpace($requiredDir)) {
+                New-Item -ItemType Directory -Force -Path $requiredDir | Out-Null
+            }
         }
     }
 
@@ -290,33 +293,27 @@ function Invoke-CapturedCommand {
     $stderr = $stderrTask.GetAwaiter().GetResult()
     $finishedAt = Get-Date
 
-    Write-Utf8NoBomText -LiteralPath $StdOutPath -Text $stdout
-    Write-Utf8NoBomText -LiteralPath $StdErrPath -Text $stderr
-
-    $jsonPathWritten = ""
-    if (-not [string]::IsNullOrWhiteSpace($JsonPath)) {
-        try {
-            $trimmed = $stdout.Trim()
-            if ($trimmed.Length -gt 0) {
-                $payload = $trimmed | ConvertFrom-Json -ErrorAction Stop
-                New-Item -ItemType Directory -Force -Path (Split-Path -Parent $JsonPath) | Out-Null
-                Write-JsonReport -LiteralPath $JsonPath -Report $payload
-                $jsonPathWritten = $JsonPath
-            }
-        } catch {
-            $jsonPathWritten = ""
-        }
+    $parsed = $null
+    if (-not [string]::IsNullOrWhiteSpace($JsonPath) -and
+        -not [string]::IsNullOrWhiteSpace($stdout)) {
+        try { $parsed = $stdout.Trim() | ConvertFrom-Json -ErrorAction Stop } catch { }
     }
 
-    $stderrRecorded = $StdErrPath
-    try {
-        if ((Test-Path -LiteralPath $StdErrPath) -and
-            [string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $StdErrPath -Raw))) {
-            Remove-Item -LiteralPath $StdErrPath -Force
-            $stderrRecorded = ""
+    $jsonPathWritten = ""
+    $stderrRecorded = ""
+    $stdoutRecorded = ""
+    if (-not $CaptureInMemory) {
+        Write-Utf8NoBomText -LiteralPath $StdOutPath -Text $stdout
+        $stdoutRecorded = $StdOutPath
+        if (-not [string]::IsNullOrWhiteSpace($stderr)) {
+            Write-Utf8NoBomText -LiteralPath $StdErrPath -Text $stderr
+            $stderrRecorded = $StdErrPath
         }
-    } catch {
-        $stderrRecorded = $StdErrPath
+        if ($null -ne $parsed) {
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $JsonPath) | Out-Null
+            Write-JsonReport -LiteralPath $JsonPath -Report $parsed
+            $jsonPathWritten = $JsonPath
+        }
     }
 
     return [ordered]@{
@@ -326,9 +323,12 @@ function Invoke-CapturedCommand {
         exit_code = $process.ExitCode
         duration_ms = [math]::Round(($finishedAt - $startedAt).TotalMilliseconds, 3)
         success = ($process.ExitCode -eq 0)
-        stdout = $StdOutPath
+        stdout = $stdoutRecorded
         stderr = $stderrRecorded
         json = $jsonPathWritten
+        stdout_text = $stdout
+        stderr_text = $stderr
+        payload = $parsed
     }
 }
 
@@ -426,6 +426,78 @@ function Get-ArtifactRelativePath {
     } catch {
     }
     return $Path
+}
+
+function Remove-TemporaryValidationPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$AllowedRoot
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    $fullPath = Get-FullPath -Path $Path
+    $root = Get-FullPath -Path $AllowedRoot
+    if ($fullPath -eq $root) { throw "Refusing to remove the validation root." }
+    Assert-PathUnderRoot -RootPath $root -Path $fullPath `
+        -Message "Temporary validation cleanup cannot leave its run: {0}"
+    $target = Get-Item -LiteralPath $fullPath
+    $items = @($target)
+    if ($target.PSIsContainer) {
+        $items += @(Get-ChildItem -LiteralPath $fullPath -Force -Recurse)
+    }
+    foreach ($item in $items) {
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            throw "Temporary validation cleanup cannot traverse links: $($item.FullName)"
+        }
+    }
+    Remove-Item -LiteralPath $fullPath -Recurse -Force -ErrorAction Stop
+}
+
+function Remove-MinimalValidationArtifacts {
+    param(
+        [Parameter(Mandatory = $true)][string]$RunDirectory,
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [switch]$ShareableFailed,
+        [string]$FailureDetail = "",
+        [string]$Resource = ""
+    )
+
+    $runRoot = Get-FullPath -Path $RunDirectory
+    if (-not (Test-ArtifactPathUnderRoot -RootPath (Join-Path $RepoRoot ".tmp_tests") -Path $runRoot)) {
+        throw "Artifact cleanup must stay inside a run under repository .tmp_tests."
+    }
+    # Validate all existing paths before writing even the small failure summary.
+    foreach ($item in @((Get-Item -LiteralPath $runRoot)) +
+        @(Get-ChildItem -LiteralPath $runRoot -Force -Recurse)) {
+        Assert-PathUnderRoot -RootPath $runRoot -Path $item.FullName `
+            -Message "Artifact cleanup cannot leave the current run: {0}"
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            throw "Artifact cleanup cannot traverse links: $($item.FullName)"
+        }
+    }
+    $shareableRoot = Join-Path $runRoot "shareable"
+    $retainedPaths = @($shareableRoot, (Join-Path $shareableRoot "report.json"),
+        (Join-Path $shareableRoot "summary.md"))
+    if ($ShareableFailed) {
+        $privateRoot = Join-Path $runRoot "private"
+        $safeError = Protect-ArtifactText -Text $FailureDetail -Resource $Resource `
+            -RepoRoot $RepoRoot -PrivateRoot $privateRoot
+        if ($safeError.Length -gt 4000) { $safeError = $safeError.Substring(0, 4000) }
+        $errorPath = Join-Path $privateRoot "error-summary.md"
+        New-Item -ItemType Directory -Force -Path $privateRoot | Out-Null
+        Write-Utf8NoBomText -LiteralPath $errorPath -Text (
+            "# Validation artifact generation failed`n`n" +
+            "Result: FAIL`n" +
+            "Cause: ${safeError}`n"
+        )
+        $retainedPaths = @($privateRoot, $errorPath)
+    }
+    $items = @(Get-ChildItem -LiteralPath $runRoot -Force -Recurse)
+    foreach ($item in @($items | Sort-Object { $_.FullName.Length } -Descending)) {
+        if ($item.FullName -notin $retainedPaths) {
+            Remove-Item -LiteralPath $item.FullName -Force -ErrorAction Stop
+        }
+    }
 }
 
 function Complete-LiveValidationRun {
@@ -581,63 +653,15 @@ function Complete-LiveValidationRun {
         $script:ShareableGenerationFailed = $true
         Write-Host "[live][$Domain] Artifact Generation Failure"
         Write-Host "[live][$Domain] shareable artifact generation failed: ${shareableError}"
-        Write-Host "[live][$Domain] private artifacts retained: $($script:RunDirectory)"
-        if (-not $DebugArtifacts -and
-            (Test-ArtifactPathUnderRoot -RootPath (Join-Path $RepoRoot ".tmp_tests") -Path $script:RunDirectory) -and
-            (Get-FullPath -Path $script:ShareableRoot) -eq
-            (Get-FullPath -Path (Join-Path $script:RunDirectory "shareable")) -and
-            @(Get-Item -LiteralPath $script:RunDirectory, $script:ShareableRoot |
-                Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint }).Count -eq 0) {
-            foreach ($name in @("report.json", "summary.md")) {
-                $path = Join-Path $script:ShareableRoot $name
-                if (Test-Path -LiteralPath $path -PathType Leaf) {
-                    Remove-Item -LiteralPath $path -Force -ErrorAction Stop
-                }
-            }
-        }
-        $report["status"] = "failed"
-        $report["shareable_generation_error"] = $shareableError
-        Write-JsonReport -LiteralPath $privateReportPath -Report $report
-        $summaryText = ""
-        if (Test-Path -LiteralPath $privateSummaryPath -PathType Leaf) {
-            $summaryText = [System.IO.File]::ReadAllText($privateSummaryPath)
-        }
-        $updated = ($summaryText -replace '(?m)^Result: (PASS|SKIP)', 'Result: FAIL').TrimEnd() +
-            [Environment]::NewLine +
-            "- Shareable artifact generation failed: ${shareableError}" +
-            [Environment]::NewLine
-        Write-Utf8NoBomText -LiteralPath $privateSummaryPath -Text $updated
-        Write-Host "[live][$Domain] report: private/report.json under $($script:RunDirectory)"
+        Remove-MinimalValidationArtifacts -RunDirectory $script:RunDirectory `
+            -RepoRoot $RepoRoot -ShareableFailed -Resource $Resource `
+            -FailureDetail $shareableError
+        Write-Host "[live][$Domain] error: private/error-summary.md under $($script:RunDirectory)"
         return
     }
 
     if (-not $DebugArtifacts) {
-        $runRoot = Get-FullPath -Path $script:RunDirectory
-        if (-not (Test-ArtifactPathUnderRoot -RootPath (Join-Path $RepoRoot ".tmp_tests") -Path $runRoot)) {
-            throw "Artifact cleanup must stay inside a run under repository .tmp_tests."
-        }
-        $shareableRoot = Get-FullPath -Path (Join-Path $runRoot "shareable")
-        if ($shareableRoot -ne (Get-FullPath -Path $script:ShareableRoot)) {
-            throw "Artifact cleanup requires shareable reports inside the current run."
-        }
-        $retainedPaths = @(
-            $shareableRoot,
-            (Join-Path $shareableRoot "report.json"),
-            (Join-Path $shareableRoot "summary.md")
-        )
-        $items = @(Get-ChildItem -LiteralPath $runRoot -Force -Recurse)
-        foreach ($item in @((Get-Item -LiteralPath $runRoot)) + $items) {
-            Assert-PathUnderRoot -RootPath $runRoot -Path $item.FullName `
-                -Message "Artifact cleanup cannot leave the current run: {0}"
-            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-                throw "Artifact cleanup cannot traverse links: $($item.FullName)"
-            }
-        }
-        foreach ($item in @($items | Sort-Object { $_.FullName.Length } -Descending)) {
-            if ($item.FullName -notin $retainedPaths) {
-                Remove-Item -LiteralPath $item.FullName -Force -ErrorAction Stop
-            }
-        }
+        Remove-MinimalValidationArtifacts -RunDirectory $script:RunDirectory -RepoRoot $RepoRoot
     }
 
     Write-Host "[live][$Domain] report: shareable/report.json under $($script:RunDirectory)"
