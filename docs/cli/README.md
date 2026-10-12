@@ -2709,6 +2709,27 @@ specified. Pass `-Backend "@py"` to run the same validation with pyvisa-py:
 System VISA and pyvisa-py are separate backend selections for each live
 validation run.
 
+All five live validation runners default to minimal artifact retention. After
+either PASS or FAIL, a completed run retains only `shareable/report.json` and
+`shareable/summary.md`. These redacted reports preserve case results, execution
+metadata, and failure diagnostics. Pass `-DebugArtifacts` to retain the existing
+private raw output, stdout/stderr, CLI JSON, workflow, preflight, and shareable
+debug artifacts. If report generation fails, raw diagnostics remain available
+and the run fails. Forced termination or Ctrl+C may leave intermediate files.
+
+```powershell
+# Default: minimal artifacts
+.\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+
+# Retain detailed artifacts
+.\scripts\live-cli-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -DebugArtifacts
+```
+
+The same retention option applies to `live-workflow-check.ps1`,
+`live-dvm-check.ps1`, `live-serial-check.ps1`, and `live-segmented-check.ps1`,
+using their existing arguments. Run directory names and `-OutputRoot` behavior
+are unchanged.
+
 ### Tektronix Live Acceptance
 
 `cursor` accepts an optional `--function` on the TBS2074 profile. The five
@@ -2767,8 +2788,9 @@ that runner case reports N/A. These opt-in parameters apply only to Tektronix
 targets; the Keysight baseline retains its existing operator gate and cases.
 
 Results use the common CLI report and artifact privacy handling under
-`.tmp_tests/live_cli_check/`, with timestamped `private/` and redacted
-`shareable/` directories. The presence of the runner is not hardware validation.
+`.tmp_tests/live_cli_check/`, with timestamped runs and redacted `shareable/`
+reports. `-DebugArtifacts` also retains `private/` and detailed shareable
+artifacts. The presence of the runner is not hardware validation.
 A PASS case from a run against the specified real resource provides direct
 hardware evidence for that case. N/A cases remain unverified; an overall PASS
 means all applicable runner cases passed, not that every Core/WebUI operation
@@ -2823,7 +2845,11 @@ Use `live-workflow-check.ps1` for the existing workflow suite on either a
 registered Keysight target or one of the three Tektronix targets:
 
 ```powershell
+# Default: minimal artifacts
 .\scripts\live-workflow-check.ps1 -Target tektronix-tds2024b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+
+# Retain detailed artifacts
+.\scripts\live-workflow-check.ps1 -Target tektronix-tds2024b -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -DebugArtifacts
 ```
 
 The runner performs hardware-free preflight, verifies the detected model, and
@@ -2852,7 +2878,7 @@ belongs to Core workflow preflight; an error reported by the initial `run`
 command fails validation and still triggers stop cleanup.
 
 Reports and artifacts use `.tmp_tests/live_workflow_check/` with the common
-private/shareable layout. DVM, Serial, and Segmented Memory live runners do
+retention policy described above. DVM, Serial, and Segmented Memory live runners do
 not accept these Tektronix targets. The standalone `preflight-cli.ps1` target
 list and `all` selection continue to cover the four Keysight targets; Tek
 preflight is selected inside the CLI and workflow live runners.
@@ -2862,7 +2888,11 @@ preflight is selected inside the CLI and workflow live runners.
 Run the optional, license-dependent DVM validation separately from the baseline:
 
 ```powershell
+# Default: minimal artifacts
 .\scripts\live-dvm-check.ps1 -Target keysight-dsox4024a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+
+# Retain detailed artifacts
+.\scripts\live-dvm-check.ps1 -Target keysight-dsox4024a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -DebugArtifacts
 ```
 
 Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output and
@@ -2888,7 +2918,11 @@ not live validation evidence.
 Run the optional, license-dependent Segmented Memory validation separately:
 
 ```powershell
+# Default: minimal artifacts
 .\scripts\live-segmented-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+
+# Retain detailed artifacts
+.\scripts\live-segmented-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -DebugArtifacts
 ```
 
 Connect the CH1 probe to the front-panel Probe Demo or Probe Comp output,
@@ -2919,7 +2953,11 @@ evidence.
 Run the optional, license-dependent Serial validation separately:
 
 ```powershell
+# Default: minimal artifacts
 .\scripts\live-serial-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+
+# Retain detailed artifacts
+.\scripts\live-serial-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -DebugArtifacts
 ```
 
 The maintained runner intentionally uses UART as the representative Serial

@@ -17,7 +17,9 @@ param(
 
     [string] $Python = ".\.venv\Scripts\python.exe",
 
-    [string] $OutputRoot = ".tmp_tests\live_workflow_check"
+    [string] $OutputRoot = ".tmp_tests\live_workflow_check",
+
+    [switch] $DebugArtifacts
 )
 
 Set-StrictMode -Version Latest
@@ -824,7 +826,7 @@ try {
     Write-Host "FAIL  Workflow live validation"
     Write-Host "No live hardware was accessed."
     Write-Host "[live][workflow] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -841,7 +843,7 @@ try {
     Write-Host ""
     Write-Host "FAIL  Workflow live validation"
     Write-Host "[live][workflow] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -862,7 +864,7 @@ try {
     Write-Host "FAIL  Workflow live validation"
     Write-Host "Functional cases were not run because the detected model does not match the requested target."
     Write-Host "[live][workflow] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -886,7 +888,7 @@ try {
     Write-Host "FAIL  Workflow live validation"
     Write-Host "No workflow cases were run."
     Write-Host "[live][workflow] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 }
@@ -1298,7 +1300,7 @@ Write-Host "[live][workflow] artifacts: $($script:RunDirectory)"
 Write-Host ""
 
 if ($script:FunctionalFailed) {
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     Write-Host "FAIL  Workflow live validation"
     if ($script:ShareableGenerationFailed) {
         Write-Host "[live][workflow] run failed; see private report for the shareable generation error"
@@ -1306,7 +1308,7 @@ if ($script:FunctionalFailed) {
     exit 1
 }
 
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "PASS"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "PASS" -DebugArtifacts:$DebugArtifacts
 if ($script:ShareableGenerationFailed) {
     Write-Host "FAIL  Workflow live validation (shareable artifact generation failed)"
     exit 1

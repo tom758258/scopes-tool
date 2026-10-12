@@ -264,7 +264,8 @@ function New-ShareableArtifactSet {
         [Parameter(Mandatory = $true)][string]$ShareableRoot,
         [Parameter(Mandatory = $true)][string]$RepoRoot,
         [AllowNull()][AllowEmptyString()][string]$Resource = "",
-        [AllowNull()][AllowEmptyCollection()][string[]]$ExtraSensitiveValues = @()
+        [AllowNull()][AllowEmptyCollection()][string[]]$ExtraSensitiveValues = @(),
+        [switch]$MinimalArtifacts
     )
 
     $context = @{
@@ -283,10 +284,21 @@ function New-ShareableArtifactSet {
     $report.artifact_visibility = 'shareable'
     $report.candidate_evidence_only = $true
     $report.promotes_live_support = $false
-    $report.private_raw_artifacts_retained = $true
+    $report.artifact_mode = if ($MinimalArtifacts) { 'minimal' } else { 'debug' }
+    $report.debug_artifacts_retained = -not [bool]$MinimalArtifacts
+    $report.private_raw_artifacts_retained = -not [bool]$MinimalArtifacts
     $report.redaction_applied = $true
     $report.redaction_version = 1
-    Write-Utf8NoBomText -LiteralPath (Join-Path $context.ShareableRoot 'report.json') -Text ($report | ConvertTo-Json -Depth 20)
+    if ($MinimalArtifacts) {
+        $report.artifact_paths.report = 'shareable/report.json'
+        $report.artifact_paths.summary = 'shareable/summary.md'
+        foreach ($invocation in $report.invocations) {
+            foreach ($field in @('stdout', 'stderr', 'json')) {
+                if ($invocation.Contains($field)) { $invocation[$field] = $null }
+            }
+        }
+    }
+    $reportText = $report | ConvertTo-Json -Depth 20
 
     $summarySafe = ''
     if (Test-Path -LiteralPath $PrivateSummaryPath) {
@@ -297,8 +309,29 @@ function New-ShareableArtifactSet {
             -PrivateRoot $context.PrivateRoot `
             -SensitiveValues $context.SensitiveValues
     } else {
+        if ($MinimalArtifacts) { throw 'Private summary unavailable for minimal artifacts.' }
         $summarySafe = "# Validation Summary`n`n- Private summary unavailable; raw private artifacts retained."
     }
+    if ($MinimalArtifacts) {
+        # Keep execution evidence, but remove references to discarded artifacts.
+        foreach ($file in @(Get-ChildItem -LiteralPath $context.PrivateRoot -File -Recurse |
+            Sort-Object { $_.FullName.Length } -Descending)) {
+            $relative = (Get-PortableRelativePath -BasePath $context.PrivateRoot -Path $file.FullName).Replace('\', '/')
+            if ($relative -in @('report.json', 'summary.md')) { continue }
+            $repoRelative = (Get-ArtifactRelativePath -BaseRoot $context.RepoRoot -Path $file.FullName)
+            foreach ($reference in @(('shareable/' + $relative), $repoRelative)) {
+                $reportText = $reportText.Replace($reference, '<artifact-not-retained>')
+                $summarySafe = $summarySafe.Replace($reference, '<artifact-not-retained>')
+            }
+        }
+        $reportText = $reportText.Replace('retained in the CLI artifacts', 'recorded during validation; CLI artifacts are not retained in minimal mode')
+        $summarySafe = $summarySafe.Replace('retained in the CLI artifacts', 'recorded during validation; CLI artifacts are not retained in minimal mode')
+        $summarySafe += "`nArtifact mode: minimal`nDebug artifacts retained: false`n"
+    } else {
+        $summarySafe += "`nArtifact mode: debug`nDebug artifacts retained: true`n"
+    }
     Write-Utf8NoBomText -LiteralPath (Join-Path $context.ShareableRoot 'summary.md') -Text $summarySafe
+    Write-Utf8NoBomText -LiteralPath (Join-Path $context.ShareableRoot 'report.json') -Text $reportText
+    if ($MinimalArtifacts) { return ($reportText | ConvertFrom-Json -ErrorAction Stop) }
     return $report
 }

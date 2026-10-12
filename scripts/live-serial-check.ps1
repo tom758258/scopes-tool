@@ -17,7 +17,9 @@ param(
 
     [string] $Python = ".\.venv\Scripts\python.exe",
 
-    [string] $OutputRoot = ".tmp_tests\live_serial_check"
+    [string] $OutputRoot = ".tmp_tests\live_serial_check",
+
+    [switch] $DebugArtifacts
 )
 
 Set-StrictMode -Version Latest
@@ -1205,7 +1207,7 @@ try {
     Write-Host "FAIL  Serial live validation"
     Write-Host "No live hardware was accessed."
     Write-Host "[live][serial] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -1222,7 +1224,7 @@ try {
     Write-Host ""
     Write-Host "FAIL  Serial live validation"
     Write-Host "[live][serial] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -1236,7 +1238,7 @@ try {
     Write-Host "FAIL  Serial live validation"
     Write-Host "Functional cases were not run because the detected model does not match the requested target."
     Write-Host "[live][serial] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -1257,7 +1259,7 @@ try {
     Write-Host "FAIL  Serial live validation"
     Write-Host "No state-changing Serial cases were run."
     Write-Host "[live][serial] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -1878,7 +1880,7 @@ Write-Host "[live][serial] artifacts: $($script:RunDirectory)"
 Write-Host ""
 
 if ($script:FunctionalFailed) {
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     Write-Host "FAIL  Serial live validation"
     if ($script:ShareableGenerationFailed) {
         Write-Host "[live][serial] run failed; see private report for the shareable generation error"
@@ -1887,7 +1889,7 @@ if ($script:FunctionalFailed) {
 }
 
 if ($script:SerialUnavailable) {
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "SKIP"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "SKIP" -DebugArtifacts:$DebugArtifacts
     Write-Host "SKIP  Serial live validation"
     Write-Host "      Serial option/license is not available on this instrument."
     if ($script:ShareableGenerationFailed) {
@@ -1897,7 +1899,7 @@ if ($script:SerialUnavailable) {
     exit 0
 }
 
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "PASS"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-serial-check' -Domain 'serial' -Result "PASS" -DebugArtifacts:$DebugArtifacts
 if ($script:ShareableGenerationFailed) {
     Write-Host "FAIL  Serial live validation (shareable artifact generation failed)"
     exit 1

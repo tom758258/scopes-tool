@@ -985,10 +985,15 @@ Write-Summary -Result "FAIL"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-@pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
+@pytest.mark.parametrize("script_path", tuple(
+    REPO_ROOT / "scripts" / f"live-{domain}-check.ps1"
+    for domain in ("cli", "workflow", "dvm", "serial", "segmented")
+), ids=lambda path: path.stem)
+@pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
 def test_live_preflight_failure_writes_summary_before_hardware_access(
     tmp_path: Path,
     script_path: Path,
+    debug: bool,
 ) -> None:
     fake_package = tmp_path / "fake_cli" / "scopes_tool_cli"
     fake_package.mkdir(parents=True)
@@ -1014,7 +1019,7 @@ sys.exit(9)
     invocation_log = tmp_path / "fake-cli-invocations.jsonl"
     # All migrated validators take the canonical Target/Connection contract,
     # validate Connection against the resource transport, and write
-    # private/report.json + private/summary.md before any live access.
+    # formal reports before any live access.
     script_args = [
         "-Resource",
         "USB0::1::2::SYNTH12345::INSTR",
@@ -1026,6 +1031,8 @@ sys.exit(9)
         sys.executable,
     ]
     script_args += ["-OutputRoot", str(output_root)]
+    if debug:
+        script_args.append("-DebugArtifacts")
     environment = os.environ.copy()
     python_path = str(fake_package.parent)
     if environment.get("PYTHONPATH"):
@@ -1056,18 +1063,25 @@ sys.exit(9)
     assert "No live hardware was accessed." in completed.stdout
     run_roots = [path for path in output_root.iterdir() if path.is_dir()]
     assert len(run_roots) == 1
-    summary_path = run_roots[0] / "private" / "summary.md"
+    report_dir = run_roots[0] / ("private" if debug else "shareable")
+    summary_path = report_dir / "summary.md"
     summary_bytes = summary_path.read_bytes()
     summary = summary_bytes.decode("utf-8")
     assert not summary_bytes.startswith(b"\xef\xbb\xbf")
     assert "Result: FAIL" in summary
     assert "| preflight | FAIL |" in summary
     assert "| preflight | FAIL |  |" not in summary
-    report_path = run_roots[0] / "private" / "report.json"
+    report_path = report_dir / "report.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["status"] == "failed"
     assert report["hardware_touched"] is False
     assert report["backend"] == "system_visa"
+    if not debug:
+        assert {p.relative_to(run_roots[0]).as_posix() for p in run_roots[0].rglob("*") if p.is_file()} == {
+            "shareable/report.json", "shareable/summary.md",
+        }
+        expected_reason = "CLI preflight failed with exit code 1." if script_path.stem == "live-cli-check" else "known preflight"
+        assert expected_reason in summary
 
     invocations = [
         json.loads(line)

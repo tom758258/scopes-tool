@@ -17,7 +17,9 @@ param(
 
     [string] $Python = ".\.venv\Scripts\python.exe",
 
-    [string] $OutputRoot = ".tmp_tests\live_segmented_check"
+    [string] $OutputRoot = ".tmp_tests\live_segmented_check",
+
+    [switch] $DebugArtifacts
 )
 
 Set-StrictMode -Version Latest
@@ -779,7 +781,7 @@ try {
     Write-Host "FAIL  Segmented Memory live validation"
     Write-Host "No live hardware was accessed."
     Write-Host "[live][segmented] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -796,7 +798,7 @@ try {
     Write-Host ""
     Write-Host "FAIL  Segmented Memory live validation"
     Write-Host "[live][segmented] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -810,7 +812,7 @@ try {
     Write-Host "FAIL  Segmented Memory live validation"
     Write-Host "Functional cases were not run because the detected model does not match the requested target."
     Write-Host "[live][segmented] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -831,7 +833,7 @@ try {
     Write-Host "FAIL  Segmented Memory live validation"
     Write-Host "No state-changing Segmented Memory cases were run."
     Write-Host "[live][segmented] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -1042,7 +1044,7 @@ Write-Host "[live][segmented] artifacts: $($script:RunDirectory)"
 Write-Host ""
 
 if ($script:FunctionalFailed) {
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     Write-Host "FAIL  Segmented Memory live validation"
     if ($script:ShareableGenerationFailed) {
         Write-Host "[live][segmented] run failed; see private report for the shareable generation error"
@@ -1051,7 +1053,7 @@ if ($script:FunctionalFailed) {
 }
 
 if ($script:SegmentedUnavailable) {
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "SKIP"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "SKIP" -DebugArtifacts:$DebugArtifacts
     Write-Host "SKIP  Segmented Memory live validation"
     Write-Host "      NOT AVAILABLE: required instrument option/license is not installed."
     if ($script:ShareableGenerationFailed) {
@@ -1061,7 +1063,7 @@ if ($script:SegmentedUnavailable) {
     exit 0
 }
 
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "PASS"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-segmented-check' -Domain 'segmented' -Result "PASS" -DebugArtifacts:$DebugArtifacts
 if ($script:ShareableGenerationFailed) {
     Write-Host "FAIL  Segmented Memory live validation (shareable artifact generation failed)"
     exit 1

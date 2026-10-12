@@ -171,7 +171,7 @@ def fake_run(
     native_status_raw: str = "0",
     core_supported_operations: tuple[str, ...] | None = None,
     confirmation: str = "enter", runt_channel: int = 1,
-    holdoff_seconds: float = 0.000001,
+    holdoff_seconds: float = 0.000001, debug: bool = True,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074", 4, "TBS2000"),
@@ -367,9 +367,11 @@ def fake_run(
     arguments = [
         "-Target", target, "-Connection", connection, "-Resource",
         "USB0::FAKE::INSTR" if connection == "usb" else "TCPIP0::example::INSTR",
-        "-Python", sys.executable, "-OutputRoot", str(output_root), *extra,
+        "-Python", sys.executable, "-OutputRoot", str(output_root),
+        *(["-DebugArtifacts"] if debug else []), *extra,
     ]
-    previous_runs = set(output_root.glob("run_*/private/report.json"))
+    report_dir = "private" if debug else "shareable"
+    previous_runs = set(output_root.glob(f"run_*/{report_dir}/report.json"))
     fixture = tmp_path / "scenario.json"
     fixture.write_text(json.dumps({
             "values": values,
@@ -395,7 +397,7 @@ def fake_run(
         "-OperatorConfirmation", confirmation,
         script=Path(__file__).with_name("tektronix_function_harness.ps1"), env=env,
     )
-    runs = set(output_root.glob("run_*/private/report.json")) - previous_runs
+    runs = set(output_root.glob(f"run_*/{report_dir}/report.json")) - previous_runs
     assert len(runs) == 1, result.stdout + result.stderr
     report = json.loads(runs.pop().read_text(encoding="utf-8"))
     assert not (tmp_path / "argv.jsonl").exists()
@@ -724,6 +726,32 @@ def test_private_and_shareable_reports_keep_common_schema(tmp_path: Path) -> Non
     assert shared_report["artifact_paths"]["report"] == "shareable/report.json"
     assert shared_report["artifact_paths"]["summary"] == "shareable/summary.md"
     assert "USB0::FAKE::INSTR" not in shareable_path.read_text(encoding="utf-8")
+
+
+@requires_windows
+@pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
+@pytest.mark.parametrize("failed", (False, True), ids=("pass", "fail"))
+def test_tektronix_cli_artifact_retention(tmp_path: Path, debug: bool, failed: bool) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[0], debug=debug, live_model=TARGETS[1] if failed else None,
+    )
+    assert result.returncode == (1 if failed else 0), result.stdout + result.stderr
+    assert report["status"] == ("failed" if failed else "passed")
+    root = ROOT / report["run_root"]
+    files = {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
+    raw = (root / "shareable/report.json").read_text(encoding="utf-8")
+    shared = json.loads(raw)
+    assert shared["artifact_mode"] == ("debug" if debug else "minimal")
+    assert shared["debug_artifacts_retained"] is debug
+    assert shared["private_raw_artifacts_retained"] is debug
+    assert shared["summary_counts"] == report["summary_counts"]
+    assert "USB0::FAKE::INSTR" not in raw
+    if debug:
+        assert "private/report.json" in files and "private/summary.md" in files
+        assert len(files) > 4
+    else:
+        assert files == {"shareable/report.json", "shareable/summary.md"}
+        assert all(inv[field] is None for inv in shared["invocations"] for field in ("stdout", "stderr", "json"))
 
 
 @requires_windows

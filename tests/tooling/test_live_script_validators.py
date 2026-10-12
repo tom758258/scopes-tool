@@ -461,6 +461,7 @@ def test_live_validators_wire_shared_framework(script_name, domain):
         "New-ValidationRunDirectory -BaseRoot $outputBase",
         "Assert-TargetModelMatch -Identity $identity -ResolvedTarget $script:Target",
         f"Complete-LiveValidationRun -Kind 'scopes-tool-live-{domain}-check'",
+        "-DebugArtifacts:$DebugArtifacts",
         "$script:HardwareTouched = $true",
         "$script:Invocations.Add($invocationRecord) | Out-Null",
     ):
@@ -527,7 +528,7 @@ $script:CaseResults['pair-measurement'] = [pscustomobject]@{
 $script:CaseResults['math-composite-source'] = [pscustomobject]@{
     Passed = $false; Status = 'N/A'; Detail = 'unsupported on detected model' }
 
-Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result 'FAIL'
+Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result 'FAIL' -DebugArtifacts
 
 $privateReportRaw =
     [System.IO.File]::ReadAllText((Join-Path $script:RunRoot 'report.json'))
@@ -657,6 +658,198 @@ $s2Report = $s2ReportRaw | ConvertFrom-Json
     assert payload["s2_summary_has_backend"] is True
     assert payload["s2_error"] == "simulated shareable artifact generation failure"
     assert payload["s2_summary_reason"] is True
+
+
+@requires_windows
+@pytest.mark.parametrize(("script_name", "domain"), (("live-cli-check.ps1", "cli"), *LIVE_VALIDATOR_SCRIPTS))
+@pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
+@pytest.mark.parametrize("result_status", ("PASS", "FAIL"))
+def test_live_artifact_retention_modes(tmp_path, script_name, domain, debug, result_status):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside evidence", encoding="utf-8")
+    sibling = tmp_path / "run_previous" / "private" / "raw.txt"
+    sibling.parent.mkdir(parents=True)
+    sibling.write_text("previous run evidence", encoding="utf-8")
+    script_path = REPO_ROOT / "scripts" / script_name
+    body = extract_live_cli_functions_ps(("Write-Summary",)).replace(
+        str(LIVE_CLI_SCRIPT), str(script_path)
+    ) + """
+$paramScript = [scriptblock]::Create($ast.ParamBlock.Extent.Text + '; [bool]$DebugArtifacts')
+$defaultDebug = & $paramScript -Target 'keysight-dsox4034a' -Connection 'usb' -Resource 'TEST::INSTR'
+$explicitDebug = & $paramScript -Target 'keysight-dsox4034a' -Connection 'usb' -Resource 'TEST::INSTR' -DebugArtifacts
+$Resource = 'USB0::1::2::SYNTH12345::INSTR'
+$RepoRoot = '@REPO@'
+$layout = New-ValidationRunDirectory -BaseRoot '@RUNS@'
+$script:RunDirectory = $layout.Root
+$script:RunRoot = $layout.Private
+$script:ShareableRoot = $layout.Shareable
+$script:Target = 'keysight-dsox4034a'
+$script:Connection = 'usb'
+$script:BackendName = 'system_visa'
+$script:ShareableGenerationFailed = $false
+$script:HardwareTouched = $false
+$script:CaseResults = [ordered]@{
+    identity = [pscustomobject]@{ Passed = $true; Status = 'PASS'; Detail = '' }
+    validation = [pscustomobject]@{
+        Passed = ('@RESULT@' -eq 'PASS'); Status = '@RESULT@'
+        Detail = 'known validation diagnostic for USB0::1::2::SYNTH12345::INSTR at 192.168.1.50'
+    }
+    optional = [pscustomobject]@{ Passed = $false; Status = 'N/A'; Detail = 'unsupported feature' }
+    cleanup = [pscustomobject]@{ Passed = $true; Status = 'PASS'; Detail = 'original state restored' }
+    final_error = [pscustomobject]@{ Passed = $true; Status = 'PASS'; Detail = 'error queue clean' }
+}
+$script:Diagnostics = [ordered]@{
+    validation = @('known failure diagnostic; Native status and errors are retained in the CLI artifacts; no extra destructive status read was issued.')
+}
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$rawNames = @('identity.stdout.txt', 'identity.stderr.txt', 'identity.json',
+    'raw/native.log', 'workflow/sequence.json', 'preflight/report.json', 'capture.bin', 'lister.csv')
+foreach ($name in $rawNames) {
+    $path = Join-Path $script:RunRoot $name
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
+    Write-Utf8NoBomText -LiteralPath $path -Text '{"resource":"USB0::1::2::SYNTH12345::INSTR","serial":"SYNTH12345","host":"192.168.1.50"}'
+}
+Write-Utf8NoBomText -LiteralPath (Join-Path $layout.Root '.intermediate') -Text 'temporary'
+$artifactRelative = Get-ArtifactRelativePath -BaseRoot $RepoRoot -Path (Join-Path $script:RunRoot 'workflow/sequence.json')
+$script:Diagnostics['artifact-reference'] = @("historical artifact: ${artifactRelative}; shareable/workflow/sequence.json")
+$script:Invocations.Add([pscustomobject]@{
+    index = 1; stage = 'identity'; command = 'fake-cli'; arguments = @(
+        'identify', '--resource', $Resource, '--output', (Join-Path $script:RunRoot 'workflow/sequence.json'))
+    exit_code = 0; duration_ms = 123.4; success = $true
+    stdout = Get-ArtifactRelativePath -BaseRoot $RepoRoot -Path (Join-Path $script:RunRoot 'identity.stdout.txt')
+    stderr = Get-ArtifactRelativePath -BaseRoot $RepoRoot -Path (Join-Path $script:RunRoot 'identity.stderr.txt')
+    json = Get-ArtifactRelativePath -BaseRoot $RepoRoot -Path (Join-Path $script:RunRoot 'identity.json')
+}) | Out-Null
+Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOMAIN@' -Result '@RESULT@' @DEBUG@
+[ordered]@{
+    run_root = $layout.Root
+    failed = $script:ShareableGenerationFailed
+    default_debug = $defaultDebug
+    explicit_debug = $explicitDebug
+} | ConvertTo-Json -Compress
+""".replace("@REPO@", str(REPO_ROOT)).replace("@RUNS@", str(tmp_path)).replace(
+        "@RESULT@", result_status
+    ).replace("@DOMAIN@", domain).replace("@DEBUG@", "-DebugArtifacts" if debug else "")
+    completed = run_live_cli_harness(body)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    payload = json.loads(completed.stdout.splitlines()[-1])
+    assert payload["default_debug"] is False
+    assert payload["explicit_debug"] is True
+    assert payload["failed"] is False
+    run_root = Path(payload["run_root"])
+    files = {p.relative_to(run_root).as_posix() for p in run_root.rglob("*") if p.is_file()}
+    report_raw = (run_root / "shareable/report.json").read_text(encoding="utf-8")
+    summary = (run_root / "shareable/summary.md").read_text(encoding="utf-8")
+    report = json.loads(report_raw)
+    assert report["status"] == ("passed" if result_status == "PASS" else "failed")
+    assert report["artifact_mode"] == ("debug" if debug else "minimal")
+    assert report["debug_artifacts_retained"] is debug
+    assert report["private_raw_artifacts_retained"] is debug
+    assert report["summary_counts"] == {
+        "cases": 5, "passed": 4 if result_status == "PASS" else 3,
+        "failed": 0 if result_status == "PASS" else 1, "na": 1, "invocations": 1,
+    }
+    assert report["hardware_touched"] is False
+    assert report["target"] == "keysight-dsox4034a"
+    assert report["connection"] == "usb"
+    assert report["backend"] == "system_visa"
+    assert report["git_head"] and report["package_version"] and report["generated_at"]
+    assert report["candidate_evidence_only"] is True
+    assert report["promotes_live_support"] is False
+    for field, filename in (("report", "report.json"), ("summary", "summary.md")):
+        assert report["artifact_paths"][field] == f"shareable/{filename}"
+        assert (run_root / report["artifact_paths"][field]).is_file()
+    invocation = report["invocations"][0]
+    assert invocation["exit_code"] == 0 and invocation["success"] is True
+    assert invocation["index"] == 1 and invocation["stage"] == "identity"
+    assert invocation["duration_ms"] == 123.4
+    for marker in (f"Result: {result_status}", "known validation diagnostic", "known failure diagnostic",
+                   "original state restored", "error queue clean", "unsupported feature"):
+        assert marker in summary
+    for secret in ("USB0::1::2::SYNTH12345::INSTR", "SYNTH12345", "192.168.1.50", str(REPO_ROOT)):
+        assert secret not in _normalize_json_text(report_raw + summary)
+    if debug:
+        for name in ("identity.stdout.txt", "identity.stderr.txt", "identity.json", "raw/native.log",
+                     "workflow/sequence.json", "preflight/report.json", "capture.bin", "lister.csv"):
+            assert f"private/{name}" in files
+            assert "SYNTH12345" in (run_root / "private" / name).read_text(encoding="utf-8")
+        assert "private/report.json" in files and "private/summary.md" in files
+        assert ".intermediate" in files
+        for field in ("stdout", "stderr", "json"):
+            assert (run_root / invocation[field]).is_file()
+        assert "shareable/workflow/sequence.json" in files
+        assert "shareable/preflight/report.json" in files
+    else:
+        assert files == {"shareable/report.json", "shareable/summary.md"}
+        assert {p.relative_to(run_root).as_posix() for p in run_root.rglob("*") if p.is_dir()} == {"shareable"}
+        assert all(invocation[field] is None for field in ("stdout", "stderr", "json"))
+        assert invocation["arguments"][-1] == "<artifact-not-retained>"
+        assert "shareable/workflow/sequence.json" not in report_raw + summary
+        assert "retained in the CLI artifacts" not in report_raw + summary
+    assert outside.read_text(encoding="utf-8") == "outside evidence"
+    assert sibling.read_text(encoding="utf-8") == "previous run evidence"
+
+
+@requires_windows
+@pytest.mark.parametrize("failure", ("throw", "missing-report", "missing-summary", "empty-summary", "invalid-report", "private-report", "private-summary"))
+def test_live_artifact_generation_failure_retains_raw_evidence(tmp_path, failure):
+    body = extract_live_cli_functions_ps(("Write-Summary",)) + """
+$Resource = 'USB0::1::2::SYNTH12345::INSTR'
+$RepoRoot = '@REPO@'
+$layout = New-ValidationRunDirectory -BaseRoot '@RUNS@'
+$script:RunDirectory = $layout.Root
+$script:RunRoot = $layout.Private
+$script:ShareableRoot = $layout.Shareable
+$script:Target = 'keysight-dsox4034a'
+$script:Connection = 'usb'
+$script:BackendName = 'system_visa'
+$script:HardwareTouched = $false
+$script:ShareableGenerationFailed = $false
+$script:CaseResults = [ordered]@{ identity = [pscustomobject]@{ Passed = $true; Status = 'PASS'; Detail = '' } }
+$script:Diagnostics = [ordered]@{}
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+Write-Utf8NoBomText -LiteralPath (Join-Path $script:RunRoot 'raw.stdout.txt') -Text 'unique raw evidence SYNTH12345'
+function New-ShareableArtifactSet {
+    if ('@FAILURE@' -eq 'throw') { throw 'injected generation failure' }
+    if ('@FAILURE@' -ne 'missing-report') {
+        $text = if ('@FAILURE@' -eq 'invalid-report') { 'invalid json' } else { '{"status":"passed"}' }
+        Write-Utf8NoBomText -LiteralPath (Join-Path $script:ShareableRoot 'report.json') -Text $text
+    }
+    if ('@FAILURE@' -ne 'missing-summary') {
+        $text = if ('@FAILURE@' -eq 'empty-summary') { '' } else { 'Result: PASS' }
+        Write-Utf8NoBomText -LiteralPath (Join-Path $script:ShareableRoot 'summary.md') -Text $text
+    }
+}
+if ('@FAILURE@' -eq 'private-summary') {
+    function Write-Summary { throw 'injected private summary failure' }
+}
+if ('@FAILURE@' -eq 'private-report') {
+    $script:ReportWriteAttempt = 0
+    function Write-JsonReport {
+        param([string]$LiteralPath, $Report)
+        $script:ReportWriteAttempt += 1
+        if ($script:ReportWriteAttempt -eq 1) { throw 'injected private report failure' }
+        Write-Utf8NoBomText -LiteralPath $LiteralPath -Text ($Report | ConvertTo-Json -Depth 20)
+    }
+}
+Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result 'PASS'
+[ordered]@{ run_root = $layout.Root; failed = $script:ShareableGenerationFailed } | ConvertTo-Json -Compress
+""".replace("@REPO@", str(REPO_ROOT)).replace("@RUNS@", str(tmp_path)).replace("@FAILURE@", failure)
+    completed = run_live_cli_harness(body)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    payload = json.loads(completed.stdout.splitlines()[-1])
+    assert payload["failed"] is True
+    assert "Artifact Generation Failure" in completed.stdout
+    root = Path(payload["run_root"])
+    assert (root / "private/raw.stdout.txt").read_text(encoding="utf-8") == "unique raw evidence SYNTH12345"
+    report = json.loads((root / "private/report.json").read_text(encoding="utf-8"))
+    assert report["status"] == "failed"
+    assert report["shareable_generation_error"]
+    summary = (root / "private/summary.md").read_text(encoding="utf-8")
+    assert "Shareable artifact generation failed:" in summary
+    assert "Result: PASS" not in summary
+    assert not (root / "shareable/report.json").exists()
+    assert not (root / "shareable/summary.md").exists()
 
 
 LIVE_VALIDATOR_FINALIZATION_CASES = (

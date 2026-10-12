@@ -126,4 +126,4 @@ $workflow = [scriptblock]::Create($source)
     -Connection 'usb' `
     -Resource 'USB0::FAKE::INSTR' `
     -Python $PythonPath `
-    -OutputRoot $OutputRoot
+    -OutputRoot $OutputRoot -DebugArtifacts

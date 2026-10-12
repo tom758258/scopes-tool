@@ -505,7 +505,7 @@ print(json.dumps({
     } catch {
         Add-Case "preflight" "FAIL" $_.Exception.Message
         $script:FunctionalFailed = $true
-        Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
+        Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
         return
     }
 
@@ -1154,7 +1154,7 @@ print(json.dumps({
             Add-Diagnostic -Name "configuration" -Message "Cursor and measurement configuration actions are not restored. TBS2074 cursor source selection may change channel display or restart acquisition."
         }
         $result = if ($script:Failure) { "FAIL" } else { "PASS" }
-        Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result $result
+        Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result $result -DebugArtifacts:$DebugArtifacts
     }
     $script:FunctionalFailed = $script:Failure
 

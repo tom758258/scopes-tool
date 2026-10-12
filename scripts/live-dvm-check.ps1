@@ -17,7 +17,9 @@ param(
 
     [string] $Python = ".\.venv\Scripts\python.exe",
 
-    [string] $OutputRoot = ".tmp_tests\live_dvm_check"
+    [string] $OutputRoot = ".tmp_tests\live_dvm_check",
+
+    [switch] $DebugArtifacts
 )
 
 Set-StrictMode -Version Latest
@@ -791,7 +793,7 @@ try {
     Write-Host "FAIL  DVM live validation"
     Write-Host "No live hardware was accessed."
     Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -808,7 +810,7 @@ try {
     Write-Host ""
     Write-Host "FAIL  DVM live validation"
     Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -822,7 +824,7 @@ try {
     Write-Host "FAIL  DVM live validation"
     Write-Host "Functional cases were not run because the detected model does not match the requested target."
     Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -843,7 +845,7 @@ try {
     Write-Host "FAIL  DVM live validation"
     Write-Host "No state-changing DVM cases were run."
     Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -1079,7 +1081,7 @@ Write-Host "[live][dvm] artifacts: $($script:RunDirectory)"
 Write-Host ""
 
 if ($script:FunctionalFailed) {
-        Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL"
+        Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     Write-Host "FAIL  DVM live validation"
     if ($script:ShareableGenerationFailed) {
         Write-Host "[live][dvm] run failed; see private report for the shareable generation error"
@@ -1088,7 +1090,7 @@ if ($script:FunctionalFailed) {
 }
 
 if ($script:DvmUnavailable) {
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "SKIP"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "SKIP" -DebugArtifacts:$DebugArtifacts
     Write-Host "SKIP  DVM live validation"
     Write-Host "      DVM option/license is not available on this instrument."
     if ($script:ShareableGenerationFailed) {
@@ -1098,7 +1100,7 @@ if ($script:DvmUnavailable) {
     exit 0
 }
 
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "PASS"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-dvm-check' -Domain 'dvm' -Result "PASS" -DebugArtifacts:$DebugArtifacts
 if ($script:ShareableGenerationFailed) {
     Write-Host "FAIL  DVM live validation (shareable artifact generation failed)"
     exit 1

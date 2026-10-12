@@ -254,7 +254,7 @@ $connection = "usb"
 $resource = "USB0::FAKE::INSTR"
 for ($index = 0; $index -lt $arguments.Count; $index++) {
     $name = $arguments[$index].TrimStart('-')
-    if ($name -in @("IncludeAcquisitionActions", "IncludeAutoscale", "IncludeStorageWrites", "IncludeConfigurationActions", "IncludeScreenshot")) {
+    if ($name -in @("IncludeAcquisitionActions", "IncludeAutoscale", "IncludeStorageWrites", "IncludeConfigurationActions", "IncludeScreenshot", "DebugArtifacts")) {
         $parameterValues[$name] = $true
     } elseif ($name -in @("SetupSlot", "ReferenceSlot", "ImageFilename", "WaveformFilename", "WaveformSourceChannel", "Connection", "Resource")) {
         $index++
@@ -271,6 +271,7 @@ $IncludeAutoscale = [bool]$parameterValues["IncludeAutoscale"]
 $IncludeStorageWrites = [bool]$parameterValues["IncludeStorageWrites"]
 $IncludeConfigurationActions = [bool]$parameterValues["IncludeConfigurationActions"]
 $IncludeScreenshot = [bool]$parameterValues["IncludeScreenshot"]
+$DebugArtifacts = [bool]$parameterValues["DebugArtifacts"]
 $SetupSlot = if ($parameterValues.ContainsKey("SetupSlot")) { [int]$parameterValues["SetupSlot"] } else { 1 }
 $ReferenceSlot = if ($parameterValues.ContainsKey("ReferenceSlot")) { [int]$parameterValues["ReferenceSlot"] } else { 1 }
 $ImageFilename = [string]$parameterValues["ImageFilename"]

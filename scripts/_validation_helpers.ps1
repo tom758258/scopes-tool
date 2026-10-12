@@ -442,7 +442,9 @@ function Complete-LiveValidationRun {
         [string] $Kind,
 
         [Parameter(Mandatory = $true)]
-        [string] $Domain
+        [string] $Domain,
+
+        [switch] $DebugArtifacts
     )
 
     $status = switch ($Result) {
@@ -548,12 +550,10 @@ function Complete-LiveValidationRun {
         invocations = $invocationArray
     }
 
-    Write-JsonReport -LiteralPath $privateReportPath -Report $report
-
-    Write-Summary -Result $Result
-
     $shareableError = $null
     try {
+        Write-JsonReport -LiteralPath $privateReportPath -Report $report
+        Write-Summary -Result $Result
         $null = New-ShareableArtifactSet `
             -PrivateReport $report `
             -PrivateSummaryPath $privateSummaryPath `
@@ -561,14 +561,40 @@ function Complete-LiveValidationRun {
             -PrivateRoot $script:RunRoot `
             -ShareableRoot $script:ShareableRoot `
             -RepoRoot $RepoRoot `
-            -Resource $Resource
+            -Resource $Resource `
+            -MinimalArtifacts:(-not $DebugArtifacts)
+
+        foreach ($name in @("report.json", "summary.md")) {
+            $path = Join-Path $script:ShareableRoot $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
+                [string]::IsNullOrWhiteSpace([System.IO.File]::ReadAllText($path))) {
+                throw "Required shareable artifact is missing or empty: ${name}"
+            }
+        }
+        $null = Get-Content -LiteralPath (Join-Path $script:ShareableRoot "report.json") -Raw |
+            ConvertFrom-Json -ErrorAction Stop
     } catch {
         $shareableError = $_.Exception.Message
     }
 
     if ($null -ne $shareableError) {
+        $script:ShareableGenerationFailed = $true
+        Write-Host "[live][$Domain] Artifact Generation Failure"
         Write-Host "[live][$Domain] shareable artifact generation failed: ${shareableError}"
         Write-Host "[live][$Domain] private artifacts retained: $($script:RunDirectory)"
+        if (-not $DebugArtifacts -and
+            (Test-ArtifactPathUnderRoot -RootPath (Join-Path $RepoRoot ".tmp_tests") -Path $script:RunDirectory) -and
+            (Get-FullPath -Path $script:ShareableRoot) -eq
+            (Get-FullPath -Path (Join-Path $script:RunDirectory "shareable")) -and
+            @(Get-Item -LiteralPath $script:RunDirectory, $script:ShareableRoot |
+                Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint }).Count -eq 0) {
+            foreach ($name in @("report.json", "summary.md")) {
+                $path = Join-Path $script:ShareableRoot $name
+                if (Test-Path -LiteralPath $path -PathType Leaf) {
+                    Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+                }
+            }
+        }
         $report["status"] = "failed"
         $report["shareable_generation_error"] = $shareableError
         Write-JsonReport -LiteralPath $privateReportPath -Report $report
@@ -576,13 +602,43 @@ function Complete-LiveValidationRun {
         if (Test-Path -LiteralPath $privateSummaryPath -PathType Leaf) {
             $summaryText = [System.IO.File]::ReadAllText($privateSummaryPath)
         }
-        $updated = $summaryText.TrimEnd() +
+        $updated = ($summaryText -replace '(?m)^Result: (PASS|SKIP)', 'Result: FAIL').TrimEnd() +
             [Environment]::NewLine +
             "- Shareable artifact generation failed: ${shareableError}" +
             [Environment]::NewLine
         Write-Utf8NoBomText -LiteralPath $privateSummaryPath -Text $updated
-        $script:ShareableGenerationFailed = $true
+        Write-Host "[live][$Domain] report: private/report.json under $($script:RunDirectory)"
+        return
     }
 
-    Write-Host "[live][$Domain] report: private/report.json under $($script:RunDirectory)"
+    if (-not $DebugArtifacts) {
+        $runRoot = Get-FullPath -Path $script:RunDirectory
+        if (-not (Test-ArtifactPathUnderRoot -RootPath (Join-Path $RepoRoot ".tmp_tests") -Path $runRoot)) {
+            throw "Artifact cleanup must stay inside a run under repository .tmp_tests."
+        }
+        $shareableRoot = Get-FullPath -Path (Join-Path $runRoot "shareable")
+        if ($shareableRoot -ne (Get-FullPath -Path $script:ShareableRoot)) {
+            throw "Artifact cleanup requires shareable reports inside the current run."
+        }
+        $retainedPaths = @(
+            $shareableRoot,
+            (Join-Path $shareableRoot "report.json"),
+            (Join-Path $shareableRoot "summary.md")
+        )
+        $items = @(Get-ChildItem -LiteralPath $runRoot -Force -Recurse)
+        foreach ($item in @((Get-Item -LiteralPath $runRoot)) + $items) {
+            Assert-PathUnderRoot -RootPath $runRoot -Path $item.FullName `
+                -Message "Artifact cleanup cannot leave the current run: {0}"
+            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw "Artifact cleanup cannot traverse links: $($item.FullName)"
+            }
+        }
+        foreach ($item in @($items | Sort-Object { $_.FullName.Length } -Descending)) {
+            if ($item.FullName -notin $retainedPaths) {
+                Remove-Item -LiteralPath $item.FullName -Force -ErrorAction Stop
+            }
+        }
+    }
+
+    Write-Host "[live][$Domain] report: shareable/report.json under $($script:RunDirectory)"
 }

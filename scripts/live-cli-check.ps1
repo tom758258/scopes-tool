@@ -19,6 +19,8 @@ param(
 
     [string] $OutputRoot = ".tmp_tests\live_cli_check",
 
+    [switch] $DebugArtifacts,
+
     [switch] $IncludeAcquisitionActions,
     [switch] $IncludeAutoscale,
     [switch] $IncludeStorageWrites,
@@ -2202,7 +2204,7 @@ try {
     Write-Host "FAIL  baseline live validation"
     Write-Host "No live hardware was accessed."
     Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -2219,7 +2221,7 @@ try {
     Write-Host ""
     Write-Host "FAIL  baseline live validation"
     Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -2232,7 +2234,7 @@ try {
     Write-Host "FAIL  baseline live validation"
     Write-Host "Functional cases were not run because the detected model does not match the requested target."
     Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -2257,7 +2259,7 @@ if (-not $initialDrainPassed) {
     Write-Host "FAIL  baseline live validation"
     Write-Host "No state-changing baseline cases were run."
     Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     exit 1
 }
 
@@ -5468,7 +5470,7 @@ foreach ($entry in $script:CaseResults.GetEnumerator()) {
 Write-Host "[live][cli] artifacts: $($script:RunDirectory)"
 
 if ($script:FunctionalFailed) {
-    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL"
+    Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
     Write-Host "FAIL  baseline live validation"
     if ($script:ShareableGenerationFailed) {
         Write-Host "[live][cli] run failed; see private report for the shareable generation error"
@@ -5476,7 +5478,7 @@ if ($script:FunctionalFailed) {
     exit 1
 }
 
-Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "PASS"
+Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Result "PASS" -DebugArtifacts:$DebugArtifacts
 if ($script:ShareableGenerationFailed) {
     Write-Host "FAIL  baseline live validation (shareable artifact generation failed)"
     exit 1
