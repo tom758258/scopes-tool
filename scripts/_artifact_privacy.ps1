@@ -169,6 +169,19 @@ function ConvertTo-ShareableArtifactValue {
         }
         return $result
     }
+    if ($Value -is [array]) {
+        # ConvertFrom-Json numeric/bool arrays contain value types, which cannot
+        # carry resource strings or paths. Keep them unchanged instead of
+        # invoking the recursive PowerShell redactor once for every number.
+        $primitiveOnly = $true
+        foreach ($item in $Value) {
+            if ($null -ne $item -and -not ($item -is [System.ValueType])) {
+                $primitiveOnly = $false
+                break
+            }
+        }
+        if ($primitiveOnly) { return ,$Value }
+    }
     if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
         $items = @($Value | ForEach-Object { ConvertTo-ShareableArtifactValue -Value $_ -FieldName $FieldName -PrivateRoot $PrivateRoot -ShareableRoot $ShareableRoot -RepoRoot $RepoRoot -Resource $Resource -SensitiveValues $SensitiveValues -GeneratedRootArtifacts $GeneratedRootArtifacts })
         return ,$items
