@@ -703,7 +703,8 @@ $script:Diagnostics = [ordered]@{
 }
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $rawNames = @('identity.stdout.txt', 'identity.stderr.txt', 'identity.json',
-    'raw/native.log', 'workflow/sequence.json', 'preflight/report.json', 'capture.bin', 'lister.csv')
+    'raw/native.log', 'workflow/sequence.json', 'workflows/measure-log/sample.json',
+    'preflight/report.json', 'capture.bin', 'lister.csv')
 foreach ($name in $rawNames) {
     $path = Join-Path $script:RunRoot $name
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
@@ -714,7 +715,12 @@ $artifactRelative = Get-ArtifactRelativePath -BaseRoot $RepoRoot -Path (Join-Pat
 $script:Diagnostics['artifact-reference'] = @("historical artifact: ${artifactRelative}; shareable/workflow/sequence.json")
 $script:Invocations.Add([pscustomobject]@{
     index = 1; stage = 'identity'; command = 'fake-cli'; arguments = @(
-        'identify', '--resource', $Resource, '--output', (Join-Path $script:RunRoot 'workflow/sequence.json'))
+        'identify', '--resource', $Resource, '--output', (Join-Path $script:RunRoot 'workflow/sequence.json'),
+        '--output-dir', (Join-Path $script:RunRoot 'workflows/measure-log'),
+        '--shared-output-dir', 'shareable/workflows/measure-log',
+        '--report', 'shareable/report.json', '--summary', 'shareable/summary.md',
+        '--label', 'shareable/workflows/measure-log-example', '--model', 'keysight-dsox4034a',
+        '--value', '0.125', '--text', 'ordinary text')
     exit_code = 0; duration_ms = 123.4; success = $true
     stdout = Get-ArtifactRelativePath -BaseRoot $RepoRoot -Path (Join-Path $script:RunRoot 'identity.stdout.txt')
     stderr = Get-ArtifactRelativePath -BaseRoot $RepoRoot -Path (Join-Path $script:RunRoot 'identity.stderr.txt')
@@ -763,6 +769,13 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
     assert invocation["exit_code"] == 0 and invocation["success"] is True
     assert invocation["index"] == 1 and invocation["stage"] == "identity"
     assert invocation["duration_ms"] == 123.4
+    arguments = invocation["arguments"]
+    def argument_value(flag):
+        return arguments[arguments.index(flag) + 1]
+    for flag, value in (("--report", "shareable/report.json"), ("--summary", "shareable/summary.md"),
+                        ("--label", "shareable/workflows/measure-log-example"),
+                        ("--model", "keysight-dsox4034a"), ("--value", "0.125"), ("--text", "ordinary text")):
+        assert argument_value(flag) == value
     for marker in (f"Result: {result_status}", "known validation diagnostic", "known failure diagnostic",
                    "original state restored", "error queue clean", "unsupported feature"):
         assert marker in summary
@@ -779,11 +792,19 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
             assert (run_root / invocation[field]).is_file()
         assert "shareable/workflow/sequence.json" in files
         assert "shareable/preflight/report.json" in files
+        assert "private/workflows/measure-log/sample.json" in files
+        assert "shareable/workflows/measure-log/sample.json" in files
+        assert argument_value("--output") == "shareable/workflow/sequence.json"
+        assert argument_value("--output-dir") == "shareable/workflows/measure-log"
+        assert argument_value("--shared-output-dir") == "shareable/workflows/measure-log"
     else:
         assert files == {"shareable/report.json", "shareable/summary.md"}
         assert {p.relative_to(run_root).as_posix() for p in run_root.rglob("*") if p.is_dir()} == {"shareable"}
         assert all(invocation[field] is None for field in ("stdout", "stderr", "json"))
-        assert invocation["arguments"][-1] == "<artifact-not-retained>"
+        assert argument_value("--output") == "<artifact-not-retained>"
+        assert argument_value("--output-dir") == "<artifact-not-retained>"
+        assert argument_value("--shared-output-dir") == "<artifact-not-retained>"
+        assert '"shareable/workflows/measure-log"' not in report_raw
         assert "shareable/workflow/sequence.json" not in report_raw + summary
         assert "retained in the CLI artifacts" not in report_raw + summary
     assert outside.read_text(encoding="utf-8") == "outside evidence"

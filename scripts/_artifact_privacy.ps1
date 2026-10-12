@@ -314,14 +314,21 @@ function New-ShareableArtifactSet {
     }
     if ($MinimalArtifacts) {
         # Keep execution evidence, but remove references to discarded artifacts.
-        foreach ($file in @(Get-ChildItem -LiteralPath $context.PrivateRoot -File -Recurse |
+        foreach ($item in @(Get-ChildItem -LiteralPath $context.PrivateRoot -Recurse |
             Sort-Object { $_.FullName.Length } -Descending)) {
-            $relative = (Get-PortableRelativePath -BasePath $context.PrivateRoot -Path $file.FullName).Replace('\', '/')
+            $relative = (Get-PortableRelativePath -BasePath $context.PrivateRoot -Path $item.FullName).Replace('\', '/')
             if ($relative -in @('report.json', 'summary.md')) { continue }
-            $repoRelative = (Get-ArtifactRelativePath -BaseRoot $context.RepoRoot -Path $file.FullName)
+            $repoRelative = (Get-ArtifactRelativePath -BaseRoot $context.RepoRoot -Path $item.FullName)
             foreach ($reference in @(('shareable/' + $relative), $repoRelative)) {
-                $reportText = $reportText.Replace($reference, '<artifact-not-retained>')
-                $summarySafe = $summarySafe.Replace($reference, '<artifact-not-retained>')
+                if ($item.PSIsContainer) {
+                    # Match a complete directory reference, not a longer path or label.
+                    $pattern = '(?<![\w./\\-])' + [regex]::Escape($reference) + '(?![\w./\\-])'
+                    $reportText = [regex]::Replace($reportText, $pattern, '<artifact-not-retained>')
+                    $summarySafe = [regex]::Replace($summarySafe, $pattern, '<artifact-not-retained>')
+                } else {
+                    $reportText = $reportText.Replace($reference, '<artifact-not-retained>')
+                    $summarySafe = $summarySafe.Replace($reference, '<artifact-not-retained>')
+                }
             }
         }
         $reportText = $reportText.Replace('retained in the CLI artifacts', 'recorded during validation; CLI artifacts are not retained in minimal mode')
