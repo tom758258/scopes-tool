@@ -56,18 +56,20 @@ const SYSTEM_OPTIONS_FRIENDLY_NAMES = {
   D4000BDLA: "system.option.D4000BDLA",
 };
 
-function formatSystemOptionsSummary(result) {
-  if (!Array.isArray(result?.options)) return String(result);
-  const tokens = result.options.filter(
+function formatSystemOptionsItems(options) {
+  return options.filter(
     (token) => token !== 0 && token !== "0" && token !== null && token !== undefined && String(token).trim() !== "",
-  );
-  if (!tokens.length) return translate("system.options.empty");
-  const formatted = tokens.map((token) => {
+  ).map((token) => {
     const nameKey = SYSTEM_OPTIONS_FRIENDLY_NAMES[token];
     const name = nameKey && hasTranslation(nameKey) ? translate(nameKey) : null;
     return name ? `${name} — ${token}` : String(token);
   });
-  return formatted.join("; ");
+}
+
+function formatSystemOptionsSummary(result) {
+  if (!Array.isArray(result?.options)) return String(result);
+  const formatted = formatSystemOptionsItems(result.options);
+  return formatted.length ? formatted.join("; ") : translate("system.options.empty");
 }
 
 function formatSystemStatusByteSummary(result) {
@@ -1113,9 +1115,19 @@ function renderSystemWorkspaceResult(container, job) {
     case "system-clear-status":
       appendSystemWorkspaceLines(container, [translate("system.clearStatus.done")]);
       return true;
-    case "system-options":
-      appendSystemWorkspaceLines(container, [formatSystemOptionsSummary(result)]);
+    case "system-options": {
+      const lines = Array.isArray(result?.options) ? formatSystemOptionsItems(result.options) : [String(result)];
+      if (!lines.length) lines.push(translate("system.options.empty"));
+      const field = document.createElement("div");
+      field.className = "workspace-result-field workspace-result-field-wide";
+      lines.forEach((text) => {
+        const content = document.createElement("span");
+        content.textContent = text;
+        field.append(content);
+      });
+      container.append(field);
       return true;
+    }
     default:
       return false;
   }

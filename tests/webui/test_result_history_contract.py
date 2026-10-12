@@ -1350,14 +1350,35 @@ def test_system_semantic_workspace_results() -> None:
           workspaceLines(completed("system-clear-status", { action: "system-clear-status" })),
           ["儀器狀態已清除。"],
         );
-        assert.deepEqual(
-          workspaceLines(completed("system-options", { raw: "0,0", options: ["0", "0"] })),
-          ["儀器未回報已安裝的選配功能。"],
-        );
-        assert.deepEqual(
-          workspaceLines(completed("system-options", { raw: "0,MEMUP,FPGAX", options: ["0", "MEMUP", "FPGAX"] })),
-          ["記憶體升級 — MEMUP; FPGAX"],
-        );
+        const assertOptionsWorkspace = (options, expected) => {
+          const original = [...options];
+          const job = completed("system-options", { options });
+          const workspace = new FakeNode("div");
+          api.renderWorkspaceResult(workspace, job, { mode: "simulate" });
+          assert.equal(workspace.children.length, 1);
+          const field = workspace.children[0];
+          assert.ok(field.className.split(" ").includes("workspace-result-field"));
+          assert.ok(field.className.split(" ").includes("workspace-result-field-wide"));
+          assert.deepEqual(field.children.map((node) => node.tagName), expected.map(() => "SPAN"));
+          assert.deepEqual(field.children.map((node) => node.textContent), expected);
+          assert.deepEqual(options, original);
+          assert.equal(historyLine(job).summary, expected.join("; "));
+        };
+        for (const [locale, name, empty] of [
+          ["zh-TW", "記憶體升級", "儀器未回報已安裝的選配功能。"],
+          ["en", "Memory Upgrade", "No installed instrument options were reported."],
+        ]) {
+          globalThis.testLocale = locale;
+          assertOptionsWorkspace(
+            Object.freeze([0, "FPGAX", "0", "MEMUP", "", "  ", null, undefined, "MEMUP"]),
+            ["FPGAX", name + " — MEMUP", name + " — MEMUP"],
+          );
+          assertOptionsWorkspace(["MEMUP"], [name + " — MEMUP"]);
+          assertOptionsWorkspace(["FPGAX"], ["FPGAX"]);
+          assertOptionsWorkspace([0, "0", "", "  ", null, undefined], [empty]);
+          assertOptionsWorkspace([], [empty]);
+        }
+        globalThis.testLocale = "zh-TW";
         const failedLines = workspaceLines({
           job_id: "job-check-error-direct", command: "check-error", status: "failed",
           error: "Core command returned a non-zero exit code.",
