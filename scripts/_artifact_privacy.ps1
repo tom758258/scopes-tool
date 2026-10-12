@@ -107,7 +107,8 @@ function ConvertTo-ShareableArtifactValue {
         [Parameter(Mandatory = $true)][string]$RepoRoot,
         [AllowNull()][AllowEmptyString()][string]$Resource,
         [string[]]$SensitiveValues = @(),
-        [string[]]$GeneratedRootArtifacts = @()
+        [string[]]$GeneratedRootArtifacts = @(),
+        [switch]$MinimalArtifacts
     )
 
     if ($null -eq $Value) { return $null }
@@ -125,6 +126,10 @@ function ConvertTo-ShareableArtifactValue {
         if ($isRootedPath) {
             if (Test-ArtifactPathUnderRoot -RootPath $PrivateRoot -Path $text) {
                 $relative = Get-PortableRelativePath -BasePath $PrivateRoot -Path $text
+                # Retention depends on the path value, not whether it was created.
+                if ($MinimalArtifacts -and $relative.Replace('\', '/') -notin @('report.json', 'summary.md')) {
+                    return '<artifact-not-retained>'
+                }
                 return ('shareable/' + $relative.Replace('\', '/'))
             }
             if (Test-ArtifactPathUnderRoot -RootPath $ShareableRoot -Path $text) {
@@ -143,6 +148,9 @@ function ConvertTo-ShareableArtifactValue {
                 $resolved = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $text))
                 if (Test-ArtifactPathUnderRoot -RootPath $PrivateRoot -Path $resolved) {
                     $relative = Get-PortableRelativePath -BasePath $PrivateRoot -Path $resolved
+                    if ($MinimalArtifacts -and $relative.Replace('\', '/') -notin @('report.json', 'summary.md')) {
+                        return '<artifact-not-retained>'
+                    }
                     if (($relative -in @('report.json', 'summary.md') -and $relative -in $GeneratedRootArtifacts) -or
                         (Test-Path -LiteralPath (Join-Path $ShareableRoot $relative) -PathType Leaf)) {
                         return ('shareable/' + $relative.Replace('\', '/'))
@@ -158,14 +166,14 @@ function ConvertTo-ShareableArtifactValue {
     if ($Value -is [System.Collections.IDictionary]) {
         $result = [ordered]@{}
         foreach ($entryKey in $Value.Keys) {
-            $result[[string]$entryKey] = ConvertTo-ShareableArtifactValue -Value $Value[$entryKey] -FieldName ([string]$entryKey) -PrivateRoot $PrivateRoot -ShareableRoot $ShareableRoot -RepoRoot $RepoRoot -Resource $Resource -SensitiveValues $SensitiveValues -GeneratedRootArtifacts $GeneratedRootArtifacts
+            $result[[string]$entryKey] = ConvertTo-ShareableArtifactValue -Value $Value[$entryKey] -FieldName ([string]$entryKey) -PrivateRoot $PrivateRoot -ShareableRoot $ShareableRoot -RepoRoot $RepoRoot -Resource $Resource -SensitiveValues $SensitiveValues -GeneratedRootArtifacts $GeneratedRootArtifacts -MinimalArtifacts:$MinimalArtifacts
         }
         return $result
     }
     if ($Value -is [pscustomobject]) {
         $result = [ordered]@{}
         foreach ($property in $Value.PSObject.Properties) {
-            $result[$property.Name] = ConvertTo-ShareableArtifactValue -Value $property.Value -FieldName $property.Name -PrivateRoot $PrivateRoot -ShareableRoot $ShareableRoot -RepoRoot $RepoRoot -Resource $Resource -SensitiveValues $SensitiveValues -GeneratedRootArtifacts $GeneratedRootArtifacts
+            $result[$property.Name] = ConvertTo-ShareableArtifactValue -Value $property.Value -FieldName $property.Name -PrivateRoot $PrivateRoot -ShareableRoot $ShareableRoot -RepoRoot $RepoRoot -Resource $Resource -SensitiveValues $SensitiveValues -GeneratedRootArtifacts $GeneratedRootArtifacts -MinimalArtifacts:$MinimalArtifacts
         }
         return $result
     }
@@ -183,7 +191,7 @@ function ConvertTo-ShareableArtifactValue {
         if ($primitiveOnly) { return ,$Value }
     }
     if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
-        $items = @($Value | ForEach-Object { ConvertTo-ShareableArtifactValue -Value $_ -FieldName $FieldName -PrivateRoot $PrivateRoot -ShareableRoot $ShareableRoot -RepoRoot $RepoRoot -Resource $Resource -SensitiveValues $SensitiveValues -GeneratedRootArtifacts $GeneratedRootArtifacts })
+        $items = @($Value | ForEach-Object { ConvertTo-ShareableArtifactValue -Value $_ -FieldName $FieldName -PrivateRoot $PrivateRoot -ShareableRoot $ShareableRoot -RepoRoot $RepoRoot -Resource $Resource -SensitiveValues $SensitiveValues -GeneratedRootArtifacts $GeneratedRootArtifacts -MinimalArtifacts:$MinimalArtifacts })
         return ,$items
     }
     return $Value
@@ -280,7 +288,7 @@ function New-ShareableArtifactSet {
     }
     Copy-ShareableArtifactTree -Context $context
 
-    $report = ConvertTo-ShareableArtifactValue -Value $PrivateReport -PrivateRoot $context.PrivateRoot -ShareableRoot $context.ShareableRoot -RepoRoot $context.RepoRoot -Resource $context.Resource -SensitiveValues $context.SensitiveValues -GeneratedRootArtifacts $context.GeneratedRootArtifacts
+    $report = ConvertTo-ShareableArtifactValue -Value $PrivateReport -PrivateRoot $context.PrivateRoot -ShareableRoot $context.ShareableRoot -RepoRoot $context.RepoRoot -Resource $context.Resource -SensitiveValues $context.SensitiveValues -GeneratedRootArtifacts $context.GeneratedRootArtifacts -MinimalArtifacts:$MinimalArtifacts
     $report.artifact_visibility = 'shareable'
     $report.candidate_evidence_only = $true
     $report.promotes_live_support = $false

@@ -713,12 +713,19 @@ foreach ($name in $rawNames) {
 Write-Utf8NoBomText -LiteralPath (Join-Path $layout.Root '.intermediate') -Text 'temporary'
 $artifactRelative = Get-ArtifactRelativePath -BaseRoot $RepoRoot -Path (Join-Path $script:RunRoot 'workflow/sequence.json')
 $script:Diagnostics['artifact-reference'] = @("historical artifact: ${artifactRelative}; shareable/workflow/sequence.json")
+$missingDirectory = Join-Path $script:RunRoot 'workflows/not-created'
+$missingFile = Join-Path $script:RunRoot 'live/not-created.png'
+$missingPathsAbsent = -not ((Test-Path -LiteralPath $missingDirectory) -or (Test-Path -LiteralPath $missingFile))
 $script:Invocations.Add([pscustomobject]@{
     index = 1; stage = 'identity'; command = 'fake-cli'; arguments = @(
         'identify', '--resource', $Resource, '--output', (Join-Path $script:RunRoot 'workflow/sequence.json'),
         '--output-dir', (Join-Path $script:RunRoot 'workflows/measure-log'),
         '--shared-output-dir', 'shareable/workflows/measure-log',
+        '--missing-output-dir', $missingDirectory, '--missing-output', $missingFile,
+        '--relative-missing-output', (Get-ArtifactRelativePath -BaseRoot $RepoRoot -Path $missingFile),
         '--report', 'shareable/report.json', '--summary', 'shareable/summary.md',
+        '--private-report', (Join-Path $script:RunRoot 'report.json'),
+        '--private-summary', (Join-Path $script:RunRoot 'summary.md'),
         '--label', 'shareable/workflows/measure-log-example', '--model', 'keysight-dsox4034a',
         '--value', '0.125', '--text', 'ordinary text')
     exit_code = 0; duration_ms = 123.4; success = $true
@@ -732,6 +739,7 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
     failed = $script:ShareableGenerationFailed
     default_debug = $defaultDebug
     explicit_debug = $explicitDebug
+    missing_paths_absent = $missingPathsAbsent
 } | ConvertTo-Json -Compress
 """.replace("@REPO@", str(REPO_ROOT)).replace("@RUNS@", str(tmp_path)).replace(
         "@RESULT@", result_status
@@ -742,6 +750,7 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
     assert payload["default_debug"] is False
     assert payload["explicit_debug"] is True
     assert payload["failed"] is False
+    assert payload["missing_paths_absent"] is True
     run_root = Path(payload["run_root"])
     files = {p.relative_to(run_root).as_posix() for p in run_root.rglob("*") if p.is_file()}
     report_raw = (run_root / "shareable/report.json").read_text(encoding="utf-8")
@@ -773,6 +782,7 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
     def argument_value(flag):
         return arguments[arguments.index(flag) + 1]
     for flag, value in (("--report", "shareable/report.json"), ("--summary", "shareable/summary.md"),
+                        ("--private-report", "shareable/report.json"), ("--private-summary", "shareable/summary.md"),
                         ("--label", "shareable/workflows/measure-log-example"),
                         ("--model", "keysight-dsox4034a"), ("--value", "0.125"), ("--text", "ordinary text")):
         assert argument_value(flag) == value
@@ -797,6 +807,13 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
         assert argument_value("--output") == "shareable/workflow/sequence.json"
         assert argument_value("--output-dir") == "shareable/workflows/measure-log"
         assert argument_value("--shared-output-dir") == "shareable/workflows/measure-log"
+        assert argument_value("--missing-output-dir") == "shareable/workflows/not-created"
+        assert argument_value("--missing-output") == "shareable/live/not-created.png"
+        assert argument_value("--relative-missing-output") == "<private-local-path>"
+        assert not (run_root / "private/workflows/not-created").exists()
+        assert not (run_root / "private/live").exists()
+        assert not (run_root / "shareable/workflows/not-created").exists()
+        assert not (run_root / "shareable/live").exists()
     else:
         assert files == {"shareable/report.json", "shareable/summary.md"}
         assert {p.relative_to(run_root).as_posix() for p in run_root.rglob("*") if p.is_dir()} == {"shareable"}
@@ -804,6 +821,10 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
         assert argument_value("--output") == "<artifact-not-retained>"
         assert argument_value("--output-dir") == "<artifact-not-retained>"
         assert argument_value("--shared-output-dir") == "<artifact-not-retained>"
+        for flag in ("--missing-output-dir", "--missing-output", "--relative-missing-output"):
+            assert argument_value(flag) == "<artifact-not-retained>"
+        assert "shareable/workflows/not-created" not in report_raw
+        assert "shareable/live/not-created.png" not in report_raw
         assert '"shareable/workflows/measure-log"' not in report_raw
         assert "shareable/workflow/sequence.json" not in report_raw + summary
         assert "retained in the CLI artifacts" not in report_raw + summary
