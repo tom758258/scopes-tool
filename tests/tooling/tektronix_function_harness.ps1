@@ -32,10 +32,12 @@ function Read-Host {
 }
 
 function Invoke-FakeTransport {
-    param([string]$Command, [string[]]$Options, [switch]$Simulate)
+    param([string]$Stage, [string]$Command, [string[]]$Options, [switch]$Simulate)
 
     # Fresh values match the independent fake CLI invocations; only explicit state persists.
     $scenario = $script:Scenario
+    $response = $scenario.stage_responses.PSObject.Properties[$Stage]
+    if ($null -ne $response) { return $response.Value }
     $property = $scenario.values.PSObject.Properties[$Command]
     $value = [pscustomobject]@{}
     if ($null -ne $property) {
@@ -236,7 +238,7 @@ $last = @($assignments | Where-Object { $_.Left.Extent.Text -eq '$stderr' })
 if ($first.Count -ne 1 -or $last.Count -ne 1) { throw "Invoke-Cli transport boundary changed" }
 $transport = @'
 $start = Get-Date
-    $fake = Invoke-FakeTransport -Command $Command -Options $Options -Simulate:$Simulate
+    $fake = Invoke-FakeTransport -Stage $Stage -Command $Command -Options $Options -Simulate:$Simulate
     $process = [pscustomobject]@{ ExitCode = $fake.ExitCode }
     if (-not $Simulate) { $script:HardwareTouched = $true }
     $timedOut = $false
@@ -247,6 +249,18 @@ $source = $runnerAst.Extent.Text
 $startOffset = $first[0].Extent.StartOffset - $runnerAst.Extent.StartOffset
 $endOffset = $last[0].Extent.EndOffset - $runnerAst.Extent.StartOffset
 $source = $source.Remove($startOffset, $endOffset - $startOffset).Insert($startOffset, $transport)
+
+if ($fixture.focused) {
+    # Exercise only the affected round trip and one unchanged restore case.
+    $firstCase = $source.IndexOf('            $ch = @("--channel", "1")')
+    $finalCase = $source.LastIndexOf('            try {')
+    if ($firstCase -lt 0 -or $finalCase -le $firstCase) { throw "Focused case boundary was not found" }
+    $source = $source.Remove($firstCase, $finalCase - $firstCase).Insert($firstCase, @'
+            Invoke-RoundTrip "save-pwd" "save-pwd" @() "path" "--path"
+            Invoke-RoundTrip "channel-scale" "channel-scale" @("--channel", "1") "volts_per_division" "--volts-per-division"
+
+'@)
+}
 
 $arguments = @($fixture.arguments)
 $parameterValues = @{}

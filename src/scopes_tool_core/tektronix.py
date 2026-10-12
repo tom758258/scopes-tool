@@ -1290,7 +1290,10 @@ class TektronixOscilloscope(Oscilloscope):
             x_increment=number("XINcr"), x_origin=number("XZEro"), x_reference=0,
             y_increment=number("YMUlt"), y_origin=number("YZEro"), y_reference=number("YOFf"),
         )
-        unit = validate_waveform_vertical_unit(_payload(raw["YUNit"], f"{root}:YUNit?").strip('"'))
+        unit = _payload(raw["YUNit"], f"{root}:YUNit?").strip('"')
+        if unit == "Volts":
+            unit = "V"
+        unit = validate_waveform_vertical_unit(unit)
         samples = tuple(int(value) for value in self.scpi.query_binary_values("CURVe?", datatype="B"))
         if not samples:
             raise WaveformResponseError("Waveform data query returned no samples.")

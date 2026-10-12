@@ -15,6 +15,17 @@ function Get-CliErrorDetail {
     return @($errorType, $errorMessage | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ": "
 }
 
+function Get-TektronixStandardEventValue {
+    param([Parameter(Mandatory = $true)][object]$Payload)
+
+    $value = $Payload.result.PSObject.Properties["value"]
+    if ($null -eq $value -or $value.Value -isnot [int] -or
+        $value.Value -lt 0 -or $value.Value -gt 255) {
+        throw "Missing or invalid native SESR value."
+    }
+    return $value.Value
+}
+
 function Assert-TektronixCommandStatus {
     param([Parameter(Mandatory = $true)][object]$Payload)
 
@@ -303,7 +314,7 @@ print(json.dumps({
             $status = "FAIL"
             $detail = $_.Exception.Message
         } finally {
-            if ($setAttempted) {
+            if ($setAttempted -and ($Command -ne "save-pwd" -or $status -eq "FAIL")) {
                 try {
                     $null = Invoke-Cli -Stage "$Name-restore" -Command $Command -Options $setArgs
                     $restored = Invoke-Cli -Stage "$Name-restored" -Command $Command `
@@ -531,14 +542,22 @@ print(json.dumps({
             [void](Confirm-OperatorContinuation -DetectedModel $detectedModel)
         }
         if (-not $script:StopAfterIdentity) {
-            Invoke-SimpleCase -Name "system-status-byte" -Command "system-status-byte" -Options @("--query")
             try {
-                $event = Invoke-Cli -Stage "system-standard-event" -Command "system-standard-event" -Options @("--query")
-                $bits = [int](Get-Readback -Payload $event -Field "value")
-                if (($bits -band 60) -ne 0) { throw "SESR error bits CME/EXE/DDE/QYE set: $bits" }
-                Add-Case -Name "system-standard-event" -Status "PASS" -Detail "No SESR error bits; raw value $bits"
-            } catch { Add-Case -Name "system-standard-event" -Status "FAIL" -Detail $_.Exception.Message }
-            Invoke-SimpleCase -Name "system-clear-status" -Command "system-clear-status"
+                $event = Invoke-Cli -Stage "pre-run-standard-event" -Command "system-standard-event" -Options @("--query")
+                $bits = Get-TektronixStandardEventValue -Payload $event
+                Add-Diagnostic -Name "pre-run-standard-event" -Message ($event.result | ConvertTo-Json -Depth 8 -Compress)
+                $null = Invoke-Cli -Stage "pre-run-clear-status" -Command "system-clear-status"
+                $event = Invoke-Cli -Stage "pre-run-standard-event-verify" -Command "system-standard-event" -Options @("--query")
+                $bits = Get-TektronixStandardEventValue -Payload $event
+                if (($bits -band 0x3C) -ne 0) { throw "SESR error bits CME/EXE/DDE/QYE remain after clear: $bits" }
+                Add-Case -Name "pre-run-clean-baseline" -Status "PASS" -Detail "No SESR error bits after clear; value $bits"
+            } catch {
+                Add-Case -Name "pre-run-clean-baseline" -Status "FAIL" -Detail $_.Exception.Message
+                $script:StopAfterIdentity = $true
+            }
+        }
+        if (-not $script:StopAfterIdentity) {
+            Invoke-SimpleCase -Name "system-status-byte" -Command "system-status-byte" -Options @("--query")
             Invoke-SimpleCase -Name "system-opc" -Command "system-opc" -Options @("--query")
 
             $ch = @("--channel", "1")
@@ -1138,7 +1157,7 @@ print(json.dumps({
 
             try {
                 $event = Invoke-Cli -Stage "final-standard-event" -Command "system-standard-event" -Options @("--query")
-                $bits = [int](Get-Readback -Payload $event -Field "value")
+                $bits = Get-TektronixStandardEventValue -Payload $event
                 if (($bits -band 60) -ne 0) { throw "Final SESR error bits CME/EXE/DDE/QYE set: $bits" }
                 Add-Case -Name "final-standard-event" -Status "PASS" -Detail "No final SESR error bits; raw value $bits"
             } catch { Add-Case -Name "final-standard-event" -Status "FAIL" -Detail $_.Exception.Message }

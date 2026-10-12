@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -859,18 +860,24 @@ def test_pulse_width_subset_roundtrip_and_range_rejection(model_id, qualifier, w
         assert scope.backend.history == before
 
 
-@pytest.mark.parametrize("model_id,root", [
-    ("tektronix-tbs2074", "WFMOutpre"), ("tektronix-tds2024b", "WFMPre"),
+@pytest.mark.parametrize("model_id,root,native_unit,expected_unit", [
+    ("tektronix-tbs2074", "WFMOutpre", '"V"', "V"),
+    ("tektronix-tds2024b", "WFMPre", '"V"', "V"),
+    ("tektronix-tbs1052b", "WFMPre", '"V"', "V"),
+    ("tektronix-tbs1052b", "WFMPre", '"Volts"', "V"),
+    ("tektronix-tbs1052b", "WFMPre", "Volts", "V"),
+    ("tektronix-tbs1052b", "WFMPre", '"A"', "A"),
 ])
-def test_byte_capture_uses_native_preamble_and_preserves_hidden_channel(model_id, root):
+def test_byte_capture_uses_native_preamble_and_preserves_hidden_channel(model_id, root, native_unit, expected_unit):
     responses = {"SELect:CH1?": "1", "SELect:CH2?": "0"}
     responses.update({f"{root}:{name}?": value for name, value in {
         "NR_Pt": "3", "XINcr": "2e-6", "XZEro": "-1e-3", "YMUlt": "0.01",
-        "YZEro": "1", "YOFf": "127.5", "YUNit": '"V"',
+        "YZEro": "1", "YOFf": "127.5", "YUNit": native_unit,
     }.items()})
     scope, backend = make_scope(model_id, responses)
     backend.binary_responses["CURVe?"] = (127, 128, 125)
     capture = scope.capture_waveform_byte(1, 1000)
+    assert capture.vertical_unit == expected_unit
     assert capture.raw_samples == (127, 128, 125)
     assert capture.time_s == pytest.approx((-0.001, -0.000998, -0.000996))
     assert capture.vertical_values == pytest.approx((0.995, 1.005, 0.975))
@@ -884,6 +891,51 @@ def test_byte_capture_uses_native_preamble_and_preserves_hidden_channel(model_id
         scope.capture_waveform_byte(1, 5000)
     with pytest.raises(ParameterValidationError):
         scope.capture_waveform_word(1)
+
+
+@pytest.mark.parametrize("native_unit", ['"U"', '"dB"', '"VA"'])
+def test_byte_capture_rejects_unsupported_unit_before_binary_transfer(native_unit):
+    responses = {"SELect:CH1?": "1"}
+    responses.update({f"WFMPre:{name}?": value for name, value in {
+        "NR_Pt": "3", "XINcr": "2e-6", "XZEro": "-1e-3", "YMUlt": "0.01",
+        "YZEro": "1", "YOFf": "127.5", "YUNit": native_unit,
+    }.items()})
+    scope, backend = make_scope("tektronix-tbs1052b", responses)
+    backend.binary_responses["CURVe?"] = (127, 128, 125)
+    with pytest.raises(ParameterValidationError, match="waveform vertical unit must be V or A"):
+        scope.capture_waveform_byte(1, 1000)
+    assert "CURVe?" not in backend.history
+    assert backend.binary_query_kwargs == []
+
+
+@pytest.mark.parametrize("runner", ["capture", "capture-batch"])
+def test_capture_runners_accept_volts_through_tektronix_core(tmp_path, runner):
+    from scopes_tool_core.capture_batch import run_capture_batch
+    from scopes_tool_core.operation_types import CaptureBatchRequest, CaptureRequest
+    from scopes_tool_core.operations import run_capture
+
+    responses = {"SELect:CH1?": "1", "DESE?": "60", "ALLEv?": '0,"No events"'}
+    responses.update({f"WFMPre:{name}?": value for name, value in {
+        "NR_Pt": "3", "XINcr": "2e-6", "XZEro": "-1e-3", "YMUlt": "0.01",
+        "YZEro": "1", "YOFf": "127.5", "YUNit": '"Volts"',
+    }.items()})
+    scope, backend = make_scope("tektronix-tbs1052b", responses)
+    backend.binary_responses["CURVe?"] = (127, 128, 125)
+    if runner == "capture":
+        result = run_capture(scope, "FAKE::SCOPE", CaptureRequest(
+            [1], 1000, csv_path=tmp_path / "wave.csv", meta_path=tmp_path / "wave_meta.json",
+        ))
+    else:
+        result = run_capture_batch(scope, "FAKE::SCOPE", CaptureBatchRequest(
+            [1], requested_count=1, output_dir=tmp_path,
+        ))
+        assert result.result["status"] == "completed"
+        assert result.result["completed_count"] == 1
+    assert result.exit_code == 0
+    assert backend.history.count("CURVe?") == 1
+    assert backend.binary_query_kwargs == [{"datatype": "B"}]
+    metadata = next(file for file in result.files if file["kind"] == "metadata")
+    assert json.loads(Path(metadata["path"]).read_text(encoding="utf-8"))["vertical_unit"] == "V"
 
 
 @pytest.mark.parametrize("forced", (False, True))

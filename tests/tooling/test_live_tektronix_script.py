@@ -172,6 +172,8 @@ def fake_run(
     core_supported_operations: tuple[str, ...] | None = None,
     confirmation: str = "enter", runt_channel: int = 1,
     holdoff_seconds: float = 0.000001, debug: bool = True,
+    focused: bool = False, stage_responses: dict | None = None,
+    save_pwd_path: str = "C:/scope",
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074", 4, "TBS2000"),
@@ -243,7 +245,7 @@ def fake_run(
         "trigger-holdoff": {"seconds": holdoff_seconds},
         "trigger-edge-level": {"level_volts": 0.0},
         "trigger-edge": {"source_channel": 1, "level_volts": 0.0, "slope": "positive"},
-        "save-pwd": {"path": "C:/scope"},
+        "save-pwd": {"path": save_pwd_path},
         "save-waveform": {"operation_complete": True},
         "display-vectors": {"value": vectors_on},
         "display-persistence": {"mode": "minimum", "seconds": None},
@@ -390,6 +392,7 @@ def fake_run(
             "screenshot_bytes": list(screenshot_bytes),
             "screenshot_format": "PNG" if target == TARGETS[0] else "BMP",
             "arguments": arguments,
+            "focused": focused, "stage_responses": stage_responses or {},
         }), encoding="utf-8")
     result = run_script(
         "-ScriptPath", str(SCRIPT), "-FixturePath", str(fixture),
@@ -1217,3 +1220,150 @@ def test_tbs2074_first_gen_runt_channel_four_and_20ns_holdoff_are_accepted(tmp_p
     assert cases["trigger-runt"]["status"] == "PASS", cases["trigger-runt"]
     assert cases["trigger-holdoff"]["status"] == "PASS", cases["trigger-holdoff"]
     assert "foreach ($candidate in @(1, 2, 3, 4))" in TEXT
+
+
+VISA_FAILURE = {
+    "ExitCode": 1,
+    "Payload": {"ok": False, "error": {"type": "VisaIOError", "message": "Injected I/O failure"}},
+}
+
+
+@requires_windows
+@pytest.mark.parametrize("initial,verified", [(0, 0), (4, 0), (65, 65)])
+def test_cli_clean_baseline_preserves_history(tmp_path: Path, initial: int, verified: int) -> None:
+    responses = {
+        stage: {"ExitCode": 0, "Payload": {"ok": True, "result": {"value": value, "raw": str(value)}}}
+        for stage, value in (("pre-run-standard-event", initial), ("pre-run-standard-event-verify", verified))
+    }
+    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses=responses)
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["pre-run-clean-baseline"]["status"] == "PASS"
+    assert cases["save-pwd"]["status"] == "PASS"
+    diagnostic = " ".join(report["diagnostics"]["pre-run-standard-event"])
+    assert f'"value":{initial}' in diagnostic
+    assert f'"raw":"{initial}"' in diagnostic
+    stages = [inv["stage"] for inv in report["invocations"]]
+    assert stages.index("identify") < stages.index("pre-run-standard-event")
+    assert stages.index("pre-run-standard-event") < stages.index("pre-run-clear-status")
+    assert stages.index("pre-run-clear-status") < stages.index("pre-run-standard-event-verify")
+    assert stages.index("pre-run-standard-event-verify") < stages.index("save-pwd-same-value")
+    assert result.stdout.index("operator-confirmation") < result.stdout.index("pre-run-clean-baseline")
+    assert sum(inv["arguments"][0] == "system-clear-status" for inv in report["invocations"]) == 1
+
+
+@requires_windows
+@pytest.mark.parametrize("stage,response", [
+    ("pre-run-standard-event", VISA_FAILURE),
+    ("pre-run-clear-status", VISA_FAILURE),
+    ("pre-run-standard-event-verify", VISA_FAILURE),
+    ("pre-run-standard-event-verify", {"ExitCode": 0, "Payload": {"ok": True, "result": {"value": 4}}}),
+    ("pre-run-standard-event-verify", {"ExitCode": 0, "Payload": {"ok": True, "result": {}}}),
+])
+def test_cli_clean_baseline_failure_blocks_setters(tmp_path: Path, stage: str, response: dict) -> None:
+    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={stage: response})
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["pre-run-clean-baseline"]["status"] == "FAIL"
+    assert "save-pwd" not in cases
+    assert "channel-scale" not in cases
+    stages = [inv["stage"] for inv in report["invocations"]]
+    assert stages[-1] == stage
+    if response["ExitCode"]:
+        assert "VisaIOError: Injected I/O failure" in cases["pre-run-clean-baseline"]["detail"]
+
+
+@requires_windows
+@pytest.mark.parametrize("gate", ["identify", "model", "confirmation"])
+def test_cli_clean_baseline_respects_safety_gates(tmp_path: Path, gate: str) -> None:
+    result, report = fake_run(
+        tmp_path, TARGETS[2], focused=True,
+        stage_responses={"identify": VISA_FAILURE} if gate == "identify" else {},
+        live_model=TARGETS[0] if gate == "model" else None,
+        confirmation="decline" if gate == "confirmation" else "enter",
+    )
+    assert result.returncode != 0
+    assert [inv["arguments"][0] for inv in report["invocations"]] == ["identify", "identify"]
+
+
+@requires_windows
+@pytest.mark.parametrize("failure", ["none", "setter", "readback", "restore"])
+def test_save_pwd_restores_only_after_failure(tmp_path: Path, failure: str) -> None:
+    responses = {}
+    if failure in ("setter", "restore"):
+        responses["save-pwd-same-value"] = VISA_FAILURE
+    if failure == "readback":
+        responses["save-pwd-after"] = {"ExitCode": 0, "Payload": {"ok": True, "result": {"path": "/other/"}}}
+    if failure == "restore":
+        responses["save-pwd-restore"] = {
+            "ExitCode": 1, "Payload": {"ok": False, "error": {"type": "VisaIOError", "message": "Restore I/O failure"}},
+        }
+    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses=responses, save_pwd_path="/usb0/")
+    case = next(case for case in report["cases"] if case["name"] == "save-pwd")
+    assert case["status"] == ("PASS" if failure == "none" else "FAIL")
+    assert (result.returncode == 0) == (failure == "none")
+    calls = [inv for inv in report["invocations"] if inv["arguments"][0] == "save-pwd"]
+    stages = [inv["stage"] for inv in calls]
+    if failure == "none":
+        assert stages == ["save-pwd-before", "save-pwd-same-value", "save-pwd-after"]
+        assert sum("--path" in inv["arguments"] for inv in calls) == 1
+    else:
+        assert "save-pwd-restore" in stages
+        if failure == "readback":
+            assert "Readback differs" in case["detail"]
+        else:
+            assert "save-pwd-same-value failed" in case["detail"]
+            assert "Injected I/O failure" in case["detail"]
+        if failure == "restore":
+            assert "restore failed" in case["detail"]
+            assert "Restore I/O failure" in case["detail"]
+        else:
+            assert stages[-1] == "save-pwd-restored"
+    # Other round trips still restore and verify even after successful readback.
+    scale_stages = [inv["stage"] for inv in report["invocations"] if inv["arguments"][0] == "channel-scale"]
+    assert scale_stages == ["channel-scale-before", "channel-scale-same-value", "channel-scale-after", "channel-scale-restore", "channel-scale-restored"]
+
+
+@requires_windows
+@pytest.mark.parametrize("path", ["", 'bad"path', "bad;path", "bad\npath"])
+def test_save_pwd_unsafe_original_does_not_write(tmp_path: Path, path: str) -> None:
+    result, report = fake_run(tmp_path, TARGETS[2], focused=True, save_pwd_path=path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    case = next(case for case in report["cases"] if case["name"] == "save-pwd")
+    assert case["status"] == "N/A"
+    assert [inv["stage"] for inv in report["invocations"] if inv["arguments"][0] == "save-pwd"] == ["save-pwd-before"]
+
+
+@requires_windows
+def test_save_pwd_failed_query_does_not_restore(tmp_path: Path) -> None:
+    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={"save-pwd-before": VISA_FAILURE})
+    assert result.returncode != 0
+    case = next(case for case in report["cases"] if case["name"] == "save-pwd")
+    assert case["status"] == "FAIL"
+    assert "Injected I/O failure" in case["detail"]
+    assert [inv["stage"] for inv in report["invocations"] if inv["arguments"][0] == "save-pwd"] == ["save-pwd-before"]
+
+
+@requires_windows
+@pytest.mark.parametrize("value", [0, 65, 4, 8, 16, 32, None])
+def test_cli_final_native_status(tmp_path: Path, value: int | None) -> None:
+    response = {"ExitCode": 0, "Payload": {"ok": True, "result": {"value": value}}}
+    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={"final-standard-event": response})
+    case = next(case for case in report["cases"] if case["name"] == "final-standard-event")
+    clean = value in (0, 65)
+    assert case["status"] == ("PASS" if clean else "FAIL")
+    assert (result.returncode == 0) == clean
+    assert report["invocations"][-1]["stage"] == "final-standard-event"
+
+
+@requires_windows
+def test_cli_final_io_failure_preserves_case_failure(tmp_path: Path) -> None:
+    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={
+        "save-pwd-same-value": VISA_FAILURE, "final-standard-event": VISA_FAILURE,
+    })
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["save-pwd"]["status"] == "FAIL"
+    assert "save-pwd-same-value failed" in cases["save-pwd"]["detail"]
+    assert cases["final-standard-event"]["status"] == "FAIL"
+    assert "VisaIOError" in cases["final-standard-event"]["detail"]

@@ -868,9 +868,7 @@ try {
     exit 1
 }
 
-if ($script:IsTektronix) {
-    Add-CaseResult -Name "stale-error-drain" -Status "N/A" -Detail "Native preflight belongs to each Core workflow; no normalized error queue is read or cleared by the runner."
-} else {
+if (-not $script:IsTektronix) {
 try {
     $initialDrain = Get-ErrorDrain -Stage "stale-error-drain"
     if ($initialDrain.Errors.Count -gt 0) {
@@ -926,7 +924,43 @@ if (-not $script:IsTektronix) {
 Write-Host ""
 Write-Host "Press Enter only after the required setup above is ready."
 Write-Host "Ctrl+C to cancel."
-[void](Read-Host)
+if ($script:IsTektronix) {
+    try {
+        $confirmation = Read-Host
+        if ($confirmation -isnot [string] -or $confirmation -cne "") {
+            throw "Operator confirmation requires explicit empty input (press Enter); workflow cases were not started."
+        }
+        Add-CaseResult -Name "operator-confirmation" -Status "PASS"
+    } catch {
+        Add-CaseResult -Name "operator-confirmation" -Status "FAIL" -Detail $_.Exception.Message
+        Write-Host ""
+        Write-Host "FAIL  Workflow live validation"
+        Write-Host "No workflow cases were run because operator confirmation failed."
+        Write-Host "[live][workflow] artifacts: $($script:RunDirectory)"
+        Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
+        exit 1
+    }
+} else {
+    [void](Read-Host)
+}
+
+if ($script:IsTektronix) {
+    try {
+        $event = Invoke-LiveCli -Stage "pre-run-standard-event" -Command "system-standard-event" -Arguments @("--query")
+        $bits = Get-TektronixStandardEventValue -Payload $event
+        Add-Diagnostic -Name "pre-run-standard-event" -Message ($event.result | ConvertTo-Json -Depth 8 -Compress)
+        Invoke-LiveCli -Stage "pre-run-clear-status" -Command "system-clear-status" | Out-Null
+        $event = Invoke-LiveCli -Stage "pre-run-standard-event-verify" -Command "system-standard-event" -Arguments @("--query")
+        $bits = Get-TektronixStandardEventValue -Payload $event
+        if (($bits -band 0x3C) -ne 0) { throw "SESR error bits CME/EXE/DDE/QYE remain after clear: $bits" }
+        Add-CaseResult -Name "pre-run-clean-baseline" -Status "PASS" -Detail "No SESR error bits after clear; value $bits"
+    } catch {
+        $script:FunctionalFailed = $true
+        Add-CaseResult -Name "pre-run-clean-baseline" -Status "FAIL" -Detail $_.Exception.Message
+        Complete-LiveValidationRun -Kind 'scopes-tool-live-workflow-check' -Domain 'workflow' -Result "FAIL" -DebugArtifacts:$DebugArtifacts
+        exit 1
+    }
+}
 
 $wasRunning = $false
 $snapshotTaken = $false
@@ -1270,7 +1304,15 @@ if ($snapshotTaken) {
 }
 
 if ($script:IsTektronix) {
-    Add-CaseResult -Name "final-error-queue" -Status "N/A" -Detail "Native workflow checkpoints and cleanup command status were checked; no normalized queue or independent STOPPED readback is available."
+    try {
+        $event = Invoke-LiveCli -Stage "final-standard-event" -Command "system-standard-event" -Arguments @("--query")
+        $bits = Get-TektronixStandardEventValue -Payload $event
+        if (($bits -band 0x3C) -ne 0) { throw "Final SESR error bits CME/EXE/DDE/QYE set: $bits" }
+        Add-CaseResult -Name "final-standard-event" -Status "PASS" -Detail "No final SESR error bits; value $bits"
+    } catch {
+        $script:FunctionalFailed = $true
+        Add-CaseResult -Name "final-standard-event" -Status "FAIL" -Detail $_.Exception.Message
+    }
 } else {
 try {
     $finalDrain = Get-ErrorDrain -Stage "final-error-queue"
