@@ -56,6 +56,98 @@ def run_script(*arguments: str, env: dict[str, str] | None = None, script: Path 
     )
 
 
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("waveform_format,expected_status", [("internal", "N/A"), ("csv", "PASS")])
+def test_empty_label_and_waveform_format_roundtrip(
+    tmp_path: Path, waveform_format: str, expected_status: str,
+) -> None:
+    # Run only these two round trips, using the production process transport
+    # and a fake CLI that rejects missing empty arguments or unsupported setters.
+    package = tmp_path / "scopes_tool_cli"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "cli.py").write_text(
+        "import json, sys\n"
+        "command = sys.argv[1]\n"
+        "if command == 'channel-label':\n"
+        " if '--query' not in sys.argv:\n"
+        "  assert sys.argv[sys.argv.index('--text') + 1] == ''\n"
+        " result = {'text': ''}\n"
+        "elif command == 'save-waveform-format':\n"
+        " if '--query' not in sys.argv:\n"
+        "  assert sys.argv[sys.argv.index('--format') + 1] == 'csv'\n"
+        f" result = {{'format': {waveform_format!r}}}\n"
+        "else:\n"
+        " raise AssertionError(command)\n"
+        "print(json.dumps({'ok': True, 'result': result}))\n",
+        encoding="utf-8",
+    )
+    harness = tmp_path / "roundtrip.ps1"
+    harness.write_text(
+        r'''param([string]$RepoRoot, [string]$PythonPath, [string]$RunRoot)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+. (Join-Path $RepoRoot "scripts/_validation_helpers.ps1")
+. (Join-Path $RepoRoot "scripts/_live_tektronix_helpers.ps1")
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    (Join-Path $RepoRoot "scripts/_live_tektronix_helpers.ps1"), [ref]$tokens, [ref]$errors
+)
+if ($errors.Count) { throw $errors[0].Message }
+foreach ($name in @("Invoke-Cli", "Get-Readback", "Test-ReadbackEqual", "Invoke-RoundTrip")) {
+    $function = $ast.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
+    }, $true)
+    if ($null -eq $function) { throw "Missing function $name" }
+    Invoke-Expression $function.Extent.Text
+}
+$pythonPath = $PythonPath
+$DebugArtifacts = $false
+$script:RunPaths = [pscustomobject]@{ Private = $RunRoot }
+$script:LiveConnectionArguments = @()
+$script:CliInvocationIndex = 0
+$script:HardwareTouched = $false
+$script:Invocations = New-Object System.Collections.Generic.List[object]
+$script:Cases = New-Object System.Collections.Generic.List[object]
+function Add-Case {
+    param([string]$Name, [string]$Status, [string]$Detail)
+    $script:Cases.Add([pscustomobject]@{ name = $Name; status = $Status; detail = $Detail })
+}
+Invoke-RoundTrip "channel-label" "channel-label" @("--channel", "1") "text" "--text"
+Invoke-RoundTrip "save-waveform-format" "save-waveform-format" @() "format" "--format" @("csv")
+@{ cases = $script:Cases.ToArray(); invocations = $script:Invocations.ToArray() } | ConvertTo-Json -Depth 20 -Compress
+''', encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(tmp_path)
+    result = run_script(
+        "-RepoRoot", str(ROOT), "-PythonPath", sys.executable, "-RunRoot", str(tmp_path),
+        script=harness, env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout)
+    label, waveform = report["cases"]
+    assert label["status"] == "PASS", label
+    assert waveform["status"] == expected_status, waveform
+    invocations = report["invocations"]
+    label_sets = [inv for inv in invocations if inv["stage"] in {"channel-label-same-value", "channel-label-restore"}]
+    assert len(label_sets) == 2
+    for invocation in label_sets:
+        arguments = invocation["arguments"]
+        assert arguments[arguments.index("--text") + 1] == ""
+        assert invocation["exit_code"] == 0
+    waveform_invocations = [inv for inv in invocations if inv["arguments"][0] == "save-waveform-format"]
+    if waveform_format == "internal":
+        assert "outside supported acceptance precondition" in waveform["detail"]
+        assert [inv["stage"] for inv in waveform_invocations] == ["save-waveform-format-before"]
+        assert all("--format" not in inv["arguments"] for inv in waveform_invocations)
+    else:
+        assert len(waveform_invocations) == 5
+
+
 def fake_workflow_run(
     tmp_path: Path, target: str, scenario: str,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:

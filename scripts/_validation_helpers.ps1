@@ -252,7 +252,7 @@ function ConvertTo-ProcessArgument {
 }
 
 function Join-ProcessArguments {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Arguments)
     return (($Arguments | ForEach-Object { ConvertTo-ProcessArgument -Argument $_ }) -join " ")
 }
 

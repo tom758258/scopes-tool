@@ -85,6 +85,61 @@ def make_scope(model_id="tektronix-tbs2074", responses=None):
     return scope, backend
 
 
+@pytest.mark.parametrize("response,expected", [
+    ("TWENTY", True), ("TWE", True), ("FULL", False), ("FUL", False),
+    ("20.0000E+6", True), ("70.0000E+6", False),
+    ("20000000", True), ("70000000", False),
+    (":CH1:BANDWIDTH 20.0000E+6", True),
+    (":CH1:BANDWIDTH 70.0000E+6", False),
+    ("20000001", True), ("70000001", False),
+])
+def test_tbs2074_bandwidth_readback(response, expected):
+    scope, backend = make_scope(responses={"CH1:BANdwidth?": response})
+    assert scope.query_channel_bandwidth_limit(1) is expected
+    assert backend.history == ["*IDN?", "CH1:BANdwidth?"]
+
+
+@pytest.mark.parametrize("response", ["UNKNOWN", "21.0000E+6", "0", "NaN", "inf"])
+def test_tbs2074_bandwidth_unknown_readback_fails(response):
+    scope, _ = make_scope(responses={"CH1:BANdwidth?": response})
+    with pytest.raises(OscilloscopeError, match="Invalid Tek bandwidth response"):
+        scope.query_channel_bandwidth_limit(1)
+
+
+@pytest.mark.parametrize("model_id", ["tektronix-tds2024b", "tektronix-tbs1052b"])
+@pytest.mark.parametrize("response,expected", [("ON", True), ("OFF", False), ("1", True), ("0", False)])
+def test_other_tek_bandwidth_readback_unchanged(model_id, response, expected):
+    scope, _ = make_scope(model_id, {"CH1:BANdwidth?": response})
+    assert scope.query_channel_bandwidth_limit(1) is expected
+
+
+@pytest.mark.parametrize("model_id", ["tektronix-tds2024b", "tektronix-tbs1052b"])
+def test_other_tek_bandwidth_does_not_accept_tbs2074_numeric_readback(model_id):
+    scope, _ = make_scope(model_id, {"CH1:BANdwidth?": "70.0000E+6"})
+    with pytest.raises(OscilloscopeError, match="Invalid Tek bandwidth response"):
+        scope.query_channel_bandwidth_limit(1)
+
+
+@pytest.mark.parametrize("response,expected", [
+    ("INTERNAL", "internal"), ("INTERN", "internal"),
+    ("SPREADSheet", "csv"), ("SPREADS", "csv"),
+])
+def test_tbs2074_save_waveform_format_readback(response, expected):
+    scope, backend = make_scope(responses={"SAVe:WAVEform:FILEFormat?": response})
+    state = scope.query_save_waveform_format()
+    assert state.to_json() == {"format": expected, "raw_response": response}
+    assert backend.history == ["*IDN?", "SAVe:WAVEform:FILEFormat?"]
+
+
+def test_tbs2074_save_waveform_format_setter_remains_csv_only():
+    scope, backend = make_scope()
+    with pytest.raises(ParameterValidationError, match="save waveform format"):
+        scope.configure_save_waveform_format("internal")
+    assert backend.history == ["*IDN?"]
+    scope.configure_save_waveform_format("csv")
+    assert backend.history[-1] == "SAVe:WAVEform:FILEFormat SPREADSheet"
+
+
 @pytest.mark.parametrize("model_id,model,channels", MODELS)
 def test_registered_identity_driver_and_channels(model_id, model, channels):
     physical = resolve_physical_model_identity("TEKTRONIX", model)

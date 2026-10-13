@@ -8,7 +8,57 @@ import scopes_tool_core.identity as identity_module
 from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.identity import PhysicalModelInfo
 from scopes_tool_core.scope import Oscilloscope
+from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
 from scopes_tool_core.visa_backend import VisaResourceListing
+
+
+@pytest.mark.parametrize("command,options,query,response,field,expected", [
+    ("channel-bandwidth-limit", ["--channel", "1"], "CH1:BANdwidth?", "20.0000E+6", "bandwidth_limit", True),
+    ("channel-bandwidth-limit", ["--channel", "1"], "CH1:BANdwidth?", "70.0000E+6", "bandwidth_limit", False),
+    ("save-waveform-format", [], "SAVe:WAVEform:FILEFormat?", "INTERNAL", "format", "internal"),
+    ("save-waveform-format", [], "SAVe:WAVEform:FILEFormat?", "INTERN", "format", "internal"),
+    ("save-waveform-format", [], "SAVe:WAVEform:FILEFormat?", "SPREADSheet", "format", "csv"),
+])
+def test_tbs2074_cli_readbacks(monkeypatch, capsys, command, options, query, response, field, expected):
+    original_query = TektronixSimulatorBackend.query
+
+    def readback(backend, scpi):
+        if scpi == query:
+            backend.history.append(scpi)
+            return response
+        return original_query(backend, scpi)
+
+    monkeypatch.setattr(TektronixSimulatorBackend, "query", readback)
+    assert cli.main([command, *options, "--query", "--simulate", "--model", "tektronix-tbs2074", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["result"][field] == expected
+    assert payload["scpi"]["sent"] == ["*IDN?", query, "*ESR?"]
+
+
+def test_tbs2074_cli_channel_summary_numeric_bandwidth(monkeypatch, capsys):
+    original_query = TektronixSimulatorBackend.query
+
+    def readback(backend, scpi):
+        if scpi in {f"CH{channel}:BANdwidth?" for channel in range(1, 5)}:
+            backend.history.append(scpi)
+            return "20.0000E+6" if scpi.startswith("CH1:") else "70.0000E+6"
+        return original_query(backend, scpi)
+
+    monkeypatch.setattr(TektronixSimulatorBackend, "query", readback)
+    assert cli.main(["channel-summary", "--simulate", "--model", "tektronix-tbs2074", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert [channel["bandwidth_limit"] for channel in payload["result"]["channels"]] == [True, False, False, False]
+    assert all(command.endswith("?") for command in payload["scpi"]["sent"])
+
+
+def test_tbs2074_cli_save_waveform_format_rejects_internal(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["save-waveform-format", "--format", "internal", "--simulate", "--model", "tektronix-tbs2074", "--json"])
+    assert exc.value.code == 2
+    captured = capsys.readouterr()
+    assert "internal" in captured.err
 
 
 def _register_synthetic_model(monkeypatch, *, driver_id):

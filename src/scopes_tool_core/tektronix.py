@@ -759,6 +759,16 @@ class TektronixOscilloscope(Oscilloscope):
         try:
             return valid[value.upper()]
         except KeyError as exc:
+            if self.capabilities.physical_model_id == "tektronix-tbs2074":
+                try:
+                    bandwidth = float(value)
+                except ValueError:
+                    pass
+                else:
+                    if math.isclose(bandwidth, 20e6, rel_tol=1e-6):
+                        return True
+                    if math.isclose(bandwidth, 70e6, rel_tol=1e-6):
+                        return False
             raise OscilloscopeError(f"Invalid Tek bandwidth response: {value!r}") from exc
 
     def set_channel_invert(self, channel: int, enabled: bool) -> None:
@@ -1507,7 +1517,10 @@ class TektronixOscilloscope(Oscilloscope):
     def query_save_waveform_format(self) -> SaveWaveformFormatState:
         self._require_tbs2000("save-waveform-format")
         value, raw = self._query("SAVe:WAVEform:FILEFormat?")
-        return SaveWaveformFormatState(_choice(value, {"SPREADS": "csv", "SPREADSHEET": "csv"}, "waveform format response"), raw)
+        return SaveWaveformFormatState(_choice(value, {
+            "SPREADS": "csv", "SPREADSHEET": "csv",
+            "INTERNAL": "internal", "INTERN": "internal",
+        }, "waveform format response"), raw)
 
     def capture_screenshot(self, *, options: ScreenshotOptions = ScreenshotOptions(), background: str = "black") -> ScreenshotCapture:
         options = normalize_screenshot_options(options)
