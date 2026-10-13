@@ -9,6 +9,7 @@ import pytest
 from tests.tooling._live_script_test_support import REPO_ROOT
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_wgen_applicability_and_runtime_failure(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -597,6 +598,7 @@ function Invoke-Scenario {
     assert runtime_failure["model_commands"] == []
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_workflow_acquisition_run_precondition(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-workflow-check.ps1"
@@ -734,6 +736,7 @@ $stoppedCalls = @($script:Invocations | ForEach-Object {
     assert result["stopped_calls"][1]["arguments"] == ["--query"]
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_timebase_reference_restore_preserves_primary_failure(
     tmp_path: Path,
@@ -914,6 +917,7 @@ function Invoke-Scenario {
     ]
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_cursor_lifecycle_preserves_primary_failure_during_cleanup(
     tmp_path: Path,
@@ -1130,6 +1134,7 @@ function Invoke-Scenario {
     ]
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_fft_accepts_documented_hann_readback_and_rejects_other_window(
     tmp_path: Path,
@@ -1283,6 +1288,7 @@ Invoke-Expression $caseBlock
     assert result["failure_drain_calls"] == 1
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_live_validator_holdoff_series_gating(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -1466,6 +1472,7 @@ Invoke-Expression $caseBlock
     assert result["non_4000x_drain_calls"] == 0
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_channel_vertical_rejects_payload_self_oracle(
     tmp_path: Path,
@@ -1675,6 +1682,7 @@ Invoke-Expression $caseBlock
     assert "channel-vertical-scale-query" in result["failure_stages"]
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_acquisition_queries_validate_payloads_and_scpi_history(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -1900,6 +1908,7 @@ Invoke-Expression $caseBlock
     }
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_diagnostic_drain_ignores_empty_error_collection(
     tmp_path: Path,
@@ -1984,6 +1993,7 @@ Drain-AfterFailure -Stage "empty-error-drain" -CaseName "cleanup"
     assert result["diagnostics"] == []
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_search_basic_and_event_execution(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -2301,6 +2311,7 @@ Run-SearchSection -Identity $identity4000x
     assert data["fail_functional_failed"] is True
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_annotation_execution_and_cleanup(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -2540,6 +2551,7 @@ $nonRestorableRestoreInvocations = @($script:Invocations | ForEach-Object { $_ }
     assert restore_commands[0]["arguments"] == ["--slot", "1", "--off", "--clear"]
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     ("series", "installed_options", "expected_transform_status", "expected_transform_operation", "expected_filter_status", "expected_visualization_status"),

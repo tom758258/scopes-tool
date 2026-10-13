@@ -204,6 +204,7 @@ def test_pair_measurements_remain_strict() -> None:
         assert "Invoke-StrictPairMeasurement" in block
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_pair_readiness_polling_retries_sentinels_and_fails_fast_on_system_error(
     tmp_path: Path,
@@ -368,6 +369,7 @@ $systemErrorSleeps = $script:SleepCalls
     assert result["system_error_sleeps"] == 0
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_single_measurement_invocation_acceptance_semantics(tmp_path: Path) -> None:
     harness_path = tmp_path / "measurement-acceptance-harness.ps1"

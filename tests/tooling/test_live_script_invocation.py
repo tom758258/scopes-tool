@@ -10,6 +10,7 @@ import pytest
 from tests.tooling._live_script_test_support import REPO_ROOT, requires_windows
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     "script_path",
@@ -271,6 +272,7 @@ $resultOutput | ConvertTo-Json -Depth 8 -Compress
         assert result["cli_invalid_stdout_artifact_exists"] is debug
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_live_cli_check_invoke_cli_raw_uses_native_invocation() -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -303,6 +305,7 @@ def test_live_cli_check_invoke_cli_raw_uses_native_invocation() -> None:
         assert "Invoke-CapturedCommand" in other_script
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
 def test_get_error_drain_normalizes_entries_as_arrays(
@@ -439,6 +442,7 @@ $multipleEntries = Get-ErrorDrain -Stage "multiple-entries"
     assert result["multiple_terminated"] is True
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     "script_path",
@@ -523,6 +527,7 @@ Write-DrainErrors -Errors @() -CaseName "dc"
     assert result["diagnostic_count"] == 0
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     "script_path",
@@ -696,6 +701,7 @@ $success = Invoke-Cli -Stage "zero-system-error-success" `
     assert result["success_ok"] is True
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
 def test_live_summary_preserves_results_and_diagnostics(
@@ -998,6 +1004,7 @@ Write-Summary -Result "FAIL"
         assert "system error -241: option not installed" in skip_summary
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("script_path", tuple(
     REPO_ROOT / "scripts" / f"live-{domain}-check.ps1"
@@ -1105,6 +1112,7 @@ sys.exit(9)
     assert all("--live" not in arguments for arguments in invocations)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("script_path", (REPO_ROOT / "scripts" / "live-cli-check.ps1",), ids=lambda path: path.stem)
 @pytest.mark.parametrize(

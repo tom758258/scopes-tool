@@ -108,6 +108,7 @@ def successful_single_target_run():
         shutil.rmtree(output_root, ignore_errors=True)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_resolve_validation_targets_selects_canonical_models() -> None:
     body = (
@@ -130,6 +131,7 @@ def test_resolve_validation_targets_selects_canonical_models() -> None:
         assert model_id in payload["invalid_error"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_script_rejects_noncanonical_target_with_usage_error() -> None:
     completed = run_preflight("-Target", "DSOX3024A")
@@ -143,6 +145,7 @@ def test_script_rejects_noncanonical_target_with_usage_error() -> None:
     assert "Unsupported target 'tektronix-tbs2074b'" in completed.stderr
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_list_targets_prints_registered_models() -> None:
     completed = run_preflight("-ListTargets")
@@ -150,6 +153,7 @@ def test_list_targets_prints_registered_models() -> None:
     assert completed.stdout.splitlines() == CANONICAL_TARGETS
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 class TestSuccessfulSingleTargetPreflight:
     def test_exit_code_and_report_contract(
@@ -275,6 +279,7 @@ class TestSuccessfulSingleTargetPreflight:
         assert (run_dir / artifact_paths["summary"]).is_file()
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_preflight_defaults_to_two_minimal_reports() -> None:
     output_root = REPO_ROOT / ".tmp_tests" / f"preflight_cli_tests_{uuid.uuid4().hex[:8]}"
@@ -298,6 +303,7 @@ def test_preflight_defaults_to_two_minimal_reports() -> None:
         shutil.rmtree(output_root, ignore_errors=True)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_failed_command_preserves_artifacts_and_fails_preflight(tmp_path: Path) -> None:
     stub = tmp_path / "failing_python.cmd"
@@ -346,6 +352,7 @@ def test_failed_command_preserves_artifacts_and_fails_preflight(tmp_path: Path) 
         shutil.rmtree(output_root, ignore_errors=True)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_target_all_runs_every_registered_model() -> None:
     output_root = (
@@ -378,6 +385,7 @@ def test_target_all_runs_every_registered_model() -> None:
         shutil.rmtree(output_root, ignore_errors=True)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
 def test_shareable_generation_failure_fails_preflight(tmp_path: Path, debug: bool) -> None:
@@ -453,6 +461,7 @@ def test_shareable_generation_failure_fails_preflight(tmp_path: Path, debug: boo
         shutil.rmtree(output_root, ignore_errors=True)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_shareable_artifacts_redact_sensitive_values(tmp_path: Path) -> None:
     resource = "USB0::1::2::SYNTH12345::INSTR"

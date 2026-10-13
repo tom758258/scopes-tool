@@ -191,6 +191,13 @@ def test_workflow_wires_event_range_with_full_history() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
     assert "permissions:\n  contents: read" in workflow
+    assert workflow.count("python scripts/check_changed_whitespace.py") == 1
+    assert workflow.count("python scripts/check_text_hygiene.py") == 1
+    workflow = workflow.split("  quality-webui:\n", 1)[1].split("\n  pytest-linux:", 1)[0]
+    assert "name: Code quality & WebUI" in workflow
+    assert 'python-version: "3.13"' in workflow
+    assert "EVENT_NAME: ${{ github.event_name }}" in workflow
+    assert "python scripts/check_text_hygiene.py" in workflow
     assert "fetch-depth: 0" in workflow
     assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert "PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}" in workflow

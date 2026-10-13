@@ -211,6 +211,7 @@ def test_serial_protocol_query_preflights_preserve_simulator_contract() -> None:
         assert dry_run_payload["result"]["operation"] == "query"
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize("scenario", ["completed", "timeout", "single-failure"])
 @pytest.mark.parametrize(
@@ -605,6 +606,7 @@ $acquisitionStatusArtifact = Get-Content -LiteralPath $acquisitionStatusPath -Ra
         assert result["output_bytes"] == 0
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     "was_running", [True, False], ids=["original-run", "original-stop"]
@@ -739,6 +741,7 @@ Restore-SerialState -Snapshot $snapshot -DisableSearch $false `
         ]
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     "scenario, original_enabled",
@@ -925,6 +928,7 @@ try {
         assert result["restore_error"] == ""
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_serial_search_and_trigger_cases_do_not_acquire(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-serial-check.ps1"

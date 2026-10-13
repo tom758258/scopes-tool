@@ -149,6 +149,7 @@ def test_live_workflow_script_uses_qualification_status_vocabulary() -> None:
     assert '"SKIP"' not in text
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_live_workflow_script_parses_in_windows_powershell() -> None:
     command = """
@@ -230,6 +231,7 @@ def test_live_workflow_script_capture_monitor_live_uses_actual_point_invariants(
     assert '+ 1' in block
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("scenario", ["clean", "stale", "nonerror-events"])
 def test_workflow_clean_baseline_preserves_history(tmp_path: Path, scenario: str) -> None:
@@ -254,6 +256,7 @@ def test_workflow_clean_baseline_preserves_history(tmp_path: Path, scenario: str
         assert counts[key] == sum(case["status"] == status for case in cases.values())
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("scenario,failed_stage", [
     ("query-io", "pre-run-standard-event"),
@@ -274,6 +277,7 @@ def test_workflow_clean_baseline_failure_blocks_workflows(tmp_path: Path, scenar
         assert "VisaIOError" in cases["pre-run-clean-baseline"]["detail"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("scenario", ["identify-io", "model-mismatch"])
 def test_workflow_clean_baseline_respects_identity_gate(tmp_path: Path, scenario: str) -> None:
@@ -282,6 +286,7 @@ def test_workflow_clean_baseline_respects_identity_gate(tmp_path: Path, scenario
     assert [inv["stage"] for inv in report["invocations"]] == ["preflight-identify", "identity"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("scenario,reason", [
     ("n", "explicit empty input"),
@@ -313,6 +318,7 @@ def test_workflow_clean_baseline_respects_confirmation_gate(tmp_path: Path, scen
         assert counts[key] == sum(case["status"] == status for case in cases.values())
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("scenario,final_status", [
     ("clean", "PASS"), ("final-event", "FAIL"), ("final-io", "FAIL"),

@@ -73,6 +73,7 @@ def fake_workflow_run(
     return result, json.loads(reports[0].read_text(encoding="utf-8"))
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("target", (*TARGETS, "all", "keysight-dsox4034a"))
 def test_exact_targets_and_explicit_resource(target: str) -> None:
@@ -87,6 +88,7 @@ def test_exact_targets_and_explicit_resource(target: str) -> None:
         assert "does not match resource" in result.stderr
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_missing_resource_rejected_before_any_live_invocation() -> None:
     result = run_script("-Target", TARGETS[0], "-Connection", "usb")
@@ -94,6 +96,7 @@ def test_missing_resource_rejected_before_any_live_invocation() -> None:
     assert "Resource" in result.stderr
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_backend_and_output_root_are_bounded() -> None:
     base = ["-Target", TARGETS[0], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR"]
@@ -105,6 +108,7 @@ def test_backend_and_output_root_are_bounded() -> None:
     assert "must stay under repository .tmp_tests" in outside.stderr
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(
     ("extra", "message"),
@@ -123,6 +127,7 @@ def test_storage_write_requires_explicit_slots_in_range(extra: list[str], messag
     assert message in result.stderr
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     result, report = fake_run(
@@ -140,6 +145,7 @@ def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     assert all(inv["arguments"][0] == "identify" for inv in report["invocations"])
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_physical_model_spacing_passes_identity_gate(tmp_path: Path) -> None:
     # Real Tektronix instruments report "TBS 1052B" while the target profile
@@ -441,6 +447,7 @@ def printed_case_details(result: subprocess.CompletedProcess[str]) -> dict[str, 
     return printed
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_fail_detail_is_printed_and_carries_cli_error_fields(tmp_path: Path) -> None:
     result, report = fake_run(
@@ -466,6 +473,7 @@ def test_fail_detail_is_printed_and_carries_cli_error_fields(tmp_path: Path) -> 
     assert lines[status_index + 1] == detail
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
     result, report = fake_run(
@@ -481,6 +489,7 @@ def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
     assert calls[0]["result"] == "N/A"
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_tbs2074_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Path) -> None:
     result, report = fake_run(tmp_path, TARGETS[0], "-IncludeConfigurationActions")
@@ -500,6 +509,7 @@ def test_tbs2074_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Pat
     assert any("--off" in args for args in calls)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_tbs2074_cursor_failure_stops_later_cursor_mutations(tmp_path: Path) -> None:
     result, report = fake_run(
@@ -522,6 +532,7 @@ def test_tbs2074_cursor_failure_stops_later_cursor_mutations(tmp_path: Path) -> 
     assert not any("--y1" in args for args in setters)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_live_runner_rejects_stale_unsupported_operation_policy(tmp_path: Path) -> None:
     result, report = fake_run(
@@ -536,6 +547,7 @@ def test_live_runner_rejects_stale_unsupported_operation_policy(tmp_path: Path) 
     assert report["status"] == "failed"
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("target", TARGETS[1:])
 def test_cursor_seconds_prerequisite_is_na(tmp_path: Path, target: str) -> None:
@@ -558,6 +570,7 @@ def test_cursor_seconds_prerequisite_is_na(tmp_path: Path, target: str) -> None:
     assert "not restored" in result.stdout
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(("command", "error"), [
     ("math-operator", ("OscilloscopeError", "Math query failed")),
@@ -578,6 +591,7 @@ def test_unrelated_math_or_cursor_errors_remain_fail(
     assert cases["math-operator" if command == "math-operator" else "cursor-set"]["status"] == "FAIL"
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("target", TARGETS[1:])
 @pytest.mark.parametrize("mismatch", (False, True))
@@ -596,6 +610,7 @@ def test_vectors_on_requires_readback(tmp_path: Path, target: str, mismatch: boo
     assert "--query" in calls[2]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("target", TARGETS)
 def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
@@ -642,6 +657,7 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
         assert cases[name]["status"] == ("N/A" if name in unsupported else "PASS")
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(("target", "mode"), [(TARGETS[0], "runt"), (TARGETS[1], "tv"), (TARGETS[2], "tv")])
 def test_non_edge_mode_preserves_trigger_configuration(tmp_path: Path, target: str, mode: str) -> None:
@@ -662,6 +678,7 @@ def test_non_edge_mode_preserves_trigger_configuration(tmp_path: Path, target: s
             assert "--time-seconds" not in args  # Unqualified runt preserves dormant width.
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("target", TARGETS)
 def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: str) -> None:
@@ -690,6 +707,7 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
     assert cases["capture-hidden-channel"]["status"] == "N/A"
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(("status_command", "expected_failure"), [
     ("run", "run"),
@@ -713,6 +731,7 @@ def test_acquisition_rejects_dirty_native_status_and_attempts_stop(
     assert cases["stop-acquisition"]["status"] == ("FAIL" if expected_failure == "stop-acquisition" else "PASS")
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_private_and_shareable_reports_keep_common_schema(tmp_path: Path) -> None:
     result, private_report = fake_run(tmp_path, TARGETS[0])
@@ -731,6 +750,7 @@ def test_private_and_shareable_reports_keep_common_schema(tmp_path: Path) -> Non
     assert "USB0::FAKE::INSTR" not in shareable_path.read_text(encoding="utf-8")
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
 @pytest.mark.parametrize("failed", (False, True), ids=("pass", "fail"))
@@ -757,6 +777,7 @@ def test_tektronix_cli_artifact_retention(tmp_path: Path, debug: bool, failed: b
         assert all(inv[field] is None for inv in shared["invocations"] for field in ("stdout", "stderr", "json"))
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("target", TARGETS)
 def test_workflow_simulator_happy_path_uses_core_identity(tmp_path: Path, target: str) -> None:
@@ -788,6 +809,7 @@ def test_workflow_simulator_happy_path_uses_core_identity(tmp_path: Path, target
     assert status["raw"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("target", TARGETS[1:])
 def test_workflow_measurement_settings_conflict_is_actionable(
@@ -808,6 +830,7 @@ def test_workflow_measurement_settings_conflict_is_actionable(
     assert stages.index("measure-sweep") < stages.index("cleanup-acquisition-stop-acquisition")
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_workflow_run_failure_still_stops_acquisition(tmp_path: Path) -> None:
     result, report = fake_workflow_run(tmp_path, TARGETS[0], "dirty-run")
@@ -820,6 +843,7 @@ def test_workflow_run_failure_still_stops_acquisition(tmp_path: Path) -> None:
     assert stages.index("acquisition-precondition-run") < stages.index("cleanup-acquisition-stop-acquisition")
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_expected_timeout_still_rejects_dirty_native_status(tmp_path: Path) -> None:
     result, report = fake_workflow_run(tmp_path, TARGETS[0], "dirty-timeout")
@@ -830,6 +854,7 @@ def test_expected_timeout_still_rejects_dirty_native_status(tmp_path: Path) -> N
     assert cases["cleanup"]["status"] == "PASS"
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("rows,points,status", [
     (("0,0.5",), None, "PASS"),
@@ -853,6 +878,7 @@ def test_capture_artifact_validity(tmp_path: Path, rows, points, status) -> None
         assert "capture-byte" not in cases
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("outcome,status", [
     ("rejected", "PASS"), ("unexpected-success", "FAIL"),
@@ -874,6 +900,7 @@ def test_hidden_capture_rejection_and_display_readback(tmp_path: Path, outcome, 
             assert "--query" in invocation["arguments"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path) -> None:
     result, report = fake_run(
@@ -887,6 +914,7 @@ def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path)
     assert not {"screenshot", "save-image"}.intersection(inv["arguments"][0] for inv in report["invocations"])
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("failure", ("mode", "bmp"))
 def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) -> None:
@@ -904,6 +932,7 @@ def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) 
         assert cases["trigger-edge"]["status"] == "N/A"
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_image_filename_requires_storage_opt_in() -> None:
     result = run_script(
@@ -946,6 +975,7 @@ def test_identity_gate_and_vectors_safety_are_explicit() -> None:
     assert "no public OFF setter" in TEXT
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_pulse_width_roundtrip_preserves_current_glitch_mode(tmp_path):
     result, report = fake_run(tmp_path, TARGETS[0], mode="glitch")
@@ -957,6 +987,7 @@ def test_pulse_width_roundtrip_preserves_current_glitch_mode(tmp_path):
     assert all("range" not in call for call in calls)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("arguments", [
     ["-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "1"],
@@ -969,6 +1000,7 @@ def test_waveform_storage_inputs_rejected_before_identity(arguments):
     assert "require" in result.stderr.lower()
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(("target", "mode"), [
     (TARGETS[0], "edge"),
@@ -1006,6 +1038,7 @@ def test_generated_arguments_match_parser_contract(tmp_path: Path, target: str, 
             assert "--model" not in argv
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_non_blank_detail_is_printed_for_pass_na_and_fail(tmp_path: Path) -> None:
     result, report = fake_run(
@@ -1053,6 +1086,7 @@ CONFIRMATION_PROMPT = (
 NOT_REQUESTED = "Not requested."
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: Path) -> None:
     # An explicit empty Enter is the only input that may continue.
@@ -1121,6 +1155,7 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
         assert absent not in result.stdout, absent
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -> None:
     result, report = fake_run(
@@ -1154,6 +1189,7 @@ def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -
     assert f"- Storage Writes: {NOT_REQUESTED}" not in result.stdout
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(("target", "expected"), [
     # TBS2074 supports a PNG screenshot written through a temporary instrument
@@ -1171,6 +1207,7 @@ def test_operator_confirmation_screenshot_note_matches_model_support(
     assert f"- {expected}" in result.stdout, expected
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("confirmation,reason", [
     # Any non-empty input, whitespace-only input, or a null result must fail
@@ -1212,6 +1249,7 @@ def test_operator_confirmation_blocks_all_later_commands(
     assert "PASS  [live][tektronix] baseline live validation" not in result.stdout
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_tbs2074_first_gen_runt_channel_four_and_20ns_holdoff_are_accepted(tmp_path: Path) -> None:
     result, report = fake_run(
@@ -1231,6 +1269,7 @@ VISA_FAILURE = {
 }
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("initial,verified", [(0, 0), (4, 0), (65, 65)])
 def test_cli_clean_baseline_preserves_history(tmp_path: Path, initial: int, verified: int) -> None:
@@ -1255,6 +1294,7 @@ def test_cli_clean_baseline_preserves_history(tmp_path: Path, initial: int, veri
     assert sum(inv["arguments"][0] == "system-clear-status" for inv in report["invocations"]) == 1
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("stage,response", [
     ("pre-run-standard-event", VISA_FAILURE),
@@ -1276,6 +1316,7 @@ def test_cli_clean_baseline_failure_blocks_setters(tmp_path: Path, stage: str, r
         assert "VisaIOError: Injected I/O failure" in cases["pre-run-clean-baseline"]["detail"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("gate", ["identify", "model", "confirmation"])
 def test_cli_clean_baseline_respects_safety_gates(tmp_path: Path, gate: str) -> None:
@@ -1289,6 +1330,7 @@ def test_cli_clean_baseline_respects_safety_gates(tmp_path: Path, gate: str) -> 
     assert [inv["arguments"][0] for inv in report["invocations"]] == ["identify", "identify"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("failure", ["none", "setter", "readback", "restore"])
 def test_save_pwd_restores_only_after_failure(tmp_path: Path, failure: str) -> None:
@@ -1327,6 +1369,7 @@ def test_save_pwd_restores_only_after_failure(tmp_path: Path, failure: str) -> N
     assert scale_stages == ["channel-scale-before", "channel-scale-same-value", "channel-scale-after", "channel-scale-restore", "channel-scale-restored"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("path", ["", 'bad"path', "bad;path", "bad\npath"])
 def test_save_pwd_unsafe_original_does_not_write(tmp_path: Path, path: str) -> None:
@@ -1337,6 +1380,7 @@ def test_save_pwd_unsafe_original_does_not_write(tmp_path: Path, path: str) -> N
     assert [inv["stage"] for inv in report["invocations"] if inv["arguments"][0] == "save-pwd"] == ["save-pwd-before"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_save_pwd_failed_query_does_not_restore(tmp_path: Path) -> None:
     result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={"save-pwd-before": VISA_FAILURE})
@@ -1347,6 +1391,7 @@ def test_save_pwd_failed_query_does_not_restore(tmp_path: Path) -> None:
     assert [inv["stage"] for inv in report["invocations"] if inv["arguments"][0] == "save-pwd"] == ["save-pwd-before"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("value", [0, 65, 4, 8, 16, 32, None])
 def test_cli_final_native_status(tmp_path: Path, value: int | None) -> None:
@@ -1359,6 +1404,7 @@ def test_cli_final_native_status(tmp_path: Path, value: int | None) -> None:
     assert report["invocations"][-1]["stage"] == "final-standard-event"
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_cli_final_io_failure_preserves_case_failure(tmp_path: Path) -> None:
     result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={

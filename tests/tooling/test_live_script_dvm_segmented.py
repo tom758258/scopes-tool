@@ -9,6 +9,7 @@ import pytest
 from tests.tooling._live_script_test_support import REPO_ROOT, requires_windows
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     ("source_channel", "expected_status", "expected_gate_open"),
@@ -215,6 +216,7 @@ if (-not $stateGateOpen) {
         assert result["detail"] == ""
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     ("result_fields", "expected_passed", "expected_unit"),
@@ -326,6 +328,7 @@ $outcome | ConvertTo-Json -Compress
     assert outcome["unit"] == expected_unit
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 @pytest.mark.parametrize(
     (
@@ -725,6 +728,7 @@ if ($script:Diagnostics.Contains("segmented configuration roundtrip")) {
         assert result["diagnostics"] == ""
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_segmented_finite_capture_uses_run_root_output_dir(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-segmented-check.ps1"

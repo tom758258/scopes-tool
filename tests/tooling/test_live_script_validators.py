@@ -123,6 +123,7 @@ Remove-Item -LiteralPath $functionsFile -Force
 """.replace("@SCRIPT@", str(LIVE_CLI_SCRIPT)).replace("@FUNCS@", name_list)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(
     ("args", "expected_error"),
@@ -203,6 +204,7 @@ def test_live_cli_check_usage_errors(args, expected_error):
     assert expected_error in completed.stderr
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_live_cli_check_requires_target_and_connection():
     completed = run_live_cli_script("-Resource", "TEST::INSTR")
@@ -214,6 +216,7 @@ def test_live_cli_check_requires_target_and_connection():
     assert "Connection" in completed.stderr
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_live_cli_check_accepts_tektronix_target_before_resource_validation():
     completed = run_live_cli_script(
@@ -225,6 +228,7 @@ def test_live_cli_check_accepts_tektronix_target_before_resource_validation():
     assert "Unsupported target" not in completed.stderr
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_live_cli_check_target_model_match_gate():
     body = """
@@ -340,6 +344,7 @@ try {
     assert payload["tek_wrong_channels"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_shared_target_resolution_keeps_tektronix_opt_in() -> None:
     body = """
@@ -381,6 +386,7 @@ LIVE_VALIDATOR_SCRIPTS = (
 )
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(("script_name", "domain"), LIVE_VALIDATOR_SCRIPTS)
 def test_live_validators_enforce_canonical_target_contract(tmp_path, script_name, domain):
@@ -477,6 +483,7 @@ def _normalize_json_text(text):
     )
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_live_cli_check_complete_run_builds_private_and_shareable_evidence(tmp_path):
     runs_root = tmp_path / "runs"
@@ -657,6 +664,7 @@ $s2Files = @((Get-ChildItem -LiteralPath $script:RunDirectory -Recurse -File) |
     assert payload["s2_resource_redacted"] is True
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(("script_name", "domain"), (("live-cli-check.ps1", "cli"), *LIVE_VALIDATOR_SCRIPTS))
 @pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
@@ -829,6 +837,7 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
     assert sibling.read_text(encoding="utf-8") == "previous run evidence"
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_temporary_artifact_cleanup_cannot_delete_sibling_run(tmp_path):
     root = tmp_path / "run"
@@ -857,6 +866,7 @@ try {
     assert result == {"removed": True, "outside_preserved": True, "rejected": True}
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("failure", ("throw", "missing-report", "missing-summary", "empty-summary", "invalid-report", "private-report", "private-summary"))
 @pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
@@ -1008,6 +1018,7 @@ def test_live_validator_finalization_control_flow(
     assert pass_tail.rstrip().endswith('Write-Host "%s"\nexit 0' % pass_label)
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_workflow_post_case_error_queue_regression(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-workflow-check.ps1"
@@ -1177,6 +1188,7 @@ $failDetail = $script:CaseResults["demo-fail"].Detail
     assert "Post-case error queue contained" in result["fail_detail"]
 
 
+@pytest.mark.windows_powershell
 @requires_windows
 def test_shareable_large_numeric_arrays_keep_values_and_redact_strings(tmp_path):
     """Regression: live invocation capability ranges must not stall redaction."""

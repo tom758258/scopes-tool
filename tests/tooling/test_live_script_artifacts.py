@@ -12,6 +12,7 @@ from scopes_tool_core.channel import validate_channel_label
 from tests.tooling._live_script_test_support import REPO_ROOT
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_save_pwd_fixture_establishes_usb_and_csv(tmp_path: Path) -> None:
     script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
@@ -197,6 +198,7 @@ function Invoke-Scenario {
     ]
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 
 
@@ -459,6 +461,7 @@ function Invoke-Scenario {
     )
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_save_export_preserves_primary_error_and_enforces_prerequisite(
     tmp_path: Path,
@@ -710,6 +713,7 @@ function Invoke-Scenario {
     )
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_setup_lifecycle_uses_concrete_timestamped_setup_file(
     tmp_path: Path,
@@ -855,6 +859,7 @@ Invoke-Expression $caseBlock
     assert result["recall_file"] == result["save_file"]
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_setup_lifecycle_channel_label_fixtures_fit_3000x_profile(
     tmp_path: Path,
@@ -1054,6 +1059,7 @@ $slotInvocations = @($script:Invocations | ForEach-Object { $_ })
     )
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_waveform_amp_case_validates_artifacts_and_restores_unit(
     tmp_path: Path,
@@ -1287,6 +1293,7 @@ Invoke-Expression $caseBlock
     ]
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_restore_carries_proven_save_context_with_fixed_usb_pwd(
     tmp_path: Path,
@@ -1746,6 +1753,7 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     )
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_capture_wait_trigger_uses_fixed_fixture_and_preserves_timeout_detail(
     tmp_path: Path,
@@ -2146,6 +2154,7 @@ $scenarios = @(
     assert stages("timeout-stop-failure") == expected_success_order
 
 
+@pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_fixture_baseline_executes_fixed_commands_and_gates_readback_failures(
     tmp_path: Path,

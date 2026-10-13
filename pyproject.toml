@@ -17,6 +17,7 @@ dev = [
   "httpx2>=2.0",
   "pyinstaller>=6.0; sys_platform == 'win32'",
   "pytest>=8",
+  "ruff>=0.15.20",
   "uvicorn>=0.23.0",
 ]
 webui = [
@@ -47,5 +48,15 @@ scopes_tool_webui = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-p", "no:cacheprovider"]
-markers = ["hardware: opt-in tests that require a real oscilloscope"]
+markers = [
+  "hardware: opt-in tests that require a real oscilloscope",
+  "windows_powershell: PowerShell Live, Preflight, and wrapper contracts run in Windows validation CI",
+]
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

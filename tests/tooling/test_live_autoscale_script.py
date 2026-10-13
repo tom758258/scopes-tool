@@ -89,6 +89,7 @@ def cases(report):
     return {case["name"]: case for case in report["cases"]}
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize(("target", "connection"), PAIRS)
 def test_registered_model_transport_flow_and_restore(tmp_path: Path, target: str, connection: str) -> None:
@@ -140,6 +141,7 @@ def test_registered_model_transport_flow_and_restore(tmp_path: Path, target: str
     assert "does not prove optimal waveform scaling or signal recognition" in result.stdout
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("target", TARGETS)
 def test_real_preflight_and_simulated_auto_never_open_hardware(tmp_path: Path, target: str) -> None:
@@ -156,6 +158,7 @@ def test_real_preflight_and_simulated_auto_never_open_hardware(tmp_path: Path, t
     assert report["invocations"][1]["scpi"]["sent"] == []
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("confirmation", ["decline", "whitespace", "null", "unavailable"])
 def test_confirmation_fails_closed_before_status_or_state_changes(tmp_path: Path, confirmation: str) -> None:
@@ -166,6 +169,7 @@ def test_confirmation_fails_closed_before_status_or_state_changes(tmp_path: Path
     assert cases(report)["restore"]["status"] == "N/A"
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("target", [TARGETS[0], TARGETS[4]])
 def test_identity_mismatch_blocks_auto_and_prompt(tmp_path: Path, target: str) -> None:
@@ -177,6 +181,7 @@ def test_identity_mismatch_blocks_auto_and_prompt(tmp_path: Path, target: str) -
     assert len(report["invocations"]) == 4
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("scenario", ["fallback", "unmarked-fallback", "fallback-failure"])
 def test_fallback_cannot_pass_ch1(tmp_path: Path, scenario: str) -> None:
@@ -189,6 +194,7 @@ def test_fallback_cannot_pass_ch1(tmp_path: Path, scenario: str) -> None:
     assert ":AUToscale" in " ".join(report["diagnostics"]["auto"])
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("scenario", ["auto-failure", "missing-scpi", "invalid-json", "dirty-status", "unterminated-queue"])
 def test_auto_failures_attempt_restore_and_remain_failed(tmp_path: Path, scenario: str) -> None:
@@ -200,6 +206,7 @@ def test_auto_failures_attempt_restore_and_remain_failed(tmp_path: Path, scenari
     assert any(inv["stage"] == "readback-ch4-channel-display" for inv in report["invocations"])
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("scenario", ["restore-failure", "readback-failure", "restore-status-failure"])
 def test_restore_failure_is_visible_and_other_steps_continue(tmp_path: Path, scenario: str) -> None:
@@ -213,6 +220,7 @@ def test_restore_failure_is_visible_and_other_steps_continue(tmp_path: Path, sce
     assert any(inv["stage"] == "post-restore-status" for inv in report["invocations"])
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 def test_auto_and_restore_failures_are_both_preserved(tmp_path: Path) -> None:
     result, report, _ = fake_run(tmp_path, scenario="auto-and-restore-failure")
@@ -223,6 +231,7 @@ def test_auto_and_restore_failures_are_both_preserved(tmp_path: Path) -> None:
     assert "ch2-channel-scale" in cases(report)["restore"]["detail"]
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 def test_pyvisa_backend_uses_shared_connection_arguments(tmp_path: Path) -> None:
     result, report, _ = fake_run(tmp_path, backend="@py")
@@ -234,6 +243,7 @@ def test_pyvisa_backend_uses_shared_connection_arguments(tmp_path: Path) -> None
             assert inv["arguments"][index + 1] == "@py"
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 def test_failed_snapshot_prevents_auto(tmp_path: Path) -> None:
     result, report, _ = fake_run(tmp_path, scenario="snapshot-failure")
@@ -243,6 +253,7 @@ def test_failed_snapshot_prevents_auto(tmp_path: Path) -> None:
     assert cases(report)["restore"]["status"] == "N/A"
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 def test_snapshot_restore_uses_real_public_simulated_cli(tmp_path: Path) -> None:
     result, report, _ = fake_run(tmp_path, TARGETS[0], real_settings=True)
@@ -254,6 +265,7 @@ def test_snapshot_restore_uses_real_public_simulated_cli(tmp_path: Path) -> None
             assert inv["scpi"]["sent"]
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 def test_non_edge_and_inactive_average_are_explicit_limits(tmp_path: Path) -> None:
     result, report, _ = fake_run(tmp_path, trigger_mode="glitch", acquisition_type="normal")
@@ -268,6 +280,7 @@ def test_non_edge_and_inactive_average_are_explicit_limits(tmp_path: Path) -> No
     assert any("Original trigger mode is glitch" in note for note in report["diagnostics"]["restore-limitations"])
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("target", TARGETS[4:])
 def test_tektronix_native_error_is_failure_without_restore(tmp_path: Path, target: str) -> None:
@@ -278,6 +291,7 @@ def test_tektronix_native_error_is_failure_without_restore(tmp_path: Path, targe
     assert not any(inv["stage"].startswith("restore-") for inv in report["invocations"])
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("debug", [False, True])
 @pytest.mark.parametrize("scenario", ["success", "auto-failure"])
@@ -300,6 +314,7 @@ def test_private_shareable_privacy_and_retention(tmp_path: Path, debug: bool, sc
         assert {path.name for path in shareable} == {"report.json", "summary.md"}
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("changes", [
     ["-Target", "all"], ["-Target", "unknown"], ["-Connection", "serial"],
@@ -316,6 +331,7 @@ def test_invalid_inputs_are_rejected_before_hardware(tmp_path: Path, changes: li
     assert "Actual commands:" not in result.stdout
 
 
+@pytest.mark.windows_powershell
 @requires_powershell
 def test_original_cli_rejects_removed_autoscale_option() -> None:
     result = ps_run(REPO_ROOT / "scripts/live-cli-check.ps1", "-Target", TARGETS[4], "-Connection", "usb",

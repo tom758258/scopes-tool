@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  quality:
-    name: CI quality
+  quality-webui:
+    name: Code quality & WebUI
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,49 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.13"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install uv
+        run: python -m pip install --upgrade uv
+
+      - name: Install packages
+        run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
+
+      - name: Run Ruff
+        run: ./.venv/bin/python -m ruff check src tests
+
+      - name: Check WebUI JavaScript syntax
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git ls-files 'src/scopes_tool_webui/static/*.js')
+          if (( ${#files[@]} == 0 )); then
+            echo "::error::No tracked WebUI JavaScript files found."
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            node --check "$file"
+          done
+
+      - name: Run WebUI Node runtime tests
+        run: >-
+          ./.venv/bin/python -m pytest -q -rs
+          --basetemp .tmp_tests/ci-quality-webui
+          tests/webui/test_ui_theme.py::test_theme_cycle_cookie_system_changes_and_localization
+          tests/webui/test_ui_theme.py::test_bootstrap_applies_theme_before_css_and_help_is_disabled
+          tests/webui/test_ui_theme.py::test_supported_panel_open_close_escape_outside_click_and_retry
+          tests/webui/test_ui_theme.py::test_chart_repaints_theme_without_changing_samples_and_disposes_listener
+          tests/webui/test_frontend_state_catalog.py
+          tests/webui/test_frontend_state_editors.py
+          tests/webui/test_frontend_state_forms.py
+          tests/webui/test_frontend_state_resources.py
+          tests/webui/test_frontend_state_results.py
+          tests/webui/test_frontend_state_serial.py
+          tests/webui/test_frontend_state_workspaces.py
 
       - name: Check tracked text hygiene
         run: python scripts/check_text_hygiene.py
@@ -66,6 +108,9 @@ jobs:
       - name: Install packages
         run: uv sync --python ${{ matrix.python-version }} --all-extras --locked --link-mode=copy
 
+      - name: Build Python package
+        run: ./.venv/bin/python -m build
+
       - name: Smoke installed package
         run: |
           ./.venv/bin/python -c "import scopes_tool_core; import scopes_tool_cli; import scopes_tool_webui"
@@ -75,7 +120,7 @@ jobs:
         run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
 
       - name: Run tests
-        run: ./.venv/bin/python -m pytest -q -m "not hardware" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}
+        run: ./.venv/bin/python -m pytest -q -m "not hardware and not windows_powershell" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}
 
   pytest-windows:
     name: Windows Python ${{ matrix.python-version }}
@@ -104,6 +149,9 @@ jobs:
       - name: Install packages
         run: uv sync --python ${{ matrix.python-version }} --all-extras --locked --link-mode=copy
 
+      - name: Build Python package
+        run: .\.venv\Scripts\python.exe -m build
+
       - name: Smoke installed package
         run: |
           .\.venv\Scripts\python.exe -c "import scopes_tool_core; import scopes_tool_cli; import scopes_tool_webui"
@@ -114,16 +162,10 @@ jobs:
 
       - name: Run tests
         run: >-
-          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}
-          --ignore=tests/tooling/test_live_script_invocation.py
-          --ignore=tests/tooling/test_live_script_dvm_segmented.py
-          --ignore=tests/tooling/test_live_script_serial.py
-          --ignore=tests/tooling/test_live_script_controls.py
-          --ignore=tests/tooling/test_live_script_artifacts.py
-          --ignore=tests/tooling/test_live_script_validators.py
+          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and not windows_powershell" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}
 
-  pytest-windows-live-script:
-    name: Windows live-script Python ${{ matrix.python-version }}
+  pytest-windows-validation:
+    name: Windows validation scripts Python ${{ matrix.python-version }}
     runs-on: windows-latest
 
     strategy:
@@ -152,13 +194,7 @@ jobs:
       - name: Prepare pytest temp root
         run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
 
-      - name: Run live-script tests
+      - name: Run Windows validation tests
         run: >-
-          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware"
-          --basetemp .tmp_tests/ci-live-script-py${{ matrix.python-version }}
-          tests/tooling/test_live_script_invocation.py
-          tests/tooling/test_live_script_dvm_segmented.py
-          tests/tooling/test_live_script_serial.py
-          tests/tooling/test_live_script_controls.py
-          tests/tooling/test_live_script_artifacts.py
-          tests/tooling/test_live_script_validators.py
+          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_powershell"
+          --basetemp .tmp_tests/ci-windows-validation-py${{ matrix.python-version }}
