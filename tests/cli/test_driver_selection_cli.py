@@ -244,8 +244,35 @@ def test_tek_simulator_uses_tek_driver_and_status_path(monkeypatch, capsys):
 
 def test_tek_simulator_unsupported_command_fails_without_business_scpi(capsys):
     assert cli.main(["measure-results", "--simulate", "--model", "tektronix-tbs2074"]) == 1
-    assert runtime._backend_history() == ["*IDN?"]
+    assert runtime._backend_history() == []
+    assert runtime._LAST_BACKEND is None
     assert "unsupported" in capsys.readouterr().err.lower()
+
+
+@pytest.mark.parametrize("entry", ["main", "json_executor"])
+def test_unsupported_command_clears_previous_backend_history(monkeypatch, capsys, entry):
+    assert cli.main(["run", "--simulate", "--model", "tektronix-tbs2074", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["scpi"]["sent"]
+    previous = runtime._LAST_BACKEND
+    previous_history = list(previous.history)
+
+    def unexpected_open(*args, **kwargs):
+        pytest.fail("Unsupported operation must not create a backend")
+
+    monkeypatch.setattr(runtime, "_make_simulator_backend", unexpected_open)
+    monkeypatch.setattr(runtime.Oscilloscope, "open", unexpected_open)
+    argv = ["measure-results", "--simulate", "--model", "tektronix-tbs2074", "--json"]
+    if entry == "main":
+        code = cli.main(argv)
+        payload = json.loads(capsys.readouterr().out)
+    else:
+        args = cli.cli_parser._build_parser().parse_args(argv)
+        payload, code = cli._execute_json_command(args)
+    assert code == 1 and payload["ok"] is False
+    assert "unsupported" in payload["error"]["message"]
+    assert payload["scpi"]["sent"] == []
+    assert runtime._LAST_BACKEND is None
+    assert previous.history == previous_history
 
 
 def test_tek_live_run_uses_esr_without_system_error_queue(monkeypatch, capsys):
@@ -408,6 +435,24 @@ def test_live_resource_discovery_model_id(monkeypatch, capsys, vendor, model, se
     assert "verification_failures" not in payload["result"]
 
 
+@pytest.mark.parametrize("model,format_name,signature", [
+    ("tektronix-tbs2074", "png", b"\x89PNG"),
+    ("tektronix-tds2024b", "bmp", b"BM"),
+    ("tektronix-tbs1052b", "jpeg", b"\xff\xd8"),
+])
+def test_screenshot_text_reports_native_format(tmp_path, capsys, model, format_name, signature):
+    output = tmp_path / f"screen.{format_name}"
+    assert cli.main([
+        "screenshot", "--simulate", "--model", model,
+        "--format", format_name, "--output", str(output),
+    ]) == 0
+    text = capsys.readouterr().out
+    assert f"{format_name.upper()}: {output}" in text
+    assert output.read_bytes().startswith(signature)
+    if format_name == "jpeg":
+        assert "BMP:" not in text and "PNG:" not in text
+
+
 @pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
 def test_cli_tds_explicit_bmp_only(mode, tmp_path, capsys):
     output = tmp_path / "screen.bmp"
@@ -425,6 +470,23 @@ def test_cli_tds_explicit_bmp_only(mode, tmp_path, capsys):
         assert cli.main(["screenshot", *options, *common]) != 0
         payload = json.loads(capsys.readouterr().out)
         assert payload["ok"] is False
+
+
+def test_worker_tbs1052b_screenshot_uses_core_jpeg_support(tmp_path):
+    from scopes_tool_cli import worker
+    from tests.cli._worker_test_support import make_worker_runtime
+    from scopes_tool_core.errors import OscilloscopeError
+
+    worker_runtime = make_worker_runtime(model="tektronix-tbs1052b")
+    output = tmp_path / "screen.jpeg"
+    args = worker.parse_domain_command("screenshot", {"output": str(output), "format": "jpeg"}, worker_runtime)
+    payload, code = cli._execute_json_command(args)
+    assert code == 0 and payload["ok"] is True
+    assert payload["capabilities"]["screenshot_formats"] == ["jpeg"]
+    assert payload["result"]["format"] == "JPEG"
+    assert output.read_bytes().startswith(b"\xff\xd8") and output.read_bytes().endswith(b"\xff\xd9")
+    with pytest.raises(OscilloscopeError, match="unsupported"):
+        worker.parse_domain_command("screenshot", {"output": str(tmp_path / "screen.bmp"), "format": "bmp"}, worker_runtime)
 
 
 def test_cli_keysight_tcpip_bmp_reaches_detected_driver(monkeypatch, tmp_path, capsys):

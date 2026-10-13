@@ -161,7 +161,10 @@ function Invoke-TektronixCliValidation {
                  ([string]$cliError.message).StartsWith("Unsupported Tek Math expression: ", [StringComparison]::Ordinal)) -or
                 ($Stage -ceq "cursor-set" -and $Command -ceq "cursor" -and
                  $cliError.type -ceq "ParameterValidationError" -and
-                 $cliError.message -ceq "X cursors require existing seconds units")) {
+                 $cliError.message -ceq "X cursors require existing seconds units") -or
+                ($Stage -ceq "cursor-set-y" -and $Command -ceq "cursor" -and
+                 $cliError.type -ceq "ParameterValidationError" -and
+                 $cliError.message -ceq "Y cursors require existing volts units")) {
                 $invocation.result = "N/A"
                 return $null
             }
@@ -179,7 +182,8 @@ function Invoke-TektronixCliValidation {
         }
         if (-not $record.success -or $null -eq $parsed) {
             $invocation.result = "FAIL"
-            throw "$Stage failed (exit $($record.exit_code), timeout=$timedOut)$cliErrorDetail; see $stdoutPath and $stderrPath"
+            $artifactHint = if ($DebugArtifacts) { "; see $stdoutPath and $stderrPath" } else { "; see shareable/report.json and shareable/summary.md" }
+            throw "$Stage failed (exit $($record.exit_code), timeout=$timedOut)$cliErrorDetail$artifactHint"
         }
         # Match Get-Content's BOM-less decoding on Windows PowerShell 5.1.
         $payload = if (-not [string]::IsNullOrEmpty($serializedJson)) {
@@ -188,7 +192,8 @@ function Invoke-TektronixCliValidation {
         } else { $null }
         if ($payload.ok -ne $true) {
             $invocation.result = "FAIL"
-            throw "$Stage returned ok=false$cliErrorDetail; see $jsonPath"
+            $artifactHint = if ($DebugArtifacts) { "; see $jsonPath" } else { "; see shareable/report.json and shareable/summary.md" }
+            throw "$Stage returned ok=false$cliErrorDetail$artifactHint"
         }
         if ($Command -in @("run", "stop-acquisition")) {
             Assert-TektronixCommandStatus -Payload $payload
@@ -347,10 +352,34 @@ print(json.dumps({
         Add-Case -Name $Name -Status $status -Detail $detail
     }
 
+    function Assert-SentCommands {
+        param([object]$Payload, [string[]]$Expected)
+        foreach ($command in $Expected) {
+            if (@($Payload.scpi.sent) -cnotcontains $command) {
+                throw "Missing sent SCPI: $command"
+            }
+        }
+    }
+
     function Invoke-SimpleCase {
         param([string]$Name, [string]$Command, [string[]]$Options = @())
         try {
-            $null = Invoke-Cli -Stage $Name -Command $Command -Options $Options
+            $payload = Invoke-Cli -Stage $Name -Command $Command -Options $Options
+            if ($Command -in @("run", "stop-acquisition", "single")) {
+                $commands = @(switch ($Command) {
+                    "run" { @("ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON") }
+                    "stop-acquisition" { @("ACQuire:STATE OFF") }
+                    "single" { @("ACQuire:STATE OFF", "ACQuire:STOPAfter SEQuence", "ACQuire:STATE ON") }
+                })
+                Assert-SentCommands $payload $commands
+                if ((Get-Readback $payload "command") -cne $commands[-1]) { throw "Acquisition command result differs." }
+            } elseif ($Command -eq "force-trigger") {
+                Assert-SentCommands $payload @("TRIGger FORCe")
+                if ((Get-Readback $payload "scpi_command") -cne "TRIGger FORCe" -or
+                    -not (Test-ReadbackEqual $true (Get-Readback $payload "forced"))) {
+                    throw "Force-trigger result differs."
+                }
+            }
             Add-Case -Name $Name -Status "PASS"
         } catch {
             Add-Case -Name $Name -Status "FAIL" -Detail $_.Exception.Message
@@ -1001,6 +1030,29 @@ print(json.dumps({
                         Add-Case "cursor-set" "PASS" "CH1 X cursors at current timebase position; no auto-range changes"
                     }
                 } catch { Add-Case "cursor-set" "FAIL" $_.Exception.Message }
+                try {
+                    $units = Invoke-Cli -Stage "cursor-y-units" -Command "channel-units" -Options @("--channel", "1", "--query")
+                    if ((Get-Readback $units "units") -cne "volt") {
+                        Add-Case "cursor-set-y" "N/A" "CH1 is not currently in physical volt units; units were not changed"
+                    } else {
+                        $offset = Invoke-Cli -Stage "cursor-y-offset" -Command "channel-offset" -Options @("--channel", "1", "--query")
+                        $y = Get-Readback $offset "volts"
+                        # Core queries native HBArs units and checks physical-volts/graticule safety before writing.
+                        $configured = Invoke-Cli -Stage "cursor-set-y" -Command "cursor" -Options @(
+                            "--source-channel", "1", "--y1", (Format-Setting $y), "--y2", (Format-Setting $y)) -AllowCurrentStateNA
+                        if ($null -eq $configured) {
+                            Add-Case "cursor-set-y" "N/A" "Y cursors require existing volts units; units were not changed"
+                        } else {
+                            $after = Invoke-Cli -Stage "cursor-set-y-after" -Command "cursor" -Options @("--query")
+                            foreach ($field in @("y1_volts", "y2_volts")) {
+                                Assert-ReadbackEqual $y (Get-Readback $after $field) "cursor" $field
+                            }
+                            if ([string](Get-Readback $after "mode") -inotmatch '^HBA(rs)?$') { throw "Cursor function readback is not HBArs." }
+                            Add-Case "cursor-set-y" "PASS" "CH1 physical-volts HBArs setter and Y position query readback; no auto-range changes"
+                        }
+                    }
+                } catch { Add-Case "cursor-set-y" "FAIL" $_.Exception.Message }
+                Add-Case "cursor-set-screen" "N/A" "Independent-axis cursors do not support combined SCREEN positions"
             }
             try {
                 $null = Invoke-Cli -Stage "cursor-off" -Command "cursor" -Options @("--off")
@@ -1099,7 +1151,12 @@ print(json.dumps({
                             (-not $force -and $wait.result.outcome -ne "natural")) {
                             throw "Invalid bounded BUSY completion result."
                         }
-                        Add-Case $name "PASS" "Outcome: $($wait.result.outcome); force only on timeout"
+                        $detail = "Outcome: $($wait.result.outcome)"
+                        if ($force -and $wait.result.outcome -eq "natural") {
+                            $detail += "; force-on-timeout option enabled; timeout-force branch NOT TESTED (natural completion)"
+                        } elseif ($force) { $detail += "; timeout-force branch executed" }
+                        else { $detail += "; natural completion required; force disabled" }
+                        Add-Case $name "PASS" $detail
                     } catch { Add-Case $name "FAIL" $_.Exception.Message }
                 }
                 Invoke-SimpleCase "run" "run"
@@ -1121,7 +1178,15 @@ print(json.dumps({
                     if ($imageFormat -notin @("png", "bmp")) { throw "Unsupported current image format: $imageFormat" }
                     $ImageFilename = "$filenameStem.$imageFormat"
                     $saved = Invoke-Cli -Stage "save-image" -Command "save-image" -Options @("--filename", $ImageFilename)
-                    if ((Get-Readback $saved "operation_complete") -ne $true) { throw "Image save completion was not confirmed." }
+                    $expected = 'SAVe:IMAge "' + $ImageFilename + '"'
+                    Assert-SentCommands $saved @($expected, "*OPC?")
+                    if ($ImageFilename -cnotmatch '^st[0-9a-f]{6}\.(png|bmp)$' -or
+                        (Get-Readback $saved "filename") -cne $ImageFilename -or
+                        (Get-Readback $saved "command") -cne $expected -or
+                        (Get-Readback $saved "operation") -cne "save-image" -or
+                        -not (Test-ReadbackEqual $true (Get-Readback $saved "instrument_side")) -or
+                        -not (Test-ReadbackEqual $true (Get-Readback $saved "operation_complete")) -or
+                        (Get-Readback $saved "raw_operation_complete") -cne "1") { throw "Image save command, filename, format, or completion differs." }
                     Add-Case "save-image" "PASS" "Generated instrument file; operation complete"
                 } catch { Add-Case "save-image" "FAIL" $_.Exception.Message }
                 try {
@@ -1131,34 +1196,126 @@ print(json.dumps({
                     } else {
                         $saved = Invoke-Cli -Stage "save-waveform" -Command "save-waveform" `
                             -Options @("--filename", $WaveformFilename, "--source-channel", "$WaveformSourceChannel")
-                        if ((Get-Readback $saved "operation_complete") -ne $true) { throw "Waveform save completion was not confirmed." }
+                        $expected = 'SAVe:WAVEform CH1,"' + $WaveformFilename + '"'
+                        Assert-SentCommands $saved @($expected, "*OPC?")
+                        if ($WaveformFilename -cnotmatch '^st[0-9a-f]{6}\.csv$' -or
+                            (Get-Readback $saved "filename") -cne $WaveformFilename -or
+                            (Get-Readback $saved "command") -cne $expected -or
+                            (Get-Readback $saved "operation") -cne "save-waveform" -or
+                            -not (Test-ReadbackEqual $true (Get-Readback $saved "instrument_side")) -or
+                            -not (Test-ReadbackEqual $true (Get-Readback $saved "operation_complete")) -or
+                            (Get-Readback $saved "raw_operation_complete") -cne "1") { throw "Waveform save command, CH1, CSV filename, or completion differs." }
                         Add-Case "save-waveform" "PASS" "CH1 and generated instrument file; operation complete"
                     }
                 } catch { Add-Case "save-waveform" "FAIL" $_.Exception.Message }
-                Invoke-SimpleCase "setup-save" "setup-save" @("--slot", "$SetupSlot")
-                if ($script:CaseResults["setup-save"].Status -eq "PASS") {
-                    Invoke-SimpleCase "setup-recall" "setup-recall" @("--slot", "$SetupSlot")
-                } else { Add-Case "setup-recall" "NOT TESTED" "Setup save failed; recall was not executed" }
+                $originalLabel = $null
+                $labelChanged = $false
+                $labelRestored = $false
+                $setupStage = "setup-slot-label-before"
                 try {
-                    $display = Invoke-Cli -Stage "reference-source-display" -Command "channel-display" `
-                        -Options @("--channel", "1", "--query")
-                    if ((Get-Readback $display "display") -eq $true) {
-                        Invoke-SimpleCase "reference-save" "reference-save" @("--slot", "$ReferenceSlot", "--source-channel", "1")
-                        if ($script:CaseResults["reference-save"].Status -eq "PASS") {
-                            Invoke-RoundTrip "reference-display" "reference-display" @("--slot", "$ReferenceSlot") "displayed" "--state"
-                        } else { Add-Case "reference-display" "NOT TESTED" "Reference save failed; display was not executed" }
+                    $before = Invoke-Cli -Stage $setupStage -Command "channel-label" -Options @("--channel", "1", "--query")
+                    $originalLabel = [string](Get-Readback $before "text")
+                    $setupStage = "setup-save"
+                    $saved = Invoke-Cli -Stage $setupStage -Command "setup-save" -Options @("--slot", "$SetupSlot")
+                    Assert-SentCommands $saved @("SAVe:SETUp $SetupSlot")
+                    Add-Case "setup-save" "PASS"
+                    $changedLabel = if ($originalLabel -ceq "slot edit") { "slot test" } else { "slot edit" }
+                    $setupStage = "setup-slot-label-change"
+                    $labelChanged = $true
+                    $null = Invoke-Cli -Stage $setupStage -Command "channel-label" -Options @("--channel", "1", "--text", $changedLabel)
+                    $changed = Invoke-Cli -Stage "setup-slot-label-changed" -Command "channel-label" -Options @("--channel", "1", "--query")
+                    Assert-ReadbackEqual $changedLabel (Get-Readback $changed "text") "channel-label" "text"
+                    $setupStage = "setup-recall"
+                    $recalled = Invoke-Cli -Stage $setupStage -Command "setup-recall" -Options @("--slot", "$SetupSlot")
+                    Assert-SentCommands $recalled @("RECAll:SETUp $SetupSlot")
+                    $restored = Invoke-Cli -Stage "setup-slot-label-restored" -Command "channel-label" -Options @("--channel", "1", "--query")
+                    Assert-ReadbackEqual $originalLabel (Get-Readback $restored "text") "channel-label" "text"
+                    $labelRestored = $true
+                    Add-Case "setup-recall" "PASS" "Recall restored the original CH1 label"
+                    Add-Case "setup-slot-lifecycle" "PASS" "Save, distinct label change/readback, recall, and original label readback"
+                } catch {
+                    $setupError = $_.Exception.Message
+                    if ($setupStage -in @("setup-save", "setup-recall")) { Add-Case $setupStage "FAIL" $setupError }
+                    foreach ($name in @("setup-save", "setup-recall")) {
+                        if (-not $script:CaseResults.Contains($name)) { Add-Case $name "NOT TESTED" "Setup prerequisite failed; operation was not executed" }
+                    }
+                    Add-Case "setup-slot-lifecycle" "FAIL" $setupError
+                } finally {
+                    if ($labelChanged -and -not $labelRestored) {
+                        try {
+                            $null = Invoke-Cli -Stage "setup-slot-label-cleanup" -Command "channel-label" -Options @("--channel", "1", "--text", $originalLabel)
+                            $restored = Invoke-Cli -Stage "setup-slot-label-cleanup-query" -Command "channel-label" -Options @("--channel", "1", "--query")
+                            Assert-ReadbackEqual $originalLabel (Get-Readback $restored "text") "channel-label" "text"
+                            Add-Case "setup-slot-cleanup" "PASS" "Original CH1 label restored after failure; original failure retained"
+                        } catch { Add-Case "setup-slot-cleanup" "FAIL" $_.Exception.Message }
+                    }
+                }
+                $originalDisplay = $null
+                $referenceChanged = $false
+                $referenceStage = "reference-source-display"
+                $referenceStatus = "PASS"
+                $referenceDetail = "Save CH1, display ON/readback, post-save reference query, and original display restored"
+                try {
+                    $display = Invoke-Cli -Stage $referenceStage -Command "channel-display" -Options @("--channel", "1", "--query")
+                    $sourceDisplayed = Get-Readback $display "display"
+                    if ($sourceDisplayed -isnot [bool]) { throw "Invalid CH1 reference source display readback." }
+                    if ($sourceDisplayed) {
+                        $referenceStage = "reference-display-before"
+                        $before = Invoke-Cli -Stage $referenceStage -Command "reference-display" -Options @("--slot", "$ReferenceSlot", "--query")
+                        $originalDisplay = Get-Readback $before "displayed"
+                        if ($originalDisplay -isnot [bool]) { throw "Invalid original reference display state." }
+                        $referenceStage = "reference-save"
+                        $referenceChanged = $true
+                        $saved = Invoke-Cli -Stage $referenceStage -Command "reference-save" -Options @("--slot", "$ReferenceSlot", "--source-channel", "1")
+                        Assert-SentCommands $saved @("SAVe:WAVEform CH1,REF1", "*OPC?")
+                        Add-Case "reference-save" "PASS"
+                        $referenceStage = "reference-display"
+                        $shown = Invoke-Cli -Stage $referenceStage -Command "reference-display" -Options @("--slot", "$ReferenceSlot", "--state", "on")
+                        Assert-SentCommands $shown @("SELect:REF1 ON")
+                        $shown = Invoke-Cli -Stage "reference-display-after" -Command "reference-display" -Options @("--slot", "$ReferenceSlot", "--query")
+                        if (-not (Test-ReadbackEqual $true (Get-Readback $shown "displayed"))) { throw "Reference display readback is not ON." }
+                        Add-Case "reference-display" "PASS" "Display ON verified after this reference save"
+                        $referenceStage = "reference-query-after-save"
+                        $reference = Invoke-Cli -Stage $referenceStage -Command "reference-query" -Options @("--slot", "$ReferenceSlot")
+                        if (-not (Test-ReadbackEqual $true (Get-Readback $reference "displayed")) -or
+                            $null -ne $reference.result.label -or $null -ne $reference.result.raw_label) {
+                            throw "Post-save reference query is inconsistent with display ON or unavailable labels."
+                        }
                     } else {
-                        Add-Case "reference-save" "N/A" "CH1 is not displayed; source is not changed"
+                        $referenceStatus = "N/A"
+                        $referenceDetail = "CH1 is not displayed; source is not changed"
+                        Add-Case "reference-save" "N/A" $referenceDetail
                         Add-Case "reference-display" "N/A" "Reference save precondition not met"
                     }
                 } catch {
-                    Add-Case "reference-save" "FAIL" $_.Exception.Message
-                    Add-Case "reference-display" "NOT TESTED" "Reference source precondition could not be checked"
+                    $referenceStatus = "FAIL"
+                    $referenceDetail = $_.Exception.Message
+                    if ($referenceStage -in @("reference-save", "reference-display")) { Add-Case $referenceStage "FAIL" $referenceDetail }
+                    foreach ($name in @("reference-save", "reference-display")) {
+                        if (-not $script:CaseResults.Contains($name)) { Add-Case $name "NOT TESTED" "Reference prerequisite failed; operation was not executed" }
+                    }
+                } finally {
+                    if ($referenceChanged) {
+                        try {
+                            $state = if ($originalDisplay) { "on" } else { "off" }
+                            $null = Invoke-Cli -Stage "reference-display-cleanup" -Command "reference-display" -Options @("--slot", "$ReferenceSlot", "--state", $state)
+                            $restored = Invoke-Cli -Stage "reference-display-cleanup-query" -Command "reference-display" -Options @("--slot", "$ReferenceSlot", "--query")
+                            Assert-ReadbackEqual $originalDisplay (Get-Readback $restored "displayed") "reference-display" "displayed"
+                            Add-Case "reference-display-cleanup" "PASS" "Original reference display state restored"
+                        } catch {
+                            $referenceStatus = "FAIL"
+                            $referenceDetail += "; cleanup failed: $($_.Exception.Message)"
+                            Add-Case "reference-display-cleanup" "FAIL" $_.Exception.Message
+                        }
+                    }
                 }
+                Add-Case "reference-lifecycle" $referenceStatus $referenceDetail
             } else {
                 foreach ($name in @("setup-save", "setup-recall", "reference-save", "reference-display", "save-image", "save-waveform")) {
                     Add-UnsupportedOperationCase $name
                 }
+                Add-Case "setup-slot-lifecycle" "N/A" "Setup storage is unsupported by Core"
+                Add-Case "reference-lifecycle" "N/A" "Reference storage is unsupported by Core"
             }
 
             try {

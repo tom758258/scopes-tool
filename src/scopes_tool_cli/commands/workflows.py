@@ -861,10 +861,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
             print(f"Palette: {capture.palette}")
         print(f"Background: {capture.background}")
         print(f"Bytes: {len(capture.data)}")
-        if format_name == "png":
-            print(f"PNG: {written_image}")
-        else:
-            print(f"BMP: {written_image}")
+        print(f"{capture.format_name.upper()}: {written_image}")
         entry = scope.post_command_status()
         runtime._json_record_system_error(entry)
         print(runtime._post_status_text(entry))

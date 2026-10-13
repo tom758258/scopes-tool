@@ -274,8 +274,8 @@ def test_capabilities_json_exposes_setup_and_workflow_choices(model, monkeypatch
     assert values["safe_max_waveform_points"] == profile.safe_max_waveform_points
     assert values["screenshot_formats"] == list(profile.screenshot_formats)
     if model == "tektronix-tbs1052b":
-        assert "screenshot" not in values["supported_operations"]
-        assert values["screenshot_formats"] == []
+        assert "screenshot" in values["supported_operations"]
+        assert values["screenshot_formats"] == ["jpeg"]
     if model == "tektronix-tds2024b":
         assert "trigger-edge-level" not in values["supported_operations"]
 

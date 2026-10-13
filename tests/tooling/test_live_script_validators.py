@@ -767,7 +767,7 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-@DOMAIN@-check' -Domain '@DOM
     assert report["private_raw_artifacts_retained"] is debug
     assert report["summary_counts"] == {
         "cases": 5, "passed": 4 if result_status == "PASS" else 3,
-        "failed": 0 if result_status == "PASS" else 1, "na": 1, "invocations": 1,
+        "failed": 0 if result_status == "PASS" else 1, "na": 1, "not_tested": 0, "invocations": 1,
     }
     assert report["hardware_touched"] is False
     assert report["target"] == "keysight-dsox4034a"

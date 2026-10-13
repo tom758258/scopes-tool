@@ -253,7 +253,7 @@ def fake_run(
     confirmation: str = "enter", runt_channel: int = 1,
     holdoff_seconds: float = 0.000001, debug: bool = True,
     focused: bool = False, stage_responses: dict | None = None,
-    save_pwd_path: str = "C:/scope",
+    save_pwd_path: str = "C:/scope", channel_label: str = "CH1",
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
         TARGETS[0]: ("TBS2074", 4, "TBS2000"),
@@ -296,7 +296,7 @@ def fake_run(
         "channel-invert": {"invert": False},
         "channel-units": {"units": "volt"},
         "channel-offset": {"volts": 0.0},
-        "channel-label": {"text": "CH1"},
+        "channel-label": {"text": channel_label},
         "channel-probe-skew": {"probe_skew_seconds": 0.0},
         "timebase-scale": {"seconds_per_division": 0.001},
         "timebase-position": {"position_seconds": 0.0},
@@ -624,10 +624,12 @@ def test_cursor_seconds_prerequisite_is_na(tmp_path: Path, target: str) -> None:
     assert report["status"] == "passed"
     calls = [inv for inv in report["invocations"] if inv["arguments"][0] == "cursor"]
     setters = [inv for inv in calls if "--query" not in inv["arguments"]]
-    assert len(setters) == 2  # Rejected X setter and the standard OFF action.
+    assert len(setters) == 3  # Rejected X, independent Y, then standard OFF.
     assert "--x1" in setters[0]["arguments"]
     assert setters[0]["result"] == "N/A"
-    assert "--off" in setters[1]["arguments"]
+    assert "--y1" in setters[1]["arguments"]
+    assert "--off" in setters[2]["arguments"]
+    assert cases["cursor-set-y"]["status"] == "PASS"
     assert "--auto-timebase" not in setters[0]["arguments"]
     assert "not restored" in result.stdout
 
@@ -744,7 +746,7 @@ def test_standard_execution_list_uses_core_capabilities(tmp_path: Path, target: 
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     calls = [inv["arguments"] for inv in report["invocations"] if "--simulate" not in inv["arguments"]]
-    for name in ("cursor-set", "cursor-off", "measure-install", "measure-clear", "run", "single",
+    for name in ("cursor-set", "cursor-set-y", "cursor-off", "measure-install", "measure-clear", "run", "single",
                  "force-trigger", "stop-acquisition", "capture-byte", "single-wait-natural", "single-wait-force"):
         assert cases[name]["status"] == "PASS", cases[name]
     commands = [call[0] for call in calls]
@@ -779,10 +781,21 @@ def test_standard_execution_list_uses_core_capabilities(tmp_path: Path, target: 
                 assert filename.endswith(".png" if call[0] == "save-image" else ".csv")
         for name in ("cursor-set-y", "cursor-set-screen"):
             assert cases[name]["status"] == "PASS"
+        stages = [inv["stage"] for inv in report["invocations"]]
+        setup_stages = [stage for stage in stages if stage.startswith("setup-")]
+        assert setup_stages == [
+            "setup-slot-label-before", "setup-save", "setup-slot-label-change",
+            "setup-slot-label-changed", "setup-recall", "setup-slot-label-restored",
+        ]
+        assert cases["setup-slot-lifecycle"]["status"] == "PASS"
+        assert cases["reference-lifecycle"]["status"] == "PASS"
+        assert stages.index("reference-save") < stages.index("reference-display") < stages.index("reference-display-after") < stages.index("reference-query-after-save") < stages.index("reference-display-cleanup")
+        assert not {"reference-label", "reference-clear"}.intersection(commands)
         functions = {call[call.index("--function") + 1] for call in calls if call[0] == "cursor" and "--function" in call}
         assert functions == set(caps.cursor_functions)
     else:
         assert not storage.intersection(commands)
+        assert cases["cursor-set-screen"]["status"] == "N/A"
         for name in storage:
             assert cases[name]["status"] == "N/A"
     assert "Stop command succeeded; native status clean" in " ".join(report["diagnostics"]["acquisition-final-state"])
@@ -1019,7 +1032,9 @@ def test_runner_uses_only_public_cli_without_optional_actions() -> None:
     }
     assert "ProcessStartInfo" in TEXT
     assert '"-m", "scopes_tool_cli.cli"' in TEXT
-    assert not re.search(r"(?i)(?:\bACQuire:|\bTRIGger:|\bCH\d+:|\*ESR\?|\*IDN\?)", TEXT)
+    # Expected SCPI may be asserted, but instrument I/O must stay in Core.
+    assert not re.search(r"(?i)\.(?:write|query)\s*\(", TEXT)
+    assert "import pyvisa" not in TEXT
     assert not re.search(r"(?i)(?:EVENT\?|EVMsg\?|ALLEv\?|EVQty\?|DISPLAY:STYLE\s+DOTS)", TEXT)
     for name in ("IncludeAcquisitionActions", "IncludeConfigurationActions", "IncludeStorageWrites", "IncludeScreenshot"):
         assert name not in TEXT and name not in SCRIPT.read_text(encoding="utf-8")
@@ -1568,3 +1583,221 @@ def test_tbs2074_waveform_save_uses_supported_current_format(tmp_path, format_na
     assert cases["capture-byte"]["status"] == "PASS"
     if format_name == "internal":
         assert "no public setter can restore INTERNAL" in cases["save-waveform"]["detail"]
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS[1:])
+@pytest.mark.parametrize("mismatch", [False, True])
+def test_legacy_cursor_y_executes_setter_and_checks_readback(tmp_path, target, mismatch):
+    responses = {"cursor-y-offset": {"ResultOverrides": {"volts": 0.25}}}
+    if mismatch:
+        responses["cursor-set-y-after"] = {"ResultOverrides": {"y2_volts": 0.5}}
+    result, report = fake_run(tmp_path, target, stage_responses=responses)
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["cursor-set-y"]["status"] == ("FAIL" if mismatch else "PASS")
+    assert (result.returncode != 0) is mismatch
+    stages = [inv["stage"] for inv in report["invocations"]]
+    assert stages.index("cursor-y-units") < stages.index("cursor-y-offset") < stages.index("cursor-set-y") < stages.index("cursor-set-y-after") < stages.index("cursor-off")
+    setter = next(inv["arguments"] for inv in report["invocations"] if inv["stage"] == "cursor-set-y")
+    assert setter[setter.index("--source-channel") + 1] == "1"
+    assert setter[setter.index("--y1") + 1] == setter[setter.index("--y2") + 1] == "0.25"
+    assert "--x1" not in setter and "--auto-vertical" not in setter
+    assert cases["cursor-set-screen"]["status"] == "N/A"
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("scenario,status,executed", [
+    ("channel-units", "N/A", False), ("cursor-units", "N/A", True),
+    ("query-error", "FAIL", False), ("setter-error", "FAIL", True),
+])
+def test_legacy_cursor_y_preconditions_are_precise(tmp_path, scenario, status, executed):
+    if scenario == "channel-units":
+        responses = {"cursor-y-units": {"ResultOverrides": {"units": "ampere"}}}
+    elif scenario == "cursor-units":
+        responses = {"cursor-set-y": {"ExitCode": 1, "Payload": {"ok": False, "error": {
+            "type": "ParameterValidationError", "message": "Y cursors require existing volts units",
+        }}}}
+    else:
+        responses = {"cursor-y-units" if scenario == "query-error" else "cursor-set-y": VISA_FAILURE}
+    result, report = fake_run(tmp_path, TARGETS[1], stage_responses=responses)
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["cursor-set-y"]["status"] == status
+    stages = [inv["stage"] for inv in report["invocations"]]
+    assert ("cursor-set-y" in stages) is executed
+    assert "cursor-set-y-after" not in stages
+    assert cases["cursor-off"]["status"] == "PASS"
+    assert (result.returncode != 0) is (status == "FAIL")
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("label", ["", "slot edit"])
+def test_setup_lifecycle_restores_empty_or_matching_marker_label(tmp_path, label):
+    result, report = fake_run(tmp_path, TARGETS[0], channel_label=label)
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["setup-slot-lifecycle"]["status"] == "PASS"
+    change = next(inv["arguments"] for inv in report["invocations"] if inv["stage"] == "setup-slot-label-change")
+    assert change[change.index("--text") + 1] != label
+    assert "setup-slot-label-cleanup" not in [inv["stage"] for inv in report["invocations"]]
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("scenario", ["change-readback", "recall-error", "recall-readback", "cleanup-error", "cleanup-readback"])
+def test_setup_lifecycle_failure_retains_error_and_checks_cleanup(tmp_path, scenario):
+    responses = {"setup-slot-label-restored": {"ResultOverrides": {"text": "not restored"}}}
+    if scenario == "change-readback":
+        responses = {"setup-slot-label-changed": {"ResultOverrides": {"text": "CH1"}}}
+    elif scenario == "recall-error":
+        responses = {"setup-recall": VISA_FAILURE}
+    elif scenario == "cleanup-error":
+        responses["setup-slot-label-cleanup"] = VISA_FAILURE
+    elif scenario == "cleanup-readback":
+        responses["setup-slot-label-cleanup-query"] = {"ResultOverrides": {"text": "not restored"}}
+    result, report = fake_run(tmp_path, TARGETS[0], stage_responses=responses)
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["setup-save"]["status"] == "PASS"
+    assert cases["setup-slot-lifecycle"]["status"] == "FAIL"
+    assert cases["setup-recall"]["status"] == ("NOT TESTED" if scenario == "change-readback" else "FAIL")
+    assert cases["setup-slot-cleanup"]["status"] == ("FAIL" if scenario.startswith("cleanup-") else "PASS")
+    assert ("VisaIOError: Injected I/O failure" if scenario == "recall-error" else "readback differs") in cases["setup-slot-lifecycle"]["detail"]
+    cleanup = next(inv["arguments"] for inv in report["invocations"] if inv["stage"] == "setup-slot-label-cleanup")
+    assert cleanup[cleanup.index("--text") + 1] == "CH1"
+    assert cases["reference-lifecycle"]["status"] == "PASS"
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+def test_reference_lifecycle_restores_original_display_off(tmp_path):
+    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={
+        "reference-display-before": {"ResultOverrides": {"displayed": False}},
+    })
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["reference-lifecycle"]["status"] == "PASS"
+    assert cases["reference-display-cleanup"]["status"] == "PASS"
+    calls = {inv["stage"]: inv["arguments"] for inv in report["invocations"]}
+    assert calls["reference-save"][calls["reference-save"].index("--source-channel") + 1] == "1"
+    for stage, expected in (("reference-display", "on"), ("reference-display-cleanup", "off")):
+        assert calls[stage][calls[stage].index("--state") + 1] == expected
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("scenario", ["display-readback", "post-save-query", "cleanup-error", "cleanup-readback"])
+def test_reference_lifecycle_rejects_inconsistent_readback_or_cleanup(tmp_path, scenario):
+    stage = {"display-readback": "reference-display-after", "post-save-query": "reference-query-after-save",
+             "cleanup-error": "reference-display-cleanup", "cleanup-readback": "reference-display-cleanup-query"}[scenario]
+    response = VISA_FAILURE if scenario == "cleanup-error" else {"ResultOverrides": {"displayed": False}}
+    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={stage: response})
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["reference-query"]["status"] == "PASS"  # Independent earlier query cannot prove the lifecycle.
+    assert cases["reference-save"]["status"] == "PASS"
+    assert cases["reference-lifecycle"]["status"] == "FAIL"
+    assert cases["reference-display-cleanup"]["status"] == ("FAIL" if scenario.startswith("cleanup-") else "PASS")
+    assert "reference-display-cleanup" in [inv["stage"] for inv in report["invocations"]]
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("command", ["save-image", "save-waveform"])
+@pytest.mark.parametrize("fault", ["filename", "command", "instrument_side", "operation_complete", "raw_operation_complete", "save-scpi", "opc-scpi"])
+def test_instrument_save_rejects_inconsistent_result_or_scpi(tmp_path, command, fault):
+    if fault.endswith("scpi"):
+        response = {"SentOverrides": ["*OPC?"]} if fault == "save-scpi" else {"OmitSent": ["*OPC?"]}
+    else:
+        value = False if fault in {"instrument_side", "operation_complete"} else "0" if fault == "raw_operation_complete" else "wrong.bmp"
+        response = {"ResultOverrides": {fault: value}}
+    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={command: response})
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases[command]["status"] == "FAIL"
+    assert cases["save-waveform" if command == "save-image" else "save-image"]["status"] == "PASS"
+    assert cases["setup-slot-lifecycle"]["status"] == "PASS"
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("stage,response", [
+    ("run", {"SentOverrides": []}), ("stop-acquisition", {"SentOverrides": []}),
+    ("single", {"SentOverrides": ["ACQuire:STATE ON"]}),
+    ("force-trigger", {"SentOverrides": []}),
+    ("run", {"ResultOverrides": {"command": "wrong"}}),
+    ("force-trigger", {"ResultOverrides": {"forced": False}}),
+])
+def test_acquisition_checks_sent_commands_and_results(tmp_path, stage, response):
+    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={stage: response})
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases[stage]["status"] == "FAIL"
+    stages = [inv["stage"] for inv in report["invocations"]]
+    if stage != "stop-acquisition":
+        assert stages.index("stop-acquisition") > stages.index(stage)
+    if stage == "single":
+        assert cases["force-trigger"]["status"] == "NOT TESTED"
+        assert "force-trigger" not in stages
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("stage,outcome,status,detail", [
+    ("single-wait-natural", "forced", "FAIL", "Invalid bounded BUSY"),
+    ("single-wait-force", "natural", "PASS", "timeout-force branch NOT TESTED"),
+    ("single-wait-force", "forced", "PASS", "timeout-force branch executed"),
+])
+def test_single_wait_reports_actual_natural_or_force_outcome(tmp_path, stage, outcome, status, detail):
+    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={
+        stage: {"ResultOverrides": {"outcome": outcome}},
+    })
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases[stage]["status"] == status
+    assert detail in cases[stage]["detail"]
+    assert (result.returncode != 0) is (status == "FAIL")
+    call = next(inv["arguments"] for inv in report["invocations"] if inv["stage"] == stage)
+    assert ("--force-trigger-on-timeout" in call) is (stage == "single-wait-force")
+    assert cases["force-trigger"]["status"] == "PASS"
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("debug", [False, True])
+@pytest.mark.parametrize("exit_code", [0, 1])
+def test_failure_hints_reference_only_retained_artifacts(tmp_path, debug, exit_code):
+    response = {"ExitCode": exit_code, "Payload": {"ok": False, "error": {
+        "type": "OscilloscopeError", "message": "Cursor Y setter failed",
+    }}}
+    result, report = fake_run(tmp_path, TARGETS[1], debug=debug, stage_responses={"cursor-set-y": response})
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    detail = printed_case_details(result)["cursor-set-y"]
+    assert cases["cursor-set-y"]["status"] == "FAIL"
+    assert "OscilloscopeError: Cursor Y setter failed" in detail
+    invocation = next(inv for inv in report["invocations"] if inv["stage"] == "cursor-set-y")
+    if debug:
+        for field in ("stdout", "stderr", "json"):
+            assert (ROOT / invocation[field]).is_file()
+        assert invocation["json" if exit_code == 0 else "stdout"].split("/")[-1].split("\\")[-1] in detail
+    else:
+        assert "see shareable/report.json and shareable/summary.md" in detail
+        assert ".stdout.txt" not in detail and ".stderr.txt" not in detail
+        assert all(invocation[field] is None for field in ("stdout", "stderr", "json"))
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("display,status", [(False, "N/A"), ("invalid", "FAIL")])
+def test_reference_lifecycle_source_precondition_blocks_writes(tmp_path, display, status):
+    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={
+        "reference-source-display": {"ResultOverrides": {"display": display}},
+    })
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["reference-lifecycle"]["status"] == status
+    assert cases["reference-save"]["status"] == ("N/A" if status == "N/A" else "NOT TESTED")
+    assert (result.returncode != 0) is (status == "FAIL")
+    stages = [inv["stage"] for inv in report["invocations"]]
+    assert not {"reference-save", "reference-display", "reference-query-after-save", "reference-display-cleanup"}.intersection(stages)

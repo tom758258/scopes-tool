@@ -12,6 +12,9 @@ $script:ModeQueries = 0
 $script:VectorsSet = $false
 $script:HiddenCaptured = $false
 $script:CursorState = $null
+$script:LabelState = [string]$fixture.values.'channel-label'.text
+$script:SavedLabel = $null
+$script:ReferenceDisplayed = [bool]$fixture.values.'reference-display'.displayed
 $script:ValidatorRoot = Split-Path -Parent $ScriptPath
 $script:PositionState = $null
 
@@ -37,7 +40,7 @@ function Invoke-FakeTransport {
     # Fresh values match the independent fake CLI invocations; only explicit state persists.
     $scenario = $script:Scenario
     $response = $scenario.stage_responses.PSObject.Properties[$Stage]
-    if ($null -ne $response) { return $response.Value }
+    if ($null -ne $response -and $null -ne $response.Value.PSObject.Properties["Payload"]) { return $response.Value }
     $property = $scenario.values.PSObject.Properties[$Command]
     $value = [pscustomobject]@{}
     if ($null -ne $property) {
@@ -56,6 +59,60 @@ function Invoke-FakeTransport {
     $idn = if ($Simulate) { $scenario.idn } else { $scenario.live_idn }
     $capabilities = if ($Simulate) { $scenario.capabilities } else { $scenario.live_capabilities }
     $payload = @{ ok = $true; idn = $idn; capabilities = $capabilities; result = $value }
+    $sent = @()
+    switch ($Command) {
+        "run" {
+            $sent = @("ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON", "*ESR?")
+            $value | Add-Member -Force -NotePropertyName command -NotePropertyValue "ACQuire:STATE ON"
+        }
+        "stop-acquisition" {
+            $sent = @("ACQuire:STATE OFF", "*ESR?")
+            $value | Add-Member -Force -NotePropertyName command -NotePropertyValue "ACQuire:STATE OFF"
+        }
+        "single" {
+            $sent = @("ACQuire:STATE OFF", "ACQuire:STOPAfter SEQuence", "ACQuire:STATE ON")
+            $value | Add-Member -Force -NotePropertyName command -NotePropertyValue "ACQuire:STATE ON"
+        }
+        "force-trigger" {
+            $sent = @("TRIGger FORCe")
+            $value | Add-Member -Force -NotePropertyName scpi_command -NotePropertyValue "TRIGger FORCe"
+            $value | Add-Member -Force -NotePropertyName forced -NotePropertyValue $true
+        }
+        "channel-label" {
+            if ($Options -contains "--text") { $script:LabelState = $Options[[Array]::IndexOf($Options, "--text") + 1] }
+            $value.text = $script:LabelState
+        }
+        "setup-save" {
+            $script:SavedLabel = $script:LabelState
+            $sent = @("SAVe:SETUp 1")
+        }
+        "setup-recall" {
+            $script:LabelState = $script:SavedLabel
+            $sent = @("RECAll:SETUp 1")
+        }
+        "reference-save" { $sent = @("SAVe:WAVEform CH1,REF1", "*OPC?") }
+        "reference-display" {
+            if ($Options -contains "--state") {
+                $state = $Options[[Array]::IndexOf($Options, "--state") + 1]
+                $script:ReferenceDisplayed = $state -ceq "on"
+                $sent = @("SELect:REF1 $($state.ToUpperInvariant())")
+            }
+            $value.displayed = $script:ReferenceDisplayed
+        }
+        "reference-query" { $value.displayed = $script:ReferenceDisplayed }
+    }
+    if ($Command -in @("save-image", "save-waveform")) {
+        $filename = $Options[[Array]::IndexOf($Options, "--filename") + 1]
+        $saveCommand = if ($Command -eq "save-image") { 'SAVe:IMAge "' + $filename + '"' } else {
+            $sourceChannel = $Options[[Array]::IndexOf($Options, "--source-channel") + 1]
+            'SAVe:WAVEform CH' + $sourceChannel + ',"' + $filename + '"'
+        }
+        $sent = @($saveCommand, "*OPC?")
+        foreach ($field in @{ filename = $filename; command = $saveCommand; operation = $Command; instrument_side = $true; raw_operation_complete = "1" }.GetEnumerator()) {
+            $value | Add-Member -Force -NotePropertyName $field.Key -NotePropertyValue $field.Value
+        }
+    }
+    $payload.scpi = @{ sent = $sent }
     $fakeError = $null
     if ($Command -eq "math-operator" -and $Options -contains "--query") { $fakeError = $scenario.math_error }
     if ($Command -eq "cursor" -and $Options -contains "--x1") { $fakeError = $scenario.cursor_error }
@@ -109,7 +166,7 @@ function Invoke-FakeTransport {
                     "vbars" = "VBArs"; "hbars" = "HBArs"
                 }[$requested]
             } else {
-                $state.mode = if ($hasX -and $hasY) { "SCREEN" } elseif ($hasX) { "TIME" } elseif ($hasY) { "AMPLITUDE" } else { "OFF" }
+                $state.mode = if ($hasX -and $hasY) { "SCREEN" } elseif ($hasX) { "TIME" } elseif ($hasY) { "HBArs" } else { "OFF" }
             }
             $script:CursorState = [pscustomobject]$state
         } elseif ($null -ne $script:CursorState) {
@@ -153,6 +210,18 @@ function Invoke-FakeTransport {
         $path = $Options[[Array]::IndexOf($Options, "--output") + 1]
         [IO.File]::WriteAllBytes($path, [byte[]]$scenario.screenshot_bytes)
         $payload.result = @{ format = $scenario.screenshot_format; byte_count = $scenario.screenshot_bytes.Count; image_path = $path }
+    }
+    if ($null -ne $response) {
+        $patch = $response.Value.PSObject.Properties["ResultOverrides"]
+        if ($null -ne $patch) {
+            foreach ($field in $patch.Value.PSObject.Properties) {
+                $payload.result | Add-Member -Force -NotePropertyName $field.Name -NotePropertyValue $field.Value
+            }
+        }
+        $sentOverride = $response.Value.PSObject.Properties["SentOverrides"]
+        if ($null -ne $sentOverride) { $payload.scpi.sent = @($sentOverride.Value) }
+        $omitSent = $response.Value.PSObject.Properties["OmitSent"]
+        if ($null -ne $omitSent) { $payload.scpi.sent = @($payload.scpi.sent | Where-Object { $_ -cnotin $omitSent.Value }) }
     }
     return @{ ExitCode = 0; Payload = $payload }
 }

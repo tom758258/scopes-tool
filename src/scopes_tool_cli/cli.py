@@ -67,6 +67,7 @@ CLI_SCHEMA_VERSION = 2
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the `scopes-tool` command line interface."""
 
+    runtime._LAST_BACKEND = None
     parser = cli_parser._build_parser()
     args = parser.parse_args(argv)
 
@@ -148,6 +149,7 @@ def _execute_json_command(
     *,
     stop_requested: StopRequested | None = None,
 ) -> tuple[dict[str, object], int]:
+    runtime._LAST_BACKEND = None
     try:
         mode = runtime._resolve_cli_mode(args)
         if mode == "dry_run":

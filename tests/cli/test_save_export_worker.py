@@ -74,14 +74,32 @@ def test_worker_save_waveform_simulator_execution_has_no_command_artifacts(tmp_p
 
 def test_worker_tek_waveform_source_forwarded(tmp_path):
     runtime = _runtime(tmp_path)
-    runtime.model = "tektronix-tbs1052b"
+    runtime.model = "tektronix-tbs2074"
     parsed = worker.parse_domain_command("save-waveform", {"filename": "wave.csv", "source_channel": 2}, runtime)
     payload, code = cli._execute_json_command(parsed)
     assert code == 0
     assert payload["result"]["command"] == 'SAVe:WAVEform CH2,"wave.csv"'
-    for source in (None, 3):
+    assert 'SAVe:WAVEform CH2,"wave.csv"' in payload["scpi"]["sent"]
+    for source in (None, 5):
         arguments = {"filename": "wave.csv"}
         if source is not None:
             arguments["source_channel"] = source
         with pytest.raises(OscilloscopeError):
             worker.parse_domain_command("save-waveform", arguments, runtime)
+
+
+@pytest.mark.parametrize("model", ["tektronix-tds2024b", "tektronix-tbs1052b"])
+def test_worker_legacy_waveform_save_rejected_before_backend(tmp_path, monkeypatch, model):
+    from scopes_tool_cli import runtime as cli_runtime
+
+    def unexpected_open(*args, **kwargs):
+        pytest.fail("Unsupported storage must not create a backend")
+
+    monkeypatch.setattr(cli_runtime, "_make_simulator_backend", unexpected_open)
+    monkeypatch.setattr(cli_runtime.Oscilloscope, "open", unexpected_open)
+    runtime = _runtime(tmp_path)
+    runtime.model = model
+    with pytest.raises(OscilloscopeError, match="unsupported"):
+        worker.parse_domain_command(
+            "save-waveform", {"filename": "wave.csv", "source_channel": 2}, runtime,
+        )
