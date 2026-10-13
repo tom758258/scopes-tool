@@ -619,7 +619,7 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
     assert cases["display-persistence"]["status"] == (
         "N/A" if target == TARGETS[0] else "PASS"
     ), cases["display-persistence"]
-    assert cases["autoscale"]["status"] == "N/A"
+    assert "autoscale" not in cases
     assert cases["setup-save"]["status"] == "N/A"
     assert cases["final-standard-event"]["status"] == "PASS"
     assert report["invocations"][-1]["arguments"][0] == "system-standard-event"
@@ -667,7 +667,7 @@ def test_non_edge_mode_preserves_trigger_configuration(tmp_path: Path, target: s
 def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: str) -> None:
     result, report = fake_run(
         tmp_path, target, "-IncludeConfigurationActions", "-IncludeAcquisitionActions",
-        "-IncludeAutoscale", "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
+        "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
         "-ImageFilename", "acceptance.png", "-IncludeScreenshot",
         "-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "2",
         subprocess_cli=target in TARGETS[:2],
@@ -675,7 +675,7 @@ def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: st
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     for name in ("cursor-off", "measure-install", "measure-clear", "run", "single", "force-trigger",
-                 "stop-acquisition", "autoscale", "save-image", "save-waveform", "setup-save", "setup-recall",
+                 "stop-acquisition", "save-image", "save-waveform", "setup-save", "setup-recall",
                  "reference-save", "reference-display", "reference-query", "measure", "capture-byte", "single-wait-natural", "single-wait-force"):
         assert cases[name]["status"] == "PASS", cases[name]
     assert cases["cursor-set"]["status"] == "PASS"
@@ -926,9 +926,9 @@ def test_runner_uses_only_public_cli_and_default_options_are_off() -> None:
     assert not re.search(r"(?i)(?:\bACQuire:|\bTRIGger:|\bCH\d+:|\*ESR\?|\*IDN\?)", TEXT)
     assert not re.search(r"(?i)(?:EVENT\?|EVMsg\?|ALLEv\?|EVQty\?|DISPLAY:STYLE\s+DOTS)", TEXT)
     assert "-IncludeAcquisitionActions" in TEXT
-    assert "-IncludeAutoscale" in TEXT
+    assert "IncludeAutoscale" not in TEXT
     assert "-IncludeStorageWrites" in TEXT
-    assert 'Add-Case "autoscale" "N/A"' in TEXT
+    assert 'Add-Case "autoscale"' not in TEXT
     assert 'Add-Case $name "N/A" "Requires -IncludeAcquisitionActions"' in TEXT
     assert 'Add-Case $name "N/A" "Requires -IncludeStorageWrites' in TEXT
 
@@ -982,7 +982,7 @@ def test_generated_arguments_match_parser_contract(tmp_path: Path, target: str, 
 
     result, report = fake_run(
         tmp_path, target, "-IncludeConfigurationActions", "-IncludeAcquisitionActions",
-        "-IncludeAutoscale", "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
+        "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
         "-ImageFilename", "acceptance.png", "-IncludeScreenshot",
         "-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "2",
         mode=mode, vectors_on=True,
@@ -1022,9 +1022,10 @@ def test_non_blank_detail_is_printed_for_pass_na_and_fail(tmp_path: Path) -> Non
     assert printed["preflight"] == "Selected model CLI simulation; no hardware accessed"
     assert printed["channel-units"] == cases["channel-units"]["detail"]
     assert printed["channel-units"] == "query, same-value set, and readback"
-    assert printed["autoscale"] == cases["autoscale"]["detail"]
-    assert printed["autoscale"] == "Requires -IncludeAutoscale"
-    assert cases["autoscale"]["status"] == "N/A"
+    assert "autoscale" not in printed
+    assert printed["setup-save"] == cases["setup-save"]["detail"]
+    assert cases["setup-save"]["status"] == "N/A"
+    assert "autoscale" not in cases
     assert printed["cursor-set"] == cases["cursor-set"]["detail"]
     assert cases["cursor-set"]["status"] == "FAIL"
     assert "OscilloscopeError: Cursor X setter failed" in printed["cursor-set"]
@@ -1120,7 +1121,7 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
 @requires_windows
 def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], "-IncludeAcquisitionActions", "-IncludeAutoscale",
+        tmp_path, TARGETS[0], "-IncludeAcquisitionActions",
         "-IncludeConfigurationActions", "-IncludeStorageWrites",
         "-SetupSlot", "1", "-ReferenceSlot", "2", "-IncludeScreenshot",
         "-ImageFilename", "acceptance.png", "-WaveformFilename", "wave.csv",
@@ -1135,7 +1136,6 @@ def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -
         "Confirm the required instrument storage is available and writable before saving files.",
         # Optional notes are specific to the options actually enabled.
         "Acquisition: Run/Stop state changes",
-        "Autoscale: Changes multiple front-panel settings and is not restored.",
         "Configuration: Runs measurement, BYTE waveform capture, and cursor actions. "
         "Cursor mode may end OFF, measurement configuration may end cleared, "
         "and waveform transfer settings are not restored. "

@@ -22,7 +22,6 @@ param(
     [switch] $DebugArtifacts,
 
     [switch] $IncludeAcquisitionActions,
-    [switch] $IncludeAutoscale,
     [switch] $IncludeStorageWrites,
     [string] $ImageFilename,
     [string] $WaveformFilename,
@@ -104,7 +103,7 @@ if ($script:IsTektronix) {
     Assert-TektronixCliOptions -BoundParameters $PSBoundParameters
 } else {
     foreach ($option in @(
-        "IncludeAcquisitionActions", "IncludeAutoscale", "IncludeStorageWrites",
+        "IncludeAcquisitionActions", "IncludeStorageWrites",
         "ImageFilename", "WaveformFilename", "WaveformSourceChannel",
         "IncludeConfigurationActions", "IncludeScreenshot", "SetupSlot", "ReferenceSlot"
     )) {
@@ -1511,7 +1510,6 @@ function Invoke-HardwareFreePreflight {
         [pscustomobject]@{ Command = "wgen-output"; Arguments = @("--enabled", "true") },
         [pscustomobject]@{ Command = "demo-function"; Arguments = @("--function", "sine") },
         [pscustomobject]@{ Command = "demo-output"; Arguments = @("--enabled", "true") },
-        [pscustomobject]@{ Command = "autoscale"; Arguments = @("--source-channel", "1") },
         [pscustomobject]@{ Command = "setup-save"; Arguments = @("--file", "\usb\scopes-tool-cli-preflight.scp") },
         [pscustomobject]@{ Command = "setup-recall"; Arguments = @("--file", "\usb\scopes-tool-cli-preflight.scp") },
         [pscustomobject]@{ Command = "save-image-format"; Arguments = @("--format", "png") },
@@ -2317,18 +2315,6 @@ Write-Host "    validator."
 Write-Host "  - This is recommended, not required."
 Write-Host "  - A restart can clear transient instrument-side state left by prior"
 Write-Host "    sessions."
-if ([string]$script:Target -eq "keysight-dsox4034a") {
-    Write-Host ""
-    Write-Host "KNOWN DSO-X 4034A FRONT-PANEL BEHAVIOR"
-    Write-Host ""
-    Write-Host "  - Autoscale may reset the front-panel Save/Recall destination"
-    Write-Host "    selection to `"Please Select`"."
-    Write-Host "  - The same behavior occurs when Auto Scale is used directly from"
-    Write-Host "    the oscilloscope front panel; it is not a Scopes Tool SAVE"
-    Write-Host "    failure."
-    Write-Host "  - After validation, reselect the USB destination under Save To if"
-    Write-Host "    front-panel saving is unavailable."
-}
 Write-Host ""
 Write-Host "PHYSICAL SETUP  operator must prepare"
 Write-Host ""
@@ -5292,16 +5278,6 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
         Add-NotApplicableCase -Name "demo-phase" -Detail "DEMO phase is unsupported by the detected instrument."
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "autoscale" -Action {
-            $autoscale = Invoke-LiveCli -Stage "autoscale-ch1" -Command "autoscale" `
-                -Arguments @("--source-channel", "1")
-            Assert-ScpiSent -Payload $autoscale -Label "CH1 autoscale" `
-                -ExpectedCommands @(":AUToscale CHANnel1")
-            Restore-InstrumentState -Snapshot $snapshot
-        }
-    }
-
     if (-not $script:FunctionalFailed) {
         Invoke-BaselineCase -Name "setup-lifecycle" -Action {
             $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -5524,10 +5500,4 @@ if ($script:ShareableGenerationFailed) {
     exit 1
 }
 Write-Host "PASS  baseline live validation"
-if ([string]$script:Target -eq "keysight-dsox4034a") {
-    Write-Host ""
-    Write-Host ("NOTE  DSO-X 4034A Autoscale may leave the front-panel Save To")
-    Write-Host ("      selection at `"Please Select`".")
-    Write-Host ("      Reselect the USB destination if front-panel saving is needed.")
-}
 exit 0

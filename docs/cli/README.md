@@ -2709,7 +2709,7 @@ specified. Pass `-Backend "@py"` to run the same validation with pyvisa-py:
 System VISA and pyvisa-py are separate backend selections for each live
 validation run.
 
-All five live validation runners default to minimal artifact generation.
+All six live validation runners default to minimal artifact generation.
 Normal CLI stdout/stderr and per-invocation JSON are validated in memory rather
 than written to disk. Required waveform, screenshot, and workflow test files
 are created only for validation and cleaned up after their checks. After either
@@ -2732,7 +2732,8 @@ to minimal mode; use `-DebugArtifacts` when complete preflight evidence is neede
 ```
 
 The same retention option applies to `live-workflow-check.ps1`,
-`live-dvm-check.ps1`, `live-serial-check.ps1`, and `live-segmented-check.ps1`,
+`live-dvm-check.ps1`, `live-serial-check.ps1`, `live-segmented-check.ps1`, and
+`live-autoscale-check.ps1`,
 using their existing arguments. Run directory names and `-OutputRoot` behavior
 are unchanged.
 
@@ -2746,6 +2747,9 @@ uses `vbars`, Y only uses `hbars`, and X plus Y uses `screen`. `off` and
 `waveform` switch the function only and require no source channel and no
 positions. `vbars` accepts only X positions, `hbars` only Y positions, and any
 other combination is rejected before the instrument is written.
+
+Auto hardware validation is separate; use `live-autoscale-check.ps1` as described below.
+`live-cli-check.ps1` does not execute Auto or accept `-IncludeAutoscale`.
 
 Use `live-cli-check.ps1` with one exact registered Tektronix target and an
 operator-selected VISA resource. It accepts `tektronix-tbs2074`,
@@ -2762,12 +2766,11 @@ After a hardware-free Core profile check and simulated identify, the runner
 checks the detected physical identity against the target and stops before
 state-changing cases on a mismatch. Its default cases query
 supported status and settings and write back current values where the public
-CLI provides a safe path. It skips acquisition actions, autoscale, storage
+CLI provides a safe path. It skips acquisition actions, storage
 writes, cursor/measurement configuration actions, and screenshots by default.
 `-IncludeAcquisitionActions` sends `stop-acquisition` during cleanup; success
 confirms the command and native status, without independent Running/Stopped
-readback or restoration of the original state;
-`-IncludeAutoscale` changes front-panel settings without restoring them.
+readback or restoration of the original state.
 `-IncludeStorageWrites` requires explicit `-SetupSlot` (1-9) and
 `-ReferenceSlot` (1-2); those slots may be overwritten. The runner does not
 preserve their previous contents. Supply `-ImageFilename` with that storage
@@ -2999,3 +3002,55 @@ Profile or parameter rejection, `-221`, `+109`, transport failures, timeouts,
 malformed responses, mixed error queues, and other instrument errors remain
 failures. The runner's hardware-free preflight is not live validation evidence;
 run the script on the prepared instrument before claiming a live PASS.
+
+### Standalone Auto Scale / AutoSet live validation
+
+Run `scripts/live-autoscale-check.ps1` with one exact registered target, an
+explicit VISA resource, and an operator at the instrument. USB validation accepts
+`keysight-dsox2004a`, `keysight-dsox3024a`, `keysight-dsox4024a`,
+`keysight-dsox4034a`, `tektronix-tbs2074`, `tektronix-tds2024b`, and
+`tektronix-tbs1052b`. TCPIP validation is limited to the two 4000X targets.
+System VISA is the default; `-Backend "@py"` selects pyvisa-py.
+
+```powershell
+.\scripts\live-autoscale-check.ps1 -Target keysight-dsox4034a -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE
+.\scripts\live-autoscale-check.ps1 -Target tektronix-tbs2074 -Connection usb -Resource $env:SCOPES_TOOL_RESOURCE -Backend "@py"
+```
+
+The runner parses resource syntax and checks simulated identity plus basic Auto
+in dry-run and simulation before accessing hardware. It then checks the physical
+identity and shows model-specific English warnings. Only an empty Enter confirms;
+other input cancels before status clearing, snapshot queries, or Auto.
+Prepare a suitable, stable CH1 signal, match probe attenuation, and remove
+unknown or sensitive DUT signals from all inputs. Auto may misidentify low-frequency,
+weak, narrow-pulse, or unstable signals and may change channel display, vertical,
+horizontal, trigger, acquisition, and other model-dependent front-panel state.
+
+Keysight uses the public `autoscale --source-channel 1` CLI. Its `auto-basic`
+and `auto-ch1` cases are separate: a clean fallback to bare `:AUToscale` can pass
+basic Auto, while CH1 selection is N/A and remains unverified. This basic check
+does not test acquisition-mode or channel-selection Auto options. Tektronix uses
+bare `autoscale`, verifies `AUTOSet EXECute` and native status, and sends no
+unsupported optional Auto controls.
+
+Keysight snapshots all analog channels' display, coupling, probe ratio, scale,
+and offset; timebase scale/reference/position; acquisition type and active
+average count; and trigger mode/holdoff plus the original Edge source, slope,
+and analog channel levels when the original mode is Edge. Restore runs after an
+Auto attempt even if Auto fails, uses the public CLI setters and readbacks, and
+continues through independent restore failures. A restore PASS covers only those
+saved settings. Other channel settings, inactive average count, non-Edge trigger parameters, trigger
+filtering/sweep, cursor, measurement, Math, Reference, Zoom, Save To, and Run/Stop
+state are not restored. Tektronix does not attempt automatic restore. Operators
+must review uncovered settings and restore them manually. Error/event reads and
+baseline draining/clearing consume diagnostic state; that state cannot be restored.
+On DSO-X 4034A, Auto may leave front-panel Save To at `Please Select`; reselect the
+USB destination if needed.
+
+Console results include actual Auto commands, fallback, restore results,
+limitations, and PASS/FAIL/N/A totals. Independent privacy-protected reports are
+written under `.tmp_tests/live_autoscale_check/run_*/shareable/`. Default retention
+keeps only `report.json` and `summary.md`; `-DebugArtifacts` also retains private
+raw evidence and detailed shareable artifacts. Keep private artifacts private.
+A hardware-free check provides no real-instrument evidence; N/A CH1 results do
+not prove source selection even when the overall run passes.

@@ -268,7 +268,7 @@ $connection = "usb"
 $resource = "USB0::FAKE::INSTR"
 for ($index = 0; $index -lt $arguments.Count; $index++) {
     $name = $arguments[$index].TrimStart('-')
-    if ($name -in @("IncludeAcquisitionActions", "IncludeAutoscale", "IncludeStorageWrites", "IncludeConfigurationActions", "IncludeScreenshot", "DebugArtifacts")) {
+    if ($name -in @("IncludeAcquisitionActions", "IncludeStorageWrites", "IncludeConfigurationActions", "IncludeScreenshot", "DebugArtifacts")) {
         $parameterValues[$name] = $true
     } elseif ($name -in @("SetupSlot", "ReferenceSlot", "ImageFilename", "WaveformFilename", "WaveformSourceChannel", "Connection", "Resource")) {
         $index++
@@ -281,7 +281,6 @@ $script:Connection = $connection
 $script:LiveConnectionArguments = @(Get-LiveConnectionArguments -Resource $resource)
 $Resource = $resource
 $IncludeAcquisitionActions = [bool]$parameterValues["IncludeAcquisitionActions"]
-$IncludeAutoscale = [bool]$parameterValues["IncludeAutoscale"]
 $IncludeStorageWrites = [bool]$parameterValues["IncludeStorageWrites"]
 $IncludeConfigurationActions = [bool]$parameterValues["IncludeConfigurationActions"]
 $IncludeScreenshot = [bool]$parameterValues["IncludeScreenshot"]

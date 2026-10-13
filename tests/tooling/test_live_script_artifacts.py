@@ -1321,17 +1321,6 @@ foreach ($functionName in @(
     Invoke-Expression $functionAst.Extent.Text
 }
 
-$autoscaleCommand = $ast.Find({
-    param($node)
-    return (
-        $node -is [System.Management.Automation.Language.CommandAst] -and
-        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
-        $node.Extent.Text.Contains('-Name "autoscale"')
-    )
-}, $true)
-if ($null -eq $autoscaleCommand) { throw "Missing autoscale case." }
-$autoscaleBlock = $autoscaleCommand.Extent.Text
-
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:DrainCalls = 0
 
@@ -1383,12 +1372,6 @@ function Invoke-LiveCli {
                     ":TRIGger:EDGE:SLOPe POSitive"
                 ) }
                 result = [pscustomobject]@{ command = ":TRIGger:EDGE:SLOPe POSitive" }
-            }
-        }
-        "autoscale-ch1" {
-            return [pscustomobject]@{
-                scpi = [pscustomobject]@{ sent = @(':AUToscale CHANnel1') }
-                result = [pscustomobject]@{}
             }
         }
         "restore-channel-summary-query" {
@@ -1512,11 +1495,6 @@ $snapshot = [pscustomobject]@{
 $script:SaveFixtureEstablished = $true
 $script:CaseResults = [ordered]@{}
 $script:FunctionalFailed = $false
-Invoke-Expression $autoscaleBlock
-$autoscaleInvocations = @($script:Invocations | ForEach-Object { $_ })
-$autoscaleStatus = [string]$script:CaseResults["autoscale"].Status
-$autoscaleFunctionalFailed = $script:FunctionalFailed
-$script:Invocations.Clear()
 Restore-InstrumentState -Snapshot $snapshot
 $installedInvocations = @($script:Invocations | ForEach-Object { $_ })
 $snapshot.WgenApplicable = $false
@@ -1536,9 +1514,6 @@ $script:Invocations.Clear()
 Restore-InstrumentState -Snapshot $snapshot
 $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
 [ordered]@{
-    autoscale_invocations = $autoscaleInvocations
-    autoscale_status = $autoscaleStatus
-    autoscale_functional_failed = $autoscaleFunctionalFailed
     invocations = $installedInvocations
     absent_invocations = $absentInvocations
     unknown_invocations = $unknownInvocations
@@ -1587,17 +1562,9 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         "save-waveform-length",
     ]
 
-    assert result["autoscale_status"] == "PASS"
-    assert result["autoscale_functional_failed"] is False
-    autoscale_commands = [
-        entry["command"] for entry in result["autoscale_invocations"]
-    ]
-    assert autoscale_commands[0] == "autoscale"
-    assert "channel-scale" in autoscale_commands
-    assert [c for c in autoscale_commands if c.startswith("save-")] == (
-        proven_save_context
-    )
     commands = [entry["command"] for entry in result["invocations"]]
+    assert "autoscale" not in commands
+    assert [c for c in commands if c.startswith("save-")] == proven_save_context
     for command in (
         "channel-label",
         "channel-scale",

@@ -449,7 +449,6 @@ def test_baseline_live_script_contains_trigger_math_generator_save_and_safety_wi
         "wgen-model-validation",
         "demo-basic",
         "demo-phase",
-        "autoscale",
         "setup-lifecycle",
         "setup-slot-lifecycle",
         "reference-lifecycle",
@@ -478,7 +477,6 @@ def test_baseline_live_script_contains_trigger_math_generator_save_and_safety_wi
         "fft",
         "wgen-output",
         "demo-output",
-        "autoscale",
         "setup-save",
         "setup-recall",
         "save-image",
@@ -798,7 +796,7 @@ def test_baseline_part1_capability_gates_and_cleanup_wiring() -> None:
 
     demo_phase_start = script.index('Invoke-BaselineCase -Name "demo-phase"')
     demo_phase_end = script.index(
-        'Invoke-BaselineCase -Name "autoscale"', demo_phase_start
+        'Invoke-BaselineCase -Name "setup-lifecycle"', demo_phase_start
     )
     demo_phase_case = script[demo_phase_start:demo_phase_end]
     assert 'Command "demo-phase"' in demo_phase_case
@@ -906,44 +904,11 @@ def _extract_brace_block(script: str, start: int) -> str:
     raise AssertionError("unbalanced braces starting at offset %d" % start)
 
 
-def test_live_cli_check_warns_4034a_about_autoscale_save_destination() -> None:
-    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(
-        encoding="utf-8"
-    )
-
-    gate = 'if ([string]$script:Target -eq "keysight-dsox4034a") {'
-    gate_positions = []
-    search_from = 0
-    while True:
-        position = script.find(gate, search_from)
-        if position < 0:
-            break
-        gate_positions.append(position)
-        search_from = position + 1
-    assert len(gate_positions) == 2, (
-        "expected exactly two 4034A gates, found %d" % len(gate_positions)
-    )
-
-    recommended_start = script.index(
-        'Write-Host "RECOMMENDED BEFORE VALIDATION"'
-    )
-    physical_setup = script.index(
-        'Write-Host "PHYSICAL SETUP  operator must prepare"'
-    )
-    pass_line = script.index('Write-Host "PASS  baseline live validation"')
-    exit_zero = script.index("exit 0", pass_line)
-
-    first_gate, second_gate = gate_positions
-    pre_block = _extract_brace_block(script, first_gate)
-    post_block = _extract_brace_block(script, second_gate)
-
-    assert recommended_start < first_gate < physical_setup
-    assert "KNOWN DSO-X 4034A FRONT-PANEL BEHAVIOR" in pre_block
-    assert '`"Please Select`"' in pre_block
-    assert "not a Scopes Tool SAVE" in pre_block
-    assert "reselect the USB destination under Save To" in pre_block
-
-    assert pass_line < second_gate < exit_zero
-    assert "NOTE  DSO-X 4034A Autoscale" in post_block
-    assert '`"Please Select`"' in post_block
-    assert "Reselect the USB destination" in post_block
+def test_live_cli_check_excludes_auto_cases_and_moved_warnings() -> None:
+    script = (REPO_ROOT / "scripts" / "live-cli-check.ps1").read_text(encoding="utf-8")
+    assert "IncludeAutoscale" not in script
+    assert 'Command "autoscale"' not in script
+    assert 'Command = "autoscale"' not in script
+    assert 'Name "autoscale"' not in script
+    assert "Please Select" not in script
+    assert "Save To" not in script

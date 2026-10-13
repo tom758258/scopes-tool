@@ -442,9 +442,6 @@ print(json.dumps({
         $acquisitionNote = if ($IncludeAcquisitionActions) {
             "Run/Stop state changes; cleanup sends stop without an independent Running/Stopped readback, and the original state is not restored."
         } else { "Not requested." }
-        $autoscaleNote = if ($IncludeAutoscale) {
-            "Changes multiple front-panel settings and is not restored."
-        } else { "Not requested." }
         $configurationNote = if ($IncludeConfigurationActions) {
             $text = "Runs measurement, BYTE waveform capture, and cursor actions. Cursor mode may end OFF, measurement configuration may end cleared, and waveform transfer settings are not restored."
             if ($script:Target -eq "tektronix-tbs2074") {
@@ -474,7 +471,6 @@ print(json.dumps({
 
         $optionalActions = [System.Collections.Generic.List[string]]@(
             "Acquisition: ${acquisitionNote}",
-            "Autoscale: ${autoscaleNote}",
             "Configuration: ${configurationNote}",
             "Storage Writes: ${storageNote}",
             "Screenshot: ${screenshotNote}"
@@ -1128,10 +1124,6 @@ print(json.dumps({
                     Add-Case $name "N/A" "Requires -IncludeAcquisitionActions"
                 }
             }
-            if ($IncludeAutoscale) {
-                Write-Warning "Autoscale changes multiple front-panel settings and is not restored."
-                Invoke-SimpleCase "autoscale" "autoscale"
-            } else { Add-Case "autoscale" "N/A" "Requires -IncludeAutoscale" }
             if ($IncludeStorageWrites) {
                 Write-Warning "Setup slot $SetupSlot and reference slot $ReferenceSlot may be overwritten."
                 if ([string]::IsNullOrWhiteSpace($ImageFilename)) {
