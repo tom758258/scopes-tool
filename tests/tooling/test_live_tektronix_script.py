@@ -96,7 +96,7 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     (Join-Path $RepoRoot "scripts/_live_tektronix_helpers.ps1"), [ref]$tokens, [ref]$errors
 )
 if ($errors.Count) { throw $errors[0].Message }
-foreach ($name in @("Invoke-Cli", "Get-Readback", "Test-ReadbackEqual", "Invoke-RoundTrip")) {
+foreach ($name in @("Invoke-Cli", "Get-Readback", "Test-ReadbackEqual", "Assert-ReadbackEqual", "Invoke-RoundTrip")) {
     $function = $ast.Find({
         param($node)
         $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
@@ -200,31 +200,13 @@ def test_backend_and_output_root_are_bounded() -> None:
     assert "must stay under repository .tmp_tests" in outside.stderr
 
 
-@pytest.mark.windows_powershell
-@requires_windows
-@pytest.mark.parametrize(
-    ("extra", "message"),
-    [
-        ([], "explicit -SetupSlot"),
-        (["-SetupSlot", "0", "-ReferenceSlot", "1"], "SetupSlot"),
-        (["-SetupSlot", "1", "-ReferenceSlot", "3"], "ReferenceSlot"),
-    ],
-)
-def test_storage_write_requires_explicit_slots_in_range(extra: list[str], message: str) -> None:
-    result = run_script(
-        "-Target", TARGETS[0], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR",
-        "-IncludeStorageWrites", *extra,
-    )
-    assert result.returncode != 0
-    assert message in result.stderr
 
 
 @pytest.mark.windows_powershell
 @requires_windows
 def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], "-IncludeConfigurationActions", "-IncludeScreenshot",
-        "-IncludeAcquisitionActions", live_model=TARGETS[1],
+        tmp_path, TARGETS[0], live_model=TARGETS[1],
     )
     assert result.returncode != 0, result.stdout + result.stderr
     assert report["hardware_touched"] is True
@@ -285,22 +267,11 @@ def fake_run(
     }[live_model or target]
     if live_model_name is not None:
         live_detected_model = live_model_name
-    screenshot_bytes = b"bad" if bad_bmp else (b"\x89PNG\r\n\x1a\nfake" if target == TARGETS[0] else b"BMfake")
-    default_supported_operations = {
-        TARGETS[0]: (
-            "cursor-set", "sample-rate", "channel-label", "channel-probe-skew",
-            "trigger-edge-level", "trigger-runt", "save-image-format",
-            "save-waveform-format", "screenshot",
-        ),
-        TARGETS[1]: (
-            "cursor-set", "trigger-tv", "save-image-ink-saver",
-            "display-vectors", "screenshot", "display-persistence",
-        ),
-        TARGETS[2]: (
-            "cursor-set", "trigger-tv", "save-image-ink-saver", "display-vectors",
-            "display-persistence",
-        ),
-    }[target]
+    screenshot_bytes = b"bad" if bad_bmp else (b"\x89PNG\r\n\x1a\nfake" if target == TARGETS[0] else b"BMfake" if target == TARGETS[1] else b"\xff\xd8fake\xff\xd9")
+    from scopes_tool_core.capabilities import capabilities_for_model_id
+    actual_capabilities = capabilities_for_model_id(target)
+    default_supported_operations = tuple(actual_capabilities.supported_operations)
+    measurement_items = tuple(actual_capabilities.measurement_items)
     supported_operations = (
         tuple(core_supported_operations)
         if core_supported_operations is not None
@@ -377,10 +348,11 @@ def fake_run(
         f"acquisition_modes = {acquisition_modes!r}\n"
         f"average_counts = {average_counts!r}\n"
         f"cursor_source_selection = {cursor_source_selection!r}\n"
+        f"measurement_items = {measurement_items!r}\n"
         "def capabilities_for_model_id(model_id):\n"
         " return SimpleNamespace(supported_operations=frozenset(supported_operations), "
         "cursor_source_selection=cursor_source_selection, fixed_acquisition_memory_mode='realtime', "
-        "acquisition_modes=acquisition_modes, average_counts=average_counts)\n",
+        "acquisition_modes=acquisition_modes, average_counts=average_counts, measurement_items=measurement_items)\n",
         encoding="utf-8",
     )
     stub = tmp_path / "scopes_tool_cli"
@@ -455,7 +427,7 @@ def fake_run(
         "if command == 'screenshot':\n"
         " path = sys.argv[sys.argv.index('--output') + 1]\n"
         f" Path(path).write_bytes({screenshot_bytes!r})\n"
-        f" values[command] = {{'format': {'PNG' if target == TARGETS[0] else 'BMP'!r}, 'byte_count': Path(path).stat().st_size, 'image_path': path}}\n"
+        f" values[command] = {{'format': {'PNG' if target == TARGETS[0] else 'BMP' if target == TARGETS[1] else 'JPEG'!r}, 'byte_count': Path(path).stat().st_size, 'image_path': path}}\n"
         f"print(json.dumps({{'ok': True, 'idn': {{'vendor': 'TEKTRONIX', 'model': '{model}'}}, "
         f"'capabilities': {{'analog_channels': {channels}, 'series': '{series}'}}, "
         "'result': values.get(command, {})}))\n",
@@ -488,7 +460,7 @@ def fake_run(
             "points": len(waveform_rows) if actual_points is None else actual_points,
             "csv_text": "time_s,ch1_v\n" + "\n".join(waveform_rows) + "\n",
             "screenshot_bytes": list(screenshot_bytes),
-            "screenshot_format": "PNG" if target == TARGETS[0] else "BMP",
+            "screenshot_format": "PNG" if target == TARGETS[0] else "BMP" if target == TARGETS[1] else "JPEG",
             "arguments": arguments,
             "focused": focused, "stage_responses": stage_responses or {},
         }), encoding="utf-8")
@@ -507,11 +479,12 @@ def fake_run(
     assert counts["passed"] == sum(case["status"] == "PASS" for case in report["cases"])
     assert counts["failed"] == sum(case["status"] == "FAIL" for case in report["cases"])
     assert counts["na"] == sum(case["status"] == "N/A" for case in report["cases"])
+    assert counts["not_tested"] == sum(case["status"] == "NOT TESTED" for case in report["cases"])
     assert counts["invocations"] == len(report["invocations"])
     return result, report
 
 
-CASE_STATUS_PATTERN = re.compile(r"^(PASS|FAIL|N/A)\s+\[live\]\[tektronix\] (\S+)\s*$")
+CASE_STATUS_PATTERN = re.compile(r"^(PASS|FAIL|N/A|NOT TESTED)\s+\[live\]\[tektronix\] (\S+)\s*$")
 
 
 def printed_case_details(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
@@ -543,8 +516,7 @@ def printed_case_details(result: subprocess.CompletedProcess[str]) -> dict[str, 
 @requires_windows
 def test_fail_detail_is_printed_and_carries_cli_error_fields(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], "-IncludeConfigurationActions",
-        cursor_error=("OscilloscopeError", "Cursor X setter failed"),
+        tmp_path, TARGETS[0], cursor_error=("OscilloscopeError", "Cursor X setter failed"),
     )
     assert result.returncode != 0
     assert report["status"] == "failed"
@@ -584,7 +556,7 @@ def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
 @pytest.mark.windows_powershell
 @requires_windows
 def test_tbs2074_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Path) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0], "-IncludeConfigurationActions")
+    result, report = fake_run(tmp_path, TARGETS[0])
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["cursor-set"]["status"] == "PASS"
@@ -607,14 +579,13 @@ def test_tbs2074_cursor_failure_stops_later_cursor_mutations(tmp_path: Path) -> 
     result, report = fake_run(
         tmp_path,
         TARGETS[0],
-        "-IncludeConfigurationActions",
         cursor_error=("OscilloscopeError", "Cursor X setter failed"),
     )
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["cursor-set"]["status"] == "FAIL"
-    assert cases["cursor-set-y"]["status"] == "N/A"
-    assert cases["cursor-set-screen"]["status"] == "N/A"
+    assert cases["cursor-set-y"]["status"] == "NOT TESTED"
+    assert cases["cursor-set-screen"]["status"] == "NOT TESTED"
     setters = [
         inv["arguments"]
         for inv in report["invocations"]
@@ -644,8 +615,7 @@ def test_live_runner_rejects_stale_unsupported_operation_policy(tmp_path: Path) 
 @pytest.mark.parametrize("target", TARGETS[1:])
 def test_cursor_seconds_prerequisite_is_na(tmp_path: Path, target: str) -> None:
     result, report = fake_run(
-        tmp_path, target, "-IncludeConfigurationActions",
-        cursor_error=("ParameterValidationError", "X cursors require existing seconds units"),
+        tmp_path, target, cursor_error=("ParameterValidationError", "X cursors require existing seconds units"),
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
@@ -654,7 +624,7 @@ def test_cursor_seconds_prerequisite_is_na(tmp_path: Path, target: str) -> None:
     assert report["status"] == "passed"
     calls = [inv for inv in report["invocations"] if inv["arguments"][0] == "cursor"]
     setters = [inv for inv in calls if "--query" not in inv["arguments"]]
-    assert len(setters) == 2  # Rejected X setter and the existing opt-in OFF action.
+    assert len(setters) == 2  # Rejected X setter and the standard OFF action.
     assert "--x1" in setters[0]["arguments"]
     assert setters[0]["result"] == "N/A"
     assert "--off" in setters[1]["arguments"]
@@ -673,8 +643,7 @@ def test_unrelated_math_or_cursor_errors_remain_fail(
 ) -> None:
     errors = {"math_error" if command == "math-operator" else "cursor_error": error}
     result, report = fake_run(
-        tmp_path, TARGETS[1], "-IncludeConfigurationActions",
-        subprocess_cli=command == "math-operator", **errors,
+        tmp_path, TARGETS[1], subprocess_cli=command == "math-operator", **errors,
     )
     assert result.returncode != 0
     assert report["status"] == "failed"
@@ -727,21 +696,16 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
         "N/A" if target == TARGETS[0] else "PASS"
     ), cases["display-persistence"]
     assert "autoscale" not in cases
-    assert cases["setup-save"]["status"] == "N/A"
+    assert cases["setup-save"]["status"] == ("PASS" if target == TARGETS[0] else "N/A")
     assert cases["final-standard-event"]["status"] == "PASS"
     assert report["invocations"][-1]["arguments"][0] == "system-standard-event"
     assert not [case for case in report["cases"] if case["status"] == "FAIL"]
     assert report["status"] == "passed"
-    assert all(invocation["arguments"][0] not in {
-        "autoscale", "setup-save", "run", "screenshot", "measure-install", "measure-clear", "save-image", "measure", "capture", "single-wait"
-    }
-               for invocation in report["invocations"])
-    assert not any(inv["arguments"][0] == "cursor" and "--query" not in inv["arguments"]
-                   for inv in report["invocations"])
+    assert all(inv["arguments"][0] != "autoscale" for inv in report["invocations"])
     unsupported = ({"trigger-tv", "save-image-ink-saver", "display-vectors"}
                    if target == TARGETS[0] else
                    {"sample-rate", "channel-label", "channel-probe-skew",
-                    "trigger-edge-level", "trigger-runt", "save-image-format", "save-waveform-format"})
+                    "trigger-edge-level", "trigger-runt", "save-image-format", "save-waveform-format", "save-image-ink-saver"})
     assert not unsupported.intersection(inv["arguments"][0] for inv in report["invocations"])
     commands = [inv["arguments"][0] for inv in report["invocations"]]
     assert commands.index("trigger-mode") < commands.index("trigger-edge-source")
@@ -773,28 +737,54 @@ def test_non_edge_mode_preserves_trigger_configuration(tmp_path: Path, target: s
 @pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("target", TARGETS)
-def test_explicit_action_storage_and_screenshot_gates(tmp_path: Path, target: str) -> None:
-    result, report = fake_run(
-        tmp_path, target, "-IncludeConfigurationActions", "-IncludeAcquisitionActions",
-        "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
-        "-ImageFilename", "acceptance.png", "-IncludeScreenshot",
-        "-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "2",
-        subprocess_cli=target in TARGETS[:2],
-    )
+def test_standard_execution_list_uses_core_capabilities(tmp_path: Path, target: str) -> None:
+    from scopes_tool_core.capabilities import capabilities_for_model_id
+    caps = capabilities_for_model_id(target)
+    result, report = fake_run(tmp_path, target)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
-    for name in ("cursor-off", "measure-install", "measure-clear", "run", "single", "force-trigger",
-                 "stop-acquisition", "save-image", "save-waveform", "setup-save", "setup-recall",
-                 "reference-save", "reference-display", "reference-query", "measure", "capture-byte", "single-wait-natural", "single-wait-force"):
+    calls = [inv["arguments"] for inv in report["invocations"] if "--simulate" not in inv["arguments"]]
+    for name in ("cursor-set", "cursor-off", "measure-install", "measure-clear", "run", "single",
+                 "force-trigger", "stop-acquisition", "capture-byte", "single-wait-natural", "single-wait-force"):
         assert cases[name]["status"] == "PASS", cases[name]
-    assert cases["cursor-set"]["status"] == "PASS"
-    assert cases["screenshot-bmp"]["status"] == ("PASS" if target == TARGETS[1] else "N/A")
+    commands = [call[0] for call in calls]
+    assert {"run", "stop-acquisition", "single", "force-trigger", "capture", "screenshot"} <= set(commands)
+    waits = [call for call in calls if call[0] == "single-wait"]
+    assert len(waits) == 2
+    assert sum("--force-trigger-on-timeout" in call for call in waits) == 1
+    measurements = [call for call in calls if call[0] == "measure"]
+    assert [call[call.index("--item") + 1] for call in measurements] == list(caps.measurement_items)
+    for item in caps.measurement_items:
+        assert cases[f"measure-{item}"]["status"] == "PASS"
+    capture = next(call for call in calls if call[0] == "capture")
+    assert capture[capture.index("--format") + 1] == "byte"
+    assert capture[capture.index("--points") + 1] == "1000"
+    assert "--csv" in capture and "--meta" in capture
+    assert any(call[0] == "cursor" and "--x1" in call for call in calls)
+    image_format = caps.screenshot_formats[0]
+    assert cases[f"screenshot-{image_format}"]["status"] == "PASS"
+    image = next(call for call in calls if call[0] == "screenshot")
+    if image_format != "png":
+        assert image[image.index("--format") + 1] == image_format
+    storage = {"setup-save", "setup-recall", "reference-save", "reference-display", "reference-query",
+               "save-image", "save-waveform", "save-pwd", "save-image-ink-saver"}
     if target == TARGETS[0]:
-        assert cases["cursor-set-y"]["status"] == "PASS"
-        assert cases["cursor-set-screen"]["status"] == "PASS"
-        assert cases["screenshot-png"]["status"] == "PASS"
-    save = next(inv for inv in report["invocations"] if inv["arguments"][0] == "save-waveform")
-    assert "--source-channel" in save["arguments"]
+        assert storage - {"save-image-ink-saver"} <= set(commands)
+        for call in calls:
+            if call[0] in {"setup-save", "setup-recall", "reference-save", "reference-display", "reference-query"}:
+                assert call[call.index("--slot") + 1] == "1"
+            if call[0] in {"save-image", "save-waveform"}:
+                filename = call[call.index("--filename") + 1]
+                assert re.fullmatch(r"st[0-9a-f]{6}\.(png|csv)", filename)
+                assert filename.endswith(".png" if call[0] == "save-image" else ".csv")
+        for name in ("cursor-set-y", "cursor-set-screen"):
+            assert cases[name]["status"] == "PASS"
+        functions = {call[call.index("--function") + 1] for call in calls if call[0] == "cursor" and "--function" in call}
+        assert functions == set(caps.cursor_functions)
+    else:
+        assert not storage.intersection(commands)
+        for name in storage:
+            assert cases[name]["status"] == "N/A"
     assert "Stop command succeeded; native status clean" in " ".join(report["diagnostics"]["acquisition-final-state"])
     assert cases["capture-hidden-channel"]["status"] == "N/A"
 
@@ -809,8 +799,7 @@ def test_acquisition_rejects_dirty_native_status_and_attempts_stop(
     tmp_path: Path, status_command: str, expected_failure: str,
 ) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], "-IncludeAcquisitionActions",
-        native_status_command=status_command, native_status_value=4, native_status_raw="4",
+        tmp_path, TARGETS[0], native_status_command=status_command, native_status_value=4, native_status_raw="4",
     )
     assert result.returncode != 0
     assert report["status"] == "failed"
@@ -958,16 +947,14 @@ def test_expected_timeout_still_rejects_dirty_native_status(tmp_path: Path) -> N
     (("0,0.5", "0,0.6"), None, "FAIL"),
 ])
 def test_capture_artifact_validity(tmp_path: Path, rows, points, status) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0], "-IncludeConfigurationActions",
-        waveform_rows=rows, actual_points=points)
+    result, report = fake_run(tmp_path, TARGETS[0], waveform_rows=rows, actual_points=points)
     cases = {case["name"]: case for case in report["cases"]}
     if status == "PASS":
         assert result.returncode == 0, result.stdout + result.stderr
         assert cases["capture-byte"]["status"] == "PASS"
     else:
         assert result.returncode != 0
-        assert cases["measure-capture"]["status"] == "FAIL"
-        assert "capture-byte" not in cases
+        assert cases["capture-byte"]["status"] == "FAIL"
 
 
 @pytest.mark.windows_powershell
@@ -977,8 +964,7 @@ def test_capture_artifact_validity(tmp_path: Path, rows, points, status) -> None
     ("wrong-error", "FAIL"), ("display-on", "FAIL"),
 ])
 def test_hidden_capture_rejection_and_display_readback(tmp_path: Path, outcome, status) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0], "-IncludeConfigurationActions",
-        hidden_outcome=outcome)
+    result, report = fake_run(tmp_path, TARGETS[0], hidden_outcome=outcome)
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["capture-hidden-channel"]["status"] == status
     assert (result.returncode == 0) == (status == "PASS")
@@ -996,8 +982,7 @@ def test_hidden_capture_rejection_and_display_readback(tmp_path: Path, outcome, 
 @requires_windows
 def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[1], "-IncludeScreenshot", "-IncludeStorageWrites",
-        "-SetupSlot", "1", "-ReferenceSlot", "1", connection="tcpip",
+        tmp_path, TARGETS[1], connection="tcpip",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
@@ -1011,8 +996,7 @@ def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path)
 @pytest.mark.parametrize("failure", ("mode", "bmp"))
 def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[1], "-IncludeScreenshot",
-        mismatch=failure == "mode", bad_bmp=failure == "bmp",
+        tmp_path, TARGETS[1], mismatch=failure == "mode", bad_bmp=failure == "bmp",
     )
     assert result.returncode != 0
     assert report["status"] == "failed"
@@ -1021,21 +1005,12 @@ def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) 
     failed_case = {"mode": "trigger-mode", "bmp": "screenshot-bmp"}[failure]
     assert cases[failed_case]["status"] == "FAIL"
     if failure == "mode":
-        assert cases["trigger-edge"]["status"] == "N/A"
+        assert cases["trigger-edge"]["status"] == "NOT TESTED"
 
 
-@pytest.mark.windows_powershell
-@requires_windows
-def test_image_filename_requires_storage_opt_in() -> None:
-    result = run_script(
-        "-Target", TARGETS[0], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR",
-        "-ImageFilename", "acceptance.png",
-    )
-    assert result.returncode != 0
-    assert "require -IncludeStorageWrites" in result.stderr
 
 
-def test_runner_uses_only_public_cli_and_default_options_are_off() -> None:
+def test_runner_uses_only_public_cli_without_optional_actions() -> None:
     commands = re.findall(r'-Command\s+"([a-z][a-z0-9-]+)"', TEXT)
     assert commands
     assert not set(commands) & {
@@ -1046,12 +1021,11 @@ def test_runner_uses_only_public_cli_and_default_options_are_off() -> None:
     assert '"-m", "scopes_tool_cli.cli"' in TEXT
     assert not re.search(r"(?i)(?:\bACQuire:|\bTRIGger:|\bCH\d+:|\*ESR\?|\*IDN\?)", TEXT)
     assert not re.search(r"(?i)(?:EVENT\?|EVMsg\?|ALLEv\?|EVQty\?|DISPLAY:STYLE\s+DOTS)", TEXT)
-    assert "-IncludeAcquisitionActions" in TEXT
+    for name in ("IncludeAcquisitionActions", "IncludeConfigurationActions", "IncludeStorageWrites", "IncludeScreenshot"):
+        assert name not in TEXT and name not in SCRIPT.read_text(encoding="utf-8")
     assert "IncludeAutoscale" not in TEXT
-    assert "-IncludeStorageWrites" in TEXT
     assert 'Add-Case "autoscale"' not in TEXT
-    assert 'Add-Case $name "N/A" "Requires -IncludeAcquisitionActions"' in TEXT
-    assert 'Add-Case $name "N/A" "Requires -IncludeStorageWrites' in TEXT
+
 
 
 def test_identity_gate_and_vectors_safety_are_explicit() -> None:
@@ -1079,17 +1053,6 @@ def test_pulse_width_roundtrip_preserves_current_glitch_mode(tmp_path):
     assert all("range" not in call for call in calls)
 
 
-@pytest.mark.windows_powershell
-@requires_windows
-@pytest.mark.parametrize("arguments", [
-    ["-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "1"],
-    ["-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1", "-WaveformFilename", "bad;file.csv", "-WaveformSourceChannel", "1"],
-    ["-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1", "-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "3"],
-])
-def test_waveform_storage_inputs_rejected_before_identity(arguments):
-    result = run_script("-Target", TARGETS[2], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR", *arguments)
-    assert result.returncode != 0
-    assert "require" in result.stderr.lower()
 
 
 @pytest.mark.windows_powershell
@@ -1105,11 +1068,7 @@ def test_generated_arguments_match_parser_contract(tmp_path: Path, target: str, 
     from scopes_tool_cli.parser import _build_parser
 
     result, report = fake_run(
-        tmp_path, target, "-IncludeConfigurationActions", "-IncludeAcquisitionActions",
-        "-IncludeStorageWrites", "-SetupSlot", "1", "-ReferenceSlot", "1",
-        "-ImageFilename", "acceptance.png", "-IncludeScreenshot",
-        "-WaveformFilename", "wave.csv", "-WaveformSourceChannel", "2",
-        mode=mode, vectors_on=True,
+        tmp_path, target, mode=mode, vectors_on=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     # Build once in pytest, not in every fake child CLI process.
@@ -1134,8 +1093,7 @@ def test_generated_arguments_match_parser_contract(tmp_path: Path, target: str, 
 @requires_windows
 def test_non_blank_detail_is_printed_for_pass_na_and_fail(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], "-IncludeConfigurationActions",
-        cursor_error=("OscilloscopeError", "Cursor X setter failed"),
+        tmp_path, TARGETS[0], cursor_error=("OscilloscopeError", "Cursor X setter failed"),
     )
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
@@ -1149,7 +1107,7 @@ def test_non_blank_detail_is_printed_for_pass_na_and_fail(tmp_path: Path) -> Non
     assert printed["channel-units"] == "query, same-value set, and readback"
     assert "autoscale" not in printed
     assert printed["setup-save"] == cases["setup-save"]["detail"]
-    assert cases["setup-save"]["status"] == "N/A"
+    assert cases["setup-save"]["status"] == "PASS"
     assert "autoscale" not in cases
     assert printed["cursor-set"] == cases["cursor-set"]["detail"]
     assert cases["cursor-set"]["status"] == "FAIL"
@@ -1168,7 +1126,7 @@ CONFIRMATION_SECTIONS = (
     "PHYSICAL PREPARATION",
     "DEFAULT VALIDATION ACTIONS",
     "STATE / CLEANUP LIMITATIONS",
-    "OPTIONAL ACTIONS",
+    "STANDARD ACTIONS",
 )
 CONFIRMATION_PROMPT = (
     "Press Enter only after reviewing the information above.",
@@ -1230,33 +1188,18 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
     )
     assert result.stdout.rstrip().endswith("PASS  [live][tektronix] baseline live validation")
 
-    # No optional action was requested, so none may be described as planned.
-    for action in ("Acquisition", "Configuration", "Storage Writes", "Screenshot"):
-        assert f"- {action}: {NOT_REQUESTED}" in result.stdout, action
-    assert "Autoscale" not in result.stdout
+    assert "Measurement and capture checks require CH1 to be displayed." in result.stdout
+    assert "Acquisition: Run/Stop state changes" in result.stdout
+    assert "Storage Writes: Not requested." not in result.stdout
     assert "autoscale" not in cases
-    assert all(inv["arguments"][0] != "autoscale" for inv in report["invocations"])
-    # Without -IncludeConfigurationActions or -IncludeStorageWrites the default
-    # screen must not demand a CH1 fixture or writable instrument storage.
-    for absent in (
-        "Probe Comp / Demo output",
-        "Measurement and capture checks require CH1 to be displayed.",
-        "Reference Save requires CH1 display ON",
-        "Confirm the required instrument storage is available and writable",
-    ):
-        assert absent not in result.stdout, absent
+
 
 
 @pytest.mark.windows_powershell
 @requires_windows
-def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -> None:
+def test_operator_confirmation_warnings_describe_standard_actions(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], "-IncludeAcquisitionActions",
-        "-IncludeConfigurationActions", "-IncludeStorageWrites",
-        "-SetupSlot", "1", "-ReferenceSlot", "2", "-IncludeScreenshot",
-        "-ImageFilename", "acceptance.png", "-WaveformFilename", "wave.csv",
-        "-WaveformSourceChannel", "2",
-    )
+        tmp_path, TARGETS[0])
     assert result.returncode == 0, result.stdout + result.stderr
     for expected in (
         # Physical preparation gains the configuration and storage requirements.
@@ -1264,16 +1207,16 @@ def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -
         "Ensure CH1 display is ON and a stable waveform is visible. Measurement and capture checks require CH1 to be displayed.",
         "Reference Save requires CH1 display ON; otherwise the reference-save case is N/A.",
         "Confirm the required instrument storage is available and writable before saving files.",
-        # Optional notes are specific to the options actually enabled.
+        # Standard notes describe the actions that will execute.
         "Acquisition: Run/Stop state changes",
         "Configuration: Runs measurement, BYTE waveform capture, and cursor actions. "
         "Cursor mode may end OFF, measurement configuration may end cleared, "
         "and waveform transfer settings are not restored. "
         "TBS2074 cursor source selection may display CH1 or restart acquisition through Core.",
-        # Storage slots and filenames come from the arguments, not from constants.
-        "Storage Writes: Setup slot 1 and reference slot 2 may be overwritten.",
-        "Requested instrument image file 'acceptance.png' may be overwritten.",
-        "Requested instrument waveform file 'wave.csv' may be overwritten.",
+        # Storage uses slot 1 and generated filenames.
+        "Storage Writes: Setup slot 1 and reference slot 1 may be overwritten.",
+        "Generated instrument image basename 'st",
+        "Generated instrument waveform file 'st",
         # TBS2074 PNG capture is the supported screenshot path.
         "Screenshot: PNG screenshot; Core writes a temporary instrument file and attempts to delete it during cleanup.",
     ):
@@ -1285,16 +1228,15 @@ def test_operator_confirmation_warnings_follow_enabled_options(tmp_path: Path) -
 @requires_windows
 @pytest.mark.parametrize(("target", "expected"), [
     # TBS2074 supports a PNG screenshot written through a temporary instrument
-    # file; TDS2024B only over USBTMC; TBS1052B supports no screenshot format at
-    # all, so -IncludeScreenshot must not promise a screenshot file.
+    # file; the legacy profiles use BMP or JPEG only over USBTMC.
     (TARGETS[0], "Screenshot: PNG screenshot; Core writes a temporary instrument file and attempts to delete it during cleanup."),
     (TARGETS[1], "Screenshot: BMP screenshot is attempted only with a USBTMC instrument resource; otherwise this case is N/A."),
-    (TARGETS[2], "Screenshot: No screenshot format is supported on this model; no screenshot file is written."),
+    (TARGETS[2], "Screenshot: JPEG screenshot is attempted only with a USBTMC instrument resource; otherwise this case is N/A."),
 ])
 def test_operator_confirmation_screenshot_note_matches_model_support(
     tmp_path: Path, target: str, expected: str,
 ) -> None:
-    result, report = fake_run(tmp_path, target, "-IncludeScreenshot")
+    result, report = fake_run(tmp_path, target)
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"- {expected}" in result.stdout, expected
 
@@ -1345,7 +1287,7 @@ def test_operator_confirmation_blocks_all_later_commands(
 @requires_windows
 def test_tbs2074_first_gen_runt_channel_four_and_20ns_holdoff_are_accepted(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], "-IncludeConfigurationActions", mode="runt",
+        tmp_path, TARGETS[0], mode="runt",
         runt_channel=4, holdoff_seconds=20e-9,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -1369,7 +1311,7 @@ def test_cli_clean_baseline_preserves_history(tmp_path: Path, initial: int, veri
         stage: {"ExitCode": 0, "Payload": {"ok": True, "result": {"value": value, "raw": str(value)}}}
         for stage, value in (("pre-run-standard-event", initial), ("pre-run-standard-event-verify", verified))
     }
-    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses=responses)
+    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses=responses)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["pre-run-clean-baseline"]["status"] == "PASS"
@@ -1396,7 +1338,7 @@ def test_cli_clean_baseline_preserves_history(tmp_path: Path, initial: int, veri
     ("pre-run-standard-event-verify", {"ExitCode": 0, "Payload": {"ok": True, "result": {}}}),
 ])
 def test_cli_clean_baseline_failure_blocks_setters(tmp_path: Path, stage: str, response: dict) -> None:
-    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={stage: response})
+    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses={stage: response})
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["pre-run-clean-baseline"]["status"] == "FAIL"
@@ -1413,9 +1355,9 @@ def test_cli_clean_baseline_failure_blocks_setters(tmp_path: Path, stage: str, r
 @pytest.mark.parametrize("gate", ["identify", "model", "confirmation"])
 def test_cli_clean_baseline_respects_safety_gates(tmp_path: Path, gate: str) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[2], focused=True,
+        tmp_path, TARGETS[0], focused=True,
         stage_responses={"identify": VISA_FAILURE} if gate == "identify" else {},
-        live_model=TARGETS[0] if gate == "model" else None,
+        live_model=TARGETS[1] if gate == "model" else None,
         confirmation="decline" if gate == "confirmation" else "enter",
     )
     assert result.returncode != 0
@@ -1435,7 +1377,7 @@ def test_save_pwd_restores_only_after_failure(tmp_path: Path, failure: str) -> N
         responses["save-pwd-restore"] = {
             "ExitCode": 1, "Payload": {"ok": False, "error": {"type": "VisaIOError", "message": "Restore I/O failure"}},
         }
-    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses=responses, save_pwd_path="/usb0/")
+    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses=responses, save_pwd_path="/usb0/")
     case = next(case for case in report["cases"] if case["name"] == "save-pwd")
     assert case["status"] == ("PASS" if failure == "none" else "FAIL")
     assert (result.returncode == 0) == (failure == "none")
@@ -1447,7 +1389,7 @@ def test_save_pwd_restores_only_after_failure(tmp_path: Path, failure: str) -> N
     else:
         assert "save-pwd-restore" in stages
         if failure == "readback":
-            assert "Readback differs" in case["detail"]
+            assert "readback differs" in case["detail"]
         else:
             assert "save-pwd-same-value failed" in case["detail"]
             assert "Injected I/O failure" in case["detail"]
@@ -1465,7 +1407,7 @@ def test_save_pwd_restores_only_after_failure(tmp_path: Path, failure: str) -> N
 @requires_windows
 @pytest.mark.parametrize("path", ["", 'bad"path', "bad;path", "bad\npath"])
 def test_save_pwd_unsafe_original_does_not_write(tmp_path: Path, path: str) -> None:
-    result, report = fake_run(tmp_path, TARGETS[2], focused=True, save_pwd_path=path)
+    result, report = fake_run(tmp_path, TARGETS[0], focused=True, save_pwd_path=path)
     assert result.returncode == 0, result.stdout + result.stderr
     case = next(case for case in report["cases"] if case["name"] == "save-pwd")
     assert case["status"] == "N/A"
@@ -1475,7 +1417,7 @@ def test_save_pwd_unsafe_original_does_not_write(tmp_path: Path, path: str) -> N
 @pytest.mark.windows_powershell
 @requires_windows
 def test_save_pwd_failed_query_does_not_restore(tmp_path: Path) -> None:
-    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={"save-pwd-before": VISA_FAILURE})
+    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses={"save-pwd-before": VISA_FAILURE})
     assert result.returncode != 0
     case = next(case for case in report["cases"] if case["name"] == "save-pwd")
     assert case["status"] == "FAIL"
@@ -1488,7 +1430,7 @@ def test_save_pwd_failed_query_does_not_restore(tmp_path: Path) -> None:
 @pytest.mark.parametrize("value", [0, 65, 4, 8, 16, 32, None])
 def test_cli_final_native_status(tmp_path: Path, value: int | None) -> None:
     response = {"ExitCode": 0, "Payload": {"ok": True, "result": {"value": value}}}
-    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={"final-standard-event": response})
+    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses={"final-standard-event": response})
     case = next(case for case in report["cases"] if case["name"] == "final-standard-event")
     clean = value in (0, 65)
     assert case["status"] == ("PASS" if clean else "FAIL")
@@ -1499,7 +1441,7 @@ def test_cli_final_native_status(tmp_path: Path, value: int | None) -> None:
 @pytest.mark.windows_powershell
 @requires_windows
 def test_cli_final_io_failure_preserves_case_failure(tmp_path: Path) -> None:
-    result, report = fake_run(tmp_path, TARGETS[2], focused=True, stage_responses={
+    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses={
         "save-pwd-same-value": VISA_FAILURE, "final-standard-event": VISA_FAILURE,
     })
     assert result.returncode != 0
@@ -1508,3 +1450,121 @@ def test_cli_final_io_failure_preserves_case_failure(tmp_path: Path) -> None:
     assert "save-pwd-same-value failed" in cases["save-pwd"]["detail"]
     assert cases["final-standard-event"]["status"] == "FAIL"
     assert "VisaIOError" in cases["final-standard-event"]["detail"]
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("target,command,expected,actual,passed", [
+    (TARGETS[1], "trigger-edge", 1.0, 1.0005, True),
+    (TARGETS[1], "trigger-edge", 1.0, 1.002, False),
+    (TARGETS[1], "trigger-edge", 0.0, 5e-13, True),
+    (TARGETS[1], "trigger-edge", 0.0, 2e-12, False),
+    (TARGETS[0], "trigger-edge-level", 1.0, 1.0005, True),
+    (TARGETS[0], "trigger-edge-level", 1.0, 1.002, False),
+])
+def test_edge_readback_tolerance(tmp_path, target, command, expected, actual, passed):
+    def response(value):
+        return {"ExitCode": 0, "Payload": {"ok": True, "result": {
+            "source_channel": 1, "level_volts": value, "slope": "positive",
+        }}}
+    result, report = fake_run(tmp_path, target, stage_responses={
+        f"{command}-before": response(expected), f"{command}-after": response(actual),
+        f"{command}-restored": response(expected),
+    })
+    case = next(case for case in report["cases"] if case["name"] == command)
+    assert case["status"] == ("PASS" if passed else "FAIL")
+    assert (result.returncode == 0) == passed
+    assert any(inv["stage"] == f"{command}-same-value" for inv in report["invocations"])
+    if not passed:
+        for field in ("Before=", "After=", "Difference=", "Tolerance="):
+            assert field in case["detail"]
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+def test_unrelated_readback_retains_strict_tolerance(tmp_path):
+    result, report = fake_run(tmp_path, TARGETS[1], stage_responses={
+        "channel-scale-after": {"ExitCode": 0, "Payload": {
+            "ok": True, "result": {"volts_per_division": 1.0005},
+        }},
+    })
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["channel-scale"]["status"] == "FAIL"
+    assert cases["trigger-edge"]["status"] == "PASS"
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("response", [
+    {"ExitCode": 1, "Payload": {"ok": False, "result": {"valid": False, "reason": "No suitable edges"}}},
+    {"ExitCode": 0, "Payload": {"ok": True, "result": {"valid": False, "value": 1.0, "unit": "V"}}},
+    {"ExitCode": 0, "Payload": {"ok": True, "result": {"valid": True, "value": "NaN", "unit": "V"}}},
+    {"ExitCode": 0, "Payload": {"ok": True, "result": {"valid": "true", "value": 1.0, "unit": "V"}}},
+])
+def test_invalid_measurement_fails_and_remaining_items_execute(tmp_path, response):
+    from scopes_tool_core.capabilities import capabilities_for_model_id
+    items = capabilities_for_model_id(TARGETS[2]).measurement_items
+    result, report = fake_run(tmp_path, TARGETS[2], stage_responses={f"measure-{items[0]}": response})
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases[f"measure-{items[0]}"]["status"] == "FAIL"
+    if response["ExitCode"]:
+        assert "No suitable edges" in cases[f"measure-{items[0]}"]["detail"]
+    for item in items[1:]:
+        assert cases[f"measure-{item}"]["status"] == "PASS"
+    assert cases["capture-byte"]["status"] == "PASS"
+    calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][0] == "measure"]
+    assert [call[call.index("--item") + 1] for call in calls] == list(items)
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("stage,dependent", [
+    ("single", "force-trigger"), ("setup-save", "setup-recall"),
+    ("reference-save", "reference-display"), ("cursor-set", "cursor-set-screen"),
+    ("primitive-source-display", "capture-byte"), ("trigger-mode-before", "trigger-edge"),
+])
+def test_failed_prerequisite_is_fail_and_unexecuted_case_not_tested(tmp_path, stage, dependent):
+    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={stage: VISA_FAILURE})
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["trigger-mode" if stage == "trigger-mode-before" else stage]["status"] == "FAIL"
+    assert cases[dependent]["status"] == "NOT TESTED"
+    assert dependent not in [inv["stage"] for inv in report["invocations"]]
+    assert report["summary_counts"]["not_tested"] > 0
+    assert f"{report['summary_counts']['not_tested']} NOT TESTED" in result.stdout
+    assert printed_case_details(result)[dependent] == cases[dependent]["detail"]
+    assert cases["stop-acquisition"]["status"] == "PASS"
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("option", [
+    "-IncludeAcquisitionActions", "-IncludeConfigurationActions", "-IncludeStorageWrites", "-IncludeScreenshot",
+])
+def test_removed_optional_switches_are_rejected_before_invocation(option):
+    result = run_script("-Target", TARGETS[0], "-Connection", "usb", "-Resource", "USB0::FAKE::INSTR", option)
+    assert result.returncode != 0
+    assert "NamedParameterNotFound" in result.stderr
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("format_name", ["csv", "internal"])
+def test_tbs2074_waveform_save_uses_supported_current_format(tmp_path, format_name):
+    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={
+        "save-waveform-format-for-file": {"ExitCode": 0, "Payload": {"ok": True, "result": {"format": format_name}}},
+        "save-image-format-for-file": {"ExitCode": 0, "Payload": {"ok": True, "result": {"format": "bmp"}}},
+    })
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["save-waveform"]["status"] == ("PASS" if format_name == "csv" else "N/A")
+    commands = [inv["arguments"] for inv in report["invocations"]]
+    waveform_saves = [call for call in commands if call[0] == "save-waveform"]
+    assert len(waveform_saves) == (1 if format_name == "csv" else 0)
+    image = next(call for call in commands if call[0] == "save-image")
+    assert re.fullmatch(r"st[0-9a-f]{6}\.bmp", image[image.index("--filename") + 1])
+    assert cases["capture-byte"]["status"] == "PASS"
+    if format_name == "internal":
+        assert "no public setter can restore INTERNAL" in cases["save-waveform"]["detail"]

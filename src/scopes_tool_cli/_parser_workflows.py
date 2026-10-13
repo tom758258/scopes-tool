@@ -532,7 +532,7 @@ def _register_workflow_parsers(subparsers) -> None:
         default=None,
         help="screenshot background color; defaults to black",
     )
-    screenshot_parser.add_argument("--format", choices=("png", "bmp", "bmp8bit"))
+    screenshot_parser.add_argument("--format", choices=("png", "bmp", "bmp8bit", "jpeg"))
     screenshot_parser.add_argument("--ink-saver", type=_strict_bool_arg)
     screenshot_parser.add_argument(
         "--palette", choices=("color", "grayscale", "none")

@@ -130,7 +130,7 @@ def _validate_screenshot_args(args: argparse.Namespace) -> None:
     if getattr(args, "background", None) is not None and options.ink_saver is not None:
         raise ParameterValidationError("--background cannot be combined with --ink-saver.")
     if options.format is not None and getattr(args, "output_path", None) is not None:
-        expected = ".png" if options.format == "png" else ".bmp"
+        expected = {"png": ".png", "jpeg": ".jpeg"}.get(options.format, ".bmp")
         if Path(args.output_path).suffix.lower() != expected:
             raise ParameterValidationError(
                 f"--format {options.format} requires an output path ending in {expected}."

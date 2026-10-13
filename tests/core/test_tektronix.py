@@ -170,14 +170,14 @@ def test_unknown_tek_model_fails_closed(series, monkeypatch):
 @pytest.mark.parametrize("model_id,_,__", MODELS)
 def test_capability_subset_and_unsupported_leaks(model_id, _, __):
     capabilities = capabilities_for_model_id(model_id)
-    for operation in ("run", "channel-scale", "setup-save", "trigger-edge", "list-resources",
-                      "measure", "capture", "single-wait", "trigger-pulse-width", "reference-query", "save-waveform", "channel-offset"):
+    for operation in ("run", "channel-scale", "trigger-edge", "list-resources",
+                      "measure", "capture", "single-wait", "trigger-pulse-width", "channel-offset"):
         assert operation_supported(capabilities, operation)
     for operation in ("measure-results", "check-error", "system-operation-status"):
         assert not operation_supported(capabilities, operation)
     assert operation_supported(capabilities, "smoke") == (model_id == "tektronix-tbs2074")
     for operation in ("channel-units", "cursor-query", "cursor-off", "math-display",
-                      "math-operator", "measure-install", "measure-clear", "save-image", "acquisition-points",
+                      "math-operator", "measure-install", "measure-clear", "acquisition-points",
                       "record-length", "channel-summary", "live-data-snapshot", "system-information-snapshot"):
         assert operation_supported(capabilities, operation)
     assert operation_supported(capabilities, "display-persistence") is (
@@ -187,11 +187,17 @@ def test_capability_subset_and_unsupported_leaks(model_id, _, __):
     assert capabilities.trigger_modes == (("edge", "glitch", "runt") if is_tbs2000 else ("edge", "glitch", "tv"))
     assert capabilities.trigger_edge_sources == (("analog-channel", "line") if is_tbs2000 else ("analog-channel", "line", "external"))
     for operation in (("sample-rate", "trigger-runt", "save-image-format", "save-waveform-format") if is_tbs2000
-                      else ("cursor-set", "trigger-tv", "save-image-ink-saver")):
+                      else ("cursor-set", "trigger-tv")):
         assert operation_supported(capabilities, operation)
     assert not capabilities.supports_measure_results_dump
     assert capabilities.supports_png_screenshot is is_tbs2000
-    assert operation_supported(capabilities, "screenshot") is (model_id != "tektronix-tbs1052b")
+    assert operation_supported(capabilities, "screenshot")
+    for operation in ("setup-save", "setup-recall", "reference-save", "reference-display",
+                      "reference-query", "save-image", "save-waveform", "save-pwd"):
+        assert operation_supported(capabilities, operation) is is_tbs2000
+    assert not operation_supported(capabilities, "save-image-ink-saver")
+    assert capabilities.reference_waveforms == (2 if is_tbs2000 else 0)
+    assert capabilities.setup_slots == (tuple(range(1, 10)) if is_tbs2000 else ())
     assert operation_supported(capabilities, "display-vectors") is (
         model_id in {"tektronix-tds2024b", "tektronix-tbs1052b"}
     )
@@ -1054,8 +1060,9 @@ def test_cli_new_primitives_simulate_and_plan(model_id, _, __, tmp_path):
             "--wait-trigger", "--trigger-timeout-ms", "20", "--trigger-poll-interval-ms", "1"],
         ["single-wait", "--trigger-timeout-ms", "20", "--trigger-poll-interval-ms", "1", "--force-trigger-on-timeout"],
         ["trigger-pulse-width", "--channel", "1", "--polarity", "positive", "--qualifier", "less-than", "--time-seconds", "1e-6"],
-        ["reference-query", "--slot", "1"],
     ]
+    if model_id == "tektronix-tbs2074":
+        cases.append(["reference-query", "--slot", "1"])
     for mode in ("--simulate", "--dry-run"):
         for case in cases:
             completed = subprocess.run([sys.executable, "-m", "scopes_tool_cli.cli", *case,
@@ -1178,3 +1185,154 @@ def test_tbs2074_math_accepts_documented_ch3_ch4_pairs(operation, source1, sourc
         assert scope.backend.tek_settings["MATH:DEFINE"].strip('"').upper() == expression
         state = scope.query_math_operator(1)
         assert (state.operation, state.source1, state.source2) == (operation, source1, source2)
+
+
+@pytest.mark.parametrize("model_id,_,__", MODELS)
+@pytest.mark.parametrize("original_timeout", [2000, 3456, None])
+@pytest.mark.parametrize("failure", [None, "write", "query", "status"])
+def test_autoset_operation_timeout_and_restore(model_id, _, __, original_timeout, failure, monkeypatch):
+    scope, backend = make_scope(model_id, {"*ESR?": "4" if failure == "status" else "0"})
+    backend.timeout = original_timeout
+    events = []
+    original_write, original_query = backend.write, backend.query
+
+    def write(command):
+        events.append((command, backend.timeout))
+        original_write(command)
+        if failure == "write" and command == "AUTOSet EXECute":
+            raise OscilloscopeError("AutoSet write failed")
+
+    def query(command):
+        events.append((command, backend.timeout))
+        if failure == "query" and command == "*ESR?":
+            raise OscilloscopeError("status read failed")
+        return original_query(command)
+
+    monkeypatch.setattr(backend, "write", write)
+    monkeypatch.setattr(backend, "query", query)
+    expected_timeout = original_timeout if model_id == "tektronix-tbs2074" else 10000
+    if failure == "write":
+        with pytest.raises(OscilloscopeError):
+            scope.autoscale(None)
+    else:
+        scope.autoscale(None)
+        assert backend.timeout == original_timeout
+        if failure:
+            with pytest.raises(OscilloscopeError):
+                scope.post_webui_operation_status("autoscale")
+        else:
+            assert scope.post_webui_operation_status("autoscale").value == 0
+        assert events[1] == ("*ESR?", expected_timeout)
+    assert events[0] == ("AUTOSet EXECute", expected_timeout)
+    assert backend.history.count("AUTOSet EXECute") == 1
+    assert backend.timeout == original_timeout
+    backend.responses["*ESR?"] = "0"
+    monkeypatch.setattr(backend, "query", original_query)
+    scope.run()
+    scope.post_command_status("run")
+    assert events[-2:] == [("ACQuire:STOPAfter RUNSTop", original_timeout), ("ACQuire:STATE ON", original_timeout)]
+    assert "*OPC?" not in backend.history
+
+
+@pytest.mark.parametrize("bad_data", [None, b"bad", b"\xff\xd8truncated"])
+def test_tbs1052b_jpeg_capture_restores_hardcopy_state(bad_data, monkeypatch):
+    from scopes_tool_core.errors import ScreenshotResponseError
+    scope, backend = make_scope("tektronix-tbs1052b", {
+        "HARDCopy:FORMat?": "BMP", "HARDCopy:PORT?": "USB", "HARDCopy:INKSaver?": "ON",
+    })
+    backend.timeout = 2000
+    data = b"\xff\xd8image\xff\xd9" if bad_data is None else bad_data
+
+    def read():
+        assert backend.timeout == 10000
+        return data
+
+    monkeypatch.setattr(backend, "read_raw", read)
+    if bad_data is None:
+        capture = scope.capture_screenshot(options=ScreenshotOptions(format="jpeg"))
+        assert capture.format_name == "JPEG" and capture.data == data
+    else:
+        with pytest.raises(ScreenshotResponseError):
+            scope.capture_screenshot(options=ScreenshotOptions(format="jpeg"))
+    assert backend.timeout == 2000
+    assert backend.history[1:] == [
+        "HARDCopy:FORMat?", "HARDCopy:PORT?", "HARDCopy:INKSaver?",
+        "HARDCopy:FORMat JPEG", "HARDCopy:INKSaver OFF", "HARDCopy STARt",
+        "HARDCopy:INKSaver ON", "HARDCopy:FORMat BMP",
+    ]
+    for format_name in ("bmp", "png"):
+        history = list(backend.history)
+        with pytest.raises(ParameterValidationError):
+            scope.capture_screenshot(options=ScreenshotOptions(format=format_name))
+        assert backend.history == history
+
+
+@pytest.mark.parametrize("model_id,_,__", MODELS)
+@pytest.mark.parametrize("failure", [None, "query"])
+def test_cli_autoset_shares_core_operation_timeout(model_id, _, __, failure, monkeypatch, capsys):
+    from scopes_tool_cli import cli, runtime
+    scope, backend = make_scope(model_id)
+    backend.timeout = 2000
+    events = []
+    original_write, original_query = backend.write, backend.query
+
+    def write(command):
+        events.append((command, backend.timeout))
+        original_write(command)
+
+    def query(command):
+        if command == "*ESR?":
+            events.append((command, backend.timeout))
+            if failure:
+                raise OscilloscopeError("Injected status I/O failure")
+        return original_query(command)
+
+    monkeypatch.setattr(backend, "write", write)
+    monkeypatch.setattr(backend, "query", query)
+    monkeypatch.setattr(runtime, "_open_scope", lambda *args: scope)
+    code = cli.main(["autoscale", "--resource", "USB0::FAKE::INSTR", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == (1 if failure else 0)
+    assert payload["ok"] == (failure is None)
+    timeout = 2000 if model_id == "tektronix-tbs2074" else 10000
+    assert events == [("AUTOSet EXECute", timeout), ("*ESR?", timeout)]
+    assert backend.timeout == 2000
+    assert backend.history.count("AUTOSet EXECute") == 1
+
+
+@pytest.mark.parametrize("model_id", ["keysight-dsox2004a", "keysight-dsox3024a", "keysight-dsox4024a"])
+@pytest.mark.parametrize("fallback", [False, True])
+def test_keysight_autoscale_preserves_existing_timeout_and_fallback(model_id, fallback, monkeypatch, capsys):
+    from scopes_tool_cli import cli, runtime
+    from scopes_tool_cli.commands.workflows import AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS
+    from scopes_tool_core.scope import Oscilloscope
+    model = physical_model_for_id(model_id)
+    backend = FakeBackend(responses={"*IDN?": f"KEYSIGHT TECHNOLOGIES,{model.canonical_model},SN,1.0"}, timeout=2000)
+    scope = Oscilloscope(backend)
+    events = []
+    original_write, original_query = backend.write, backend.query
+    statuses = iter(['-113,"Undefined header"', '+0,"No error"'] if fallback else ['+0,"No error"'])
+
+    def write(command):
+        events.append((command, backend.timeout))
+        original_write(command)
+
+    def query(command):
+        if command == ":SYSTem:ERRor?":
+            events.append((command, backend.timeout))
+            backend.history.append(command)
+            return next(statuses)
+        return original_query(command)
+
+    monkeypatch.setattr(backend, "write", write)
+    monkeypatch.setattr(backend, "query", query)
+    monkeypatch.setattr(runtime, "_open_scope", lambda *args: scope)
+    code = cli.main(["autoscale", "--source-channel", "1", "--resource", "USB0::FAKE::INSTR", "--json"])
+    output = capsys.readouterr()
+    assert code == 0, output.out + output.err
+    payload = json.loads(output.out)
+    assert payload["ok"]
+    assert events == [
+        (":AUToscale CHANnel1", 2000), (":SYSTem:ERRor?", AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS),
+    ] + ([(":AUToscale", 2000), (":SYSTem:ERRor?", AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS)] if fallback else [])
+    assert backend.timeout == 2000

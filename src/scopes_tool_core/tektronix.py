@@ -503,7 +503,17 @@ class TektronixOscilloscope(Oscilloscope):
             "system-standard-event",
         }:
             return TekPostStatus(0, "not read after explicit status operation")
-        raw = self.scpi.query("*ESR?")
+        if operation == "autoscale" and self.capabilities is not None and self.capabilities.physical_model_id in {
+            "tektronix-tds2024b", "tektronix-tbs1052b",
+        }:
+            original_timeout = self.scpi.timeout
+            try:
+                self.scpi.set_timeout(10000)
+                raw = self.scpi.query("*ESR?")
+            finally:
+                self.scpi.set_timeout(original_timeout)
+        else:
+            raw = self.scpi.query("*ESR?")
         number = _number(raw, "*ESR?")
         if not number.is_integer() or not 0 <= number <= 255:
             raise OscilloscopeError(f"Invalid Tek SESR response: {raw!r}")
@@ -661,7 +671,17 @@ class TektronixOscilloscope(Oscilloscope):
                   channels_mode: str | None = None) -> None:
         if channels is not None or acquire_mode is not None or channels_mode is not None:
             raise ParameterValidationError("Tek autoscale supports no optional controls")
-        self.scpi.write("AUTOSet EXECute")
+        if self.capabilities is not None and self.capabilities.physical_model_id in {
+            "tektronix-tds2024b", "tektronix-tbs1052b",
+        }:
+            original_timeout = self.scpi.timeout
+            try:
+                self.scpi.set_timeout(10000)
+                self.scpi.write("AUTOSet EXECute")
+            finally:
+                self.scpi.set_timeout(original_timeout)
+        else:
+            self.scpi.write("AUTOSet EXECute")
 
     def set_timebase_scale(self, seconds_per_division: float) -> None:
         if seconds_per_division <= 0:
@@ -1532,9 +1552,10 @@ class TektronixOscilloscope(Oscilloscope):
         if isinstance(self.backend, VisaBackend):
             resource = self.backend.resource_name.strip().upper()
             if not (resource.startswith("USB") and resource.endswith("::INSTR")):
-                raise OscilloscopeError("Tek BMP screenshot capture requires a USBTMC resource.")
+                raise OscilloscopeError("Tek hardcopy screenshot capture requires a USBTMC resource.")
         desired_ink = options.ink_saver if options.ink_saver is not None else background == "white"
-        temporary_settings = [("HARDCopy:FORMat", "BMP"), ("HARDCopy:PORT", "USB")]
+        format_name = options.format or "png"
+        temporary_settings = [("HARDCopy:FORMat", format_name.upper()), ("HARDCopy:PORT", "USB")]
         if options.ink_saver is None:
             temporary_settings.append(("HARDCopy:INKSaver", "ON" if desired_ink else "OFF"))
         originals = [
@@ -1557,8 +1578,8 @@ class TektronixOscilloscope(Oscilloscope):
                 layout = "LANdscape" if options.layout == "landscape" else "PORTRait"
                 self.scpi.write(f"HARDCopy:LAYout {layout}")
             self.scpi.write("HARDCopy STARt")
-            data = screenshot_bytes_from_values_for_format(self.scpi.read_raw(), "bmp")
-            return ScreenshotCapture("BMP", None, data, "white" if desired_ink else "black")
+            data = screenshot_bytes_from_values_for_format(self.scpi.read_raw(), format_name)
+            return ScreenshotCapture(format_name.upper(), None, data, "white" if desired_ink else "black")
         finally:
             try:
                 # Attempt every restoration even if one instrument write fails.

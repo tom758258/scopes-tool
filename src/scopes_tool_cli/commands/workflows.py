@@ -821,7 +821,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
         format_name = options.format or "png"
         output_path = _screenshot_output_path(args, format_name)
         background = args.background or DEFAULT_SCREENSHOT_BACKGROUND
-        display_format = {"png": "PNG", "bmp": "BMP", "bmp8bit": "BMP8bit"}[
+        display_format = {"png": "PNG", "bmp": "BMP", "bmp8bit": "BMP8bit", "jpeg": "JPEG"}[
             format_name
         ]
         print(
@@ -833,7 +833,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
         written_image = _write_screenshot(capture, output_path, format_name)
         for command in scope.backend.history[history_start:]:
             print(f"Command: {command}")
-        file_kind = "png" if format_name == "png" else "bmp"
+        file_kind = "bmp" if format_name == "bmp8bit" else format_name
         files = [{"kind": file_kind, "path": str(written_image)}]
         runtime._json_set_files(files)
         result = dict(
@@ -991,7 +991,7 @@ def _cmd_simple_advanced(args: argparse.Namespace, command_name: str) -> int:
                     scope, AUTOSCALE_SYSTEM_ERROR_TIMEOUT_MS
                 )
         else:
-            entry = scope.post_command_status()
+            entry = scope.post_command_status(command_name)
         runtime._json_record_system_error(entry)
         print(runtime._post_status_text(entry))
         return 1 if entry.is_error else 0
@@ -1073,14 +1073,14 @@ def _screenshot_output_path(args: argparse.Namespace, format_name: str) -> Path:
         return Path(args.output_path)
     if format_name == "png":
         return _default_screenshot_path()
-    return _default_screenshot_path(extension=".bmp")
+    return _default_screenshot_path(extension=".jpeg" if format_name == "jpeg" else ".bmp")
 
 
 def _write_screenshot(capture, output_path: Path, format_name: str) -> Path:
     try:
         return write_screenshot(capture, output_path)
     except OSError as exc:
-        label = "screenshot PNG" if format_name == "png" else "screenshot BMP"
+        label = "screenshot " + ("BMP" if format_name == "bmp8bit" else format_name.upper())
         raise OscilloscopeError(
             _format_output_file_error(label, output_path, exc)
         ) from exc

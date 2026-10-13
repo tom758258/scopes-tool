@@ -99,11 +99,13 @@ when it does not match the detected identity.
 The Tektronix profiles admit only the existing operation subsets documented
 in the Tektronix model-support section below. All three support BYTE waveform
 capture, model-specific single-source measurements, voltage channel offsets,
-source-qualified instrument waveform saves, native-status workflows,
+native-status workflows,
 capability-driven acquisition checks and cleanup, and a model-specific sequence
 subset. TBS2074 supports native PNG screenshots with black background and the
-Smoke workflow; TDS2024B supports explicit BMP screenshots over USBTMC;
-TBS1052B screenshots remain unsupported. Normalized `check-error` is
+Smoke workflow and instrument-side setup/reference/file storage;
+TDS2024B supports explicit BMP screenshots and TBS1052B supports explicit JPEG
+screenshots over USBTMC. Setup, reference memory, and instrument-side storage
+are not public operations on TDS2024B or TBS1052B. Normalized `check-error` is
 unsupported on all three. Tek workflow status remains separate from the
 normalized Keysight system-error queue.
 
@@ -170,7 +172,7 @@ adapter aliases do not create additional hardware features.
 | `single-wait` | SUPPORTED | SUPPORTED | SUPPORTED | One single acquisition plus finite `BUSY?` polling; optional timeout force-trigger is followed by another bounded poll. Cancellation and timeout remain bounded. |
 | `force-trigger` | SUPPORTED | SUPPORTED | SUPPORTED | `TRIGger FORCe`; requires an armed instrument and is not itself a completion wait. |
 | `acquisition` | SUPPORTED | SUPPORTED | SUPPORTED | normal/sample, peak, and average on all three; TBS2074 does not support high-resolution. Average counts: powers of two 2-512 on TBS2074, and 4/16/64/128 on TDS2024B/TBS1052B. |
-| `autoscale` | SUPPORTED | SUPPORTED | SUPPORTED | Bare `AUTOSet` only; optional channel-list, acquisition-mode, or channel-selection policy requests remain unsupported. |
+| `autoscale` | SUPPORTED | SUPPORTED | SUPPORTED | Bare `AUTOSet` only; optional channel-list, acquisition-mode, or channel-selection policy requests remain unsupported. TDS2024B/TBS1052B temporarily use 10000 ms for AutoSet and its following SESR query, restoring the original timeout after each operation. TBS2074 retains the session timeout. |
 | `sample-rate` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 has current/maximum sample-rate readbacks. Reciprocal waveform X increment on the B1 models is not a hardware sample-rate readback. |
 | `acquisition-points`, `record-length` | SUPPORTED | SUPPORTED | SUPPORTED | Query-only acquisition size. TDS2024B/TBS1052B are fixed at 2500 points; no new record-length setter. |
 | `timebase-scale` | SUPPORTED | SUPPORTED | SUPPORTED | Seconds/division read/write. |
@@ -258,22 +260,25 @@ For TBS2074 runt, the admitted spellings come from the documented
 | --- | --- | --- | --- | --- |
 | `capture` | SUPPORTED | SUPPORTED | SUPPORTED | BYTE only, displayed analog channels, safe maximum 1000 requested points. Hidden channels fail without display mutation. Multi-channel capture uses successive transfers; `all` includes hidden channels and fails rather than filtering. No WORD, acquisition reconfiguration, or resampling. |
 | `screenshot` explicit BMP host artifact | UNSUPPORTED | SUPPORTED | UNSUPPORTED | TDS2024B uses native `HARDCopy START` over USBTMC with BMP bytes and `.bmp` host artifact semantics. TBS2074 uses a separate native PNG path. TBS1052B BMP applicability remains ambiguous and unsupported. |
+| `screenshot` explicit JPEG host artifact | UNSUPPORTED | UNSUPPORTED | SUPPORTED | TBS1052B uses `HARDCopy:FORMat JPEG`, `HARDCopy:PORT USB`, and `HARDCopy START` over USBTMC. Native JPEG bytes retain `.jpeg` host artifact semantics; start/end markers are required. B1 pp. 2-96 to 2-102. |
 | `capture_screenshot`; CLI default/explicit PNG | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 temporarily saves native PNG, waits for OPC, reads the file, validates PNG, and attempts cleanup. Requires writable instrument storage. Black is the only supported background. |
 | `screenshot --query-hardcopy`; `query_hardcopy_state` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Required hardcopy area/ink-saver/palette/layout/format readbacks are not all available. |
-| `reference-save`, `reference-display`, `reference-query` | SUPPORTED | SUPPORTED | SUPPORTED | Two slots only. Save has OPC completion; query returns actual display state while label/raw_label remain null because Tek lacks matching label readback. |
+| `reference-save`, `reference-display`, `reference-query` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | Two slots only. Save has OPC completion; query returns actual display state while label/raw_label remain null because Tek lacks matching label readback. |
 | `reference-label`, `reference-clear` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | No writable reference label or explicit memory-clear action; hiding is not clearing. |
-| `save-pwd` | SUPPORTED | SUPPORTED | SUPPORTED | Native filesystem current-directory set/query, subject to public and model filesystem validation. |
-| `save-image` | SUPPORTED | SUPPORTED | SUPPORTED | Instrument-side file action, no host artifact; completion requires successful OPC with the existing temporary 15-second timeout restored in `finally`. The current instrument encoding does not add a public format enum. |
+| `save-pwd` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | Native filesystem current-directory set/query, subject to public and model filesystem validation. |
+| `save-image` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | Instrument-side file action, no host artifact; completion requires successful OPC with the existing temporary 15-second timeout restored in `finally`. The current instrument encoding does not add a public format enum. |
 | `save-image-format` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 PNG/BMP setter and matching readback. B1 `SAVE:IMAGE:FILEFORMAT` has no established matching query; `HARDCopy:FORMat?` reads a different setting and cannot be substituted. |
-| `save-image-ink-saver` | UNSUPPORTED | SUPPORTED | SUPPORTED | B1 `HARDCopy:INKSaver` controls saved images. TBS2074 has no equivalent background/ink-saver control. |
+| `save-image-ink-saver` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | No public instrument-storage ink-saver setting. Legacy hardcopy screenshot capture still manages its own temporary ink-saver state. |
 | `save-image-palette`, `save-image-factors`, `save-filename` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | No independent matching state/readback. |
 | `save-waveform-format` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 public subset is CSV/SPREADSheet with readback. B1 CSV export has no independent format setter/readback. |
-| `save-waveform` | SUPPORTED | SUPPORTED | SUPPORTED | Tek requires the existing optional `source_channel`, bounded to model analog channels, then OPC completion with the temporary 15-second timeout restored. |
+| `save-waveform` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | Tek requires the existing optional `source_channel`, bounded to model analog channels, then OPC completion with the temporary 15-second timeout restored. |
 | `save-waveform-length`, `save-waveform-length-max` | UNSUPPORTED | UNSUPPORTED | UNSUPPORTED | Record length and transfer start/stop are not export point-count/max-length settings. |
-| `setup-save`, `setup-recall` | SUPPORTED | SUPPORTED | SUPPORTED | Slots 1-9 only. File targets remain unsupported; Tek setup-file formats do not satisfy the existing `.scp` contract. |
+| `setup-save`, `setup-recall` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | Slots 1-9 only. File targets remain unsupported; Tek setup-file formats do not satisfy the existing `.scp` contract. |
 
-TDS2024B BMP capture reads through end-of-message, validates the BMP signature,
-keeps native BMP bytes, and preserves `.bmp` artifact semantics. Temporary
+TDS2024B BMP and TBS1052B JPEG capture read through VISA end-of-message,
+validate the native format, and preserve `.bmp` / `.jpeg` artifact semantics.
+JPEG capture requires both start and end markers; it uses the rear USB Device
+port without a USB flash drive. Temporary
 10-second timeout, hardcopy format, port, and requested ink-saver/background
 settings are
 restored even after failure. Explicit landscape/portrait and ink-saver controls
@@ -435,9 +440,11 @@ support incorrectly:
   `HARDCopy:FORMat` syntax and applies it to USB-file/USBTMC output, while
   p. 2-99 describes BMP as non-TBS1000B. TBS1052B BMP screenshot therefore
   remains unsupported pending authoritative resolution. Separately,
-  `HARDCopy:FORMat?` is not treated as a readback of
-  `SAVE:IMAGE:FILEFORMAT`; format-independent `save-image` and documented
-  ink-saver control remain separate support decisions.
+  JPEG is explicitly documented for TBS1000B on pp. 2-98 to 2-99,
+  with `HARDCopy START` output and USB Device port routing on pp. 2-96 to
+  2-102. This supports the separate JPEG path without admitting BMP.
+  `HARDCopy:FORMat?` is not a readback of `SAVE:IMAGE:FILEFORMAT`;
+  legacy instrument-side storage remains outside the public operation set.
 - TBS2000 FFT documentation does not establish the full-span conversion or
   frequency reference needed by the public atomic result (pp. 93-97).
 - TBS2000 cursor documentation refers to a source without a corresponding

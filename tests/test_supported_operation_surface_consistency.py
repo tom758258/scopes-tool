@@ -190,3 +190,40 @@ def test_supported_operation_plans_executes_and_accepts_adapter_requests(model_i
             result = execute_command(web_command, mode=mode, resource=None, model_id=model_id,
                                      parameters=normalized, artifact_dir=tmp_path / f"web-{mode}")
             assert result["exit_code"] == 0, result
+
+
+@pytest.mark.parametrize("model_id", ["tektronix-tds2024b", "tektronix-tbs1052b"])
+@pytest.mark.parametrize("operation", [
+    "setup-save", "setup-recall", "reference-save", "reference-display", "reference-query",
+    "save-image", "save-waveform", "save-pwd", "save-image-ink-saver",
+])
+def test_legacy_tektronix_storage_is_rejected_by_public_adapters(model_id, operation, tmp_path, capsys, monkeypatch):
+    from scopes_tool_cli import runtime
+    from scopes_tool_core.errors import OscilloscopeError
+    from scopes_tool_webui.command_validation import WebUIRequestError
+
+    def unexpected_backend(*args):
+        pytest.fail("Unsupported operation must be rejected before opening a backend")
+
+    monkeypatch.setattr(runtime, "_make_simulator_backend", unexpected_backend)
+    monkeypatch.setattr(runtime, "_LAST_BACKEND", None)
+    caps = capabilities_for_model_id(model_id)
+    assert not operation_supported(caps, operation)
+    cli_args, web_args = _arguments(operation, caps, tmp_path)
+    for mode in ("--dry-run", "--simulate"):
+        code = cli.main([operation, *arguments_to_argv(cli_args), mode, "--model", model_id, "--json"])
+        output = capsys.readouterr()
+        assert code != 0, output.out + output.err
+        payload = json.loads(output.out)
+        assert not payload["ok"]
+        assert not payload["scpi"]["sent"]
+        assert not payload["scpi"]["planned"]
+    assert not CATALOG[operation]["presentation"]["models"][model_id]["supported"]
+    for mode in ("simulate", "dry-run", "live"):
+        with pytest.raises(WebUIRequestError, match="unsupported"):
+            _validate_parameters(operation, deepcopy(web_args), mode, model_id)
+    command, arguments, _ = validate_command_request({
+        "schema_version": WORKER_SCHEMA_VERSION, "command": operation, "arguments": cli_args,
+    })
+    with pytest.raises(OscilloscopeError):
+        parse_domain_command(command, arguments, SimpleNamespace(mode="simulate", model=model_id, resource=None))

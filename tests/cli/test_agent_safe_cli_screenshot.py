@@ -200,7 +200,7 @@ def test_screenshot_hardcopy_controls_dry_run_explicit_ink_saver_has_no_restore(
     }
 
 
-def test_screenshot_hardcopy_controls_reject_invalid_values_before_backend(monkeypatch):
+def test_screenshot_hardcopy_controls_reject_invalid_values_before_backend(monkeypatch, capsys):
     opened = False
 
     def fail_open(*args, **kwargs):
@@ -210,7 +210,12 @@ def test_screenshot_hardcopy_controls_reject_invalid_values_before_backend(monke
 
     monkeypatch.setattr(runtime, "_open_scope", fail_open)
     with pytest.raises(SystemExit):
-        cli.main(["screenshot", "--simulate", "--format", "jpeg"])
+        cli.main(["screenshot", "--simulate", "--format", "gif"])
+    capsys.readouterr()
+    assert cli.main(["screenshot", "--simulate", "--format", "jpeg", "--json"]) == 1
+    payload = _json_stdout(capsys)
+    assert not payload["ok"]
+    assert "unsupported" in payload["error"]["message"]
     assert opened is False
 
 

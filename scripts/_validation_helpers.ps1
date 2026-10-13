@@ -334,7 +334,7 @@ function Invoke-CapturedCommand {
 
 function Write-CaseStatus {
     param(
-        [Parameter(Mandatory = $true)][ValidateSet("PASS", "FAIL", "N/A")][string]$Status,
+        [Parameter(Mandatory = $true)][ValidateSet("PASS", "FAIL", "N/A", "NOT TESTED")][string]$Status,
         [Parameter(Mandatory = $true)][string]$Name,
         [string]$Context = "",
         [AllowEmptyCollection()][string[]]$FailureReasons = @()
@@ -562,11 +562,13 @@ function Complete-LiveValidationRun {
     $passedCaseCount = 0
     $failedCaseCount = 0
     $naCaseCount = 0
+    $notTestedCaseCount = 0
     foreach ($caseEntry in $cases) {
         switch ($caseEntry.status) {
             "PASS" { $passedCaseCount += 1 }
             "FAIL" { $failedCaseCount += 1 }
             "N/A" { $naCaseCount += 1 }
+            "NOT TESTED" { $notTestedCaseCount += 1 }
         }
     }
 
@@ -615,6 +617,7 @@ function Complete-LiveValidationRun {
             passed = $passedCaseCount
             failed = $failedCaseCount
             na = $naCaseCount
+            not_tested = $notTestedCaseCount
             invocations = $invocationArray.Count
         }
         cases = $cases

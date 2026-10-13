@@ -535,9 +535,9 @@ def _normalize_screenshot_worker_arguments(
             raise OscilloscopeError(f"screenshot argument {key} must be a string")
     if "ink_saver" in arguments and not isinstance(arguments["ink_saver"], bool):
         raise OscilloscopeError("screenshot argument ink_saver must be a boolean")
-    if arguments.get("format") not in {None, "png", "bmp", "bmp8bit"}:
+    if arguments.get("format") not in {None, "png", "bmp", "bmp8bit", "jpeg"}:
         raise OscilloscopeError(
-            "screenshot argument format must be one of: png, bmp, bmp8bit"
+            "screenshot argument format must be one of: png, bmp, bmp8bit, jpeg"
         )
     if arguments.get("background") not in {None, "black", "white"}:
         raise OscilloscopeError(

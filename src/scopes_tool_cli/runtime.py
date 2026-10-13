@@ -114,6 +114,9 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope | Abstr
     global _LAST_BACKEND
     mode = _resolve_cli_mode(args)
     if mode == "simulate":
+        capabilities = capabilities_for_model_id(args.model)
+        if not operation_supported(capabilities, args.command):
+            raise OscilloscopeError(f"{args.command} is unsupported for {args.model}")
         backend = _make_simulator_backend(args, resource)
         _LAST_BACKEND = backend
         scope = scope_for_physical_model(physical_model_for_id(args.model), backend)

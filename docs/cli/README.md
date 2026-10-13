@@ -2015,13 +2015,16 @@ timeout for this completion query and then restores the prior session timeout;
 temporary 15-second completion timeout and restores it in finally.
 
 `save-waveform --filename ... [--source-channel N]` keeps filename-only
-behavior on Keysight. Tek requires `--source-channel` in the model's analog
-channel range (1..4 or 1..2). TDS2000B and TBS1000B models save CSV without a format query/set;
-TBS2074 retains its existing `csv` format control. Use available instrument
+behavior on Keysight. TBS2074 requires `--source-channel` in its analog
+channel range (1..4) and retains its existing `csv` format control.
+TDS2024B and TBS1052B do not expose Setup, Reference Memory, instrument-side
+file saves, current-directory controls, or storage-only settings. Use available instrument
 storage and a filename valid for the model (TBS2000 uses 8.3 names).
 TBS2074 `screenshot` retrieves native PNG with black background and no
 appearance controls. TDS2024B retains `--format bmp` over USBTMC;
-TBS1052B screenshot remains unsupported.
+TBS1052B supports explicit `--format jpeg` over USBTMC, producing native
+`.jpeg` host files without a USB flash drive. BMP remains unsupported on that
+model because the programmer manual has conflicting applicability statements.
 
 These commands send model-specific SAVE SCPI so the oscilloscope writes to its own
 current save directory, internal storage, or attached USB storage. They do not
@@ -2764,44 +2767,59 @@ select pyvisa-py explicitly when needed:
 
 After a hardware-free Core profile check and simulated identify, the runner
 checks the detected physical identity against the target and stops before
-state-changing cases on a mismatch. Its default cases query
-supported status and settings and write back current values where the public
-CLI provides a safe path. It skips acquisition actions, storage
-writes, cursor/measurement configuration actions, and screenshots by default.
-`-IncludeAcquisitionActions` sends `stop-acquisition` during cleanup; success
-confirms the command and native status, without independent Running/Stopped
-readback or restoration of the original state.
-`-IncludeStorageWrites` requires explicit `-SetupSlot` (1-9) and
-`-ReferenceSlot` (1-2); those slots may be overwritten. The runner does not
-preserve their previous contents. Supply `-ImageFilename` with that storage
-opt-in to test image saving on available instrument storage; the requested file
-may be overwritten. Without a filename, image saving remains N/A. To test
-waveform saving, supply both `-WaveformFilename` and `-WaveformSourceChannel`
-with `-IncludeStorageWrites`; the channel must exist on the selected model.
-`-IncludeConfigurationActions` tests supported cursor setting, cursor off,
-measurement installation, and measurement clear. It does not restore previous
-cursor or measurement configurations; successful actions leave cursors off and
-measurements cleared. For TBS2074, the runner checks X, physical-voltage Y,
-and combined SCREEN cursor settings when their prerequisites hold, and it
-switches each of the five cursor functions `off`, `screen`, `waveform`,
-`vbars`, and `hbars`, verifying the function readback each time. Selecting
-the cursor source may change the selected waveform, display that channel, or
-restart acquisition through Core. Those effects are not restored. Horizontal
-position validation uses only public `timebase-position` query/set/readback;
-the runner does not actively switch Delay Mode ON/OFF.
-`-IncludeScreenshot` enables native PNG capture for TBS2074 and explicit BMP
-capture for TDS2024B over USBTMC. Core handles temporary instrument files,
-hardcopy settings, and timeout restoration as applicable. TBS1052B screenshot
-capture is not supported. Display persistence is not supported on TBS2074 and
-that runner case reports N/A. These opt-in parameters apply only to Tektronix
-targets; the Keysight baseline retains its existing operator gate and cases.
+state-changing cases on a mismatch. Standard cases query supported status
+and settings and write back current values where the public CLI provides a
+safe path. No additional action switches are required. All three models run
+`run`, `stop-acquisition`, `single`, `force-trigger`, and the natural/timeout-force
+`single-wait` cases. Cleanup requests stop and checks native command status;
+it does not independently read Running/Stopped or restore the original state.
+
+Measurement checks run each item from Core `measurement_items` on displayed
+CH1, requiring valid finite values and a unit. Signal-related invalid results
+are FAIL with the CLI reason; remaining items still run. BYTE capture requests
+at most 1000 points and checks CSV/JSON counts, finite waveform values, and a
+strictly increasing time axis. These host transfers also run on the legacy
+models that do not expose instrument-side storage.
+
+Cursor setting, cursor off, measurement installation, and measurement clear
+run for each model's supported subset. Previous cursor/measurement configurations
+are not restored; successful actions leave cursors off and measurements cleared.
+TBS2074 checks X, physical-voltage Y, combined SCREEN, and all five cursor
+functions (`off`, `screen`, `waveform`, `vbars`, `hbars`) with query/readback.
+Its cursor source selection may display a channel or restart acquisition through
+Core; those effects are not restored. Horizontal position uses only public
+`timebase-position` query/set/readback and does not switch Delay Mode ON/OFF.
+
+Screenshots use native PNG on TBS2074, explicit BMP on TDS2024B over USBTMC,
+and explicit JPEG on TBS1052B over USBTMC. Core restores temporary settings
+and timeouts and attempts temporary instrument-file deletion where applicable.
+TBS2074 storage checks save/recall setup slot 1 and save/display/query reference
+slot 1. Both slots may be overwritten; their previous contents are not
+preserved. Image and CH1 CSV waveform saves use generated 8.3 filenames in the
+current instrument directory, with OPC completion checks and timeout restoration.
+They remain on the instrument. TDS2024B/TBS1052B exclude all setup, reference,
+file-save, and storage-only setting commands while retaining host capture.
+
+Before continuing through the operator gate, display a suitable stable CH1
+signal (for example, Probe Comp / Demo), enable TBS2074 Horizontal Delay Mode
+for timebase-position checks, and provide writable TBS2074 storage with
+waveform save format set to CSV/SPREADSheet. INTERNAL is outside the public
+format setter subset, so the runner does not change it. AutoSet is
+validated separately; TDS2024B/TBS1052B use a temporary 10000 ms timeout for
+AutoSet and its following SESR read, restoring the prior timeout in `finally`.
+General operations retain the session timeout; Keysight Auto Scale fallback and
+TBS2074 AutoSet behavior are unchanged.
 
 Results use the common CLI report and artifact privacy handling under
 `.tmp_tests/live_cli_check/`, with timestamped runs and redacted `shareable/`
 reports. `-DebugArtifacts` also retains `private/` and detailed shareable
 artifacts. The presence of the runner is not hardware validation.
-A PASS case from a run against the specified real resource provides direct
-hardware evidence for that case. N/A cases remain unverified; an overall PASS
+PASS requires execution and successful validation; FAIL means execution or
+validation failed. N/A identifies an unsupported operation or a specific
+inapplicable instrument state. NOT TESTED identifies an unexecuted case or a
+direct check blocked by a failed prerequisite; it is counted separately.
+A PASS case against the specified real resource provides hardware evidence for
+that case. N/A and NOT TESTED cases remain unverified; an overall PASS
 means all applicable runner cases passed, not that every Core/WebUI operation
 has direct one-shot CLI evidence. The runner uses `trigger-mode --query` and
 checks a same-value mode write/readback before testing Edge setters. Edge
@@ -2809,8 +2827,11 @@ same-value validation requires current Edge mode; combined Edge also requires
 an analog source. Runt and TV setters require their respective current modes
 and settings within the public setter subset. Otherwise those setters remain
 N/A, without switching trigger modes. Read-only supported trigger queries
-remain available. Other N/A cases describe unsupported model operations,
-missing opt-ins, or current settings that cannot safely use a public setter.
+remain available. Other N/A cases describe unsupported model operations
+or current settings that cannot safely use a public setter. Edge numeric
+readback uses `max(1e-12, abs(expected) * 1e-3)`, matching the Keysight standard;
+other Tektronix numeric comparisons retain their existing tolerance. An Edge
+mismatch reports Before, After, Difference, and Tolerance.
 
 ### Live CLI Validation
 

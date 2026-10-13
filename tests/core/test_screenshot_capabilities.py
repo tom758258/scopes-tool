@@ -31,7 +31,7 @@ def test_screenshot_formats_define_capture_support():
     validate_screenshot_capability(png, ScreenshotOptions())
 
 
-@pytest.mark.parametrize("format_name", ["png", "bmp", "bmp8bit"])
+@pytest.mark.parametrize("format_name", ["png", "bmp", "bmp8bit", "jpeg"])
 def test_keysight_capture_checks_declared_formats(format_name):
     caps = replace(capabilities_for_model_id("keysight-dsox4024a"), screenshot_formats=())
     with pytest.raises(ParameterValidationError, match="unsupported"):

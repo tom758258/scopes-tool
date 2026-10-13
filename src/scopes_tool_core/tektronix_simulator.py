@@ -5,9 +5,23 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 import re
+import base64
 
 from .simulator_backend import SimulatorBackend, SimulatorBackendError, _parse_scpi_number, _simulated_screenshot_bmp, _simulated_screenshot_png
 
+
+# A complete one-pixel JPEG for hardware-free hardcopy transfers.
+_SIMULATED_JPEG = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcp"
+    "LDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIy"
+    "MjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAA"
+    "AgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6"
+    "Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXG"
+    "x8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREA"
+    "AgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5"
+    "OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPE"
+    "xcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q=="
+)
 
 @dataclass
 class TektronixSimulatorBackend(SimulatorBackend):
@@ -255,7 +269,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
             self.hardcopy_inksaver = token == "ON"
             return True
         if self._capabilities.screenshot_formats:
-            if header == "HARDCOPY:FORMAT" and token in {"BMP", "EPS", "TIFF", "PCX", "RLE"}:
+            if header == "HARDCOPY:FORMAT" and token in {"BMP", "JPEG", "EPS", "TIFF", "PCX", "RLE"}:
                 self.hardcopy_format = value
                 return True
             if header == "HARDCOPY:PORT" and token in {"USB", "FILE"}:
@@ -264,7 +278,7 @@ class TektronixSimulatorBackend(SimulatorBackend):
             if header == "HARDCOPY:LAYOUT" and token in {"PORTRAIT", "LANDSCAPE"}:
                 self.hardcopy_layout = value
                 return True
-            if header == "HARDCOPY" and token == "START" and self.hardcopy_format.upper() == "BMP":
+            if header == "HARDCOPY" and token == "START" and self.hardcopy_format.upper() in {"BMP", "JPEG"}:
                 self.hardcopy_pending = True
                 return True
         return False
@@ -359,7 +373,9 @@ class TektronixSimulatorBackend(SimulatorBackend):
             raise SimulatorBackendError("No supported Tek hardcopy transfer is pending")
         self.hardcopy_pending = False
         self._raise_configured_failure(self.binary_failures, "HARDCopy STARt")
-        return bytes(self.binary_overrides.get("HARDCopy STARt", _simulated_screenshot_bmp(False)))
+        default = (_SIMULATED_JPEG if self.hardcopy_format.upper() == "JPEG"
+                   else _simulated_screenshot_bmp(False))
+        return bytes(self.binary_overrides.get("HARDCopy STARt", default))
 
     def query_binary_values(self, command: str, **kwargs: object) -> tuple:
         self._record(command, query=True)

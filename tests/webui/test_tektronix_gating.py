@@ -27,11 +27,17 @@ def test_catalog_admits_only_registered_tek_operations():
     assert supported("display-vectors", tds2024b)
     assert not supported("trigger-edge-level", tds2024b)
     assert supported("trigger-edge-level", tbs2074)
-    for command in ("measure", "capture", "single-wait", "trigger-pulse-width", "reference-query"):
+    for command in ("measure", "capture", "single-wait", "trigger-pulse-width"):
         assert supported(command, tbs2074)
         assert supported(command, tds2024b)
     assert supported("screenshot", tbs2074)
     assert supported("screenshot", tds2024b)
+    assert supported("screenshot", "tektronix-tbs1052b")
+    assert supported("reference-query", tbs2074)
+    for model in (tds2024b, "tektronix-tbs1052b"):
+        for command in ("setup-save", "setup-recall", "reference-save", "reference-display",
+                        "reference-query", "save-image", "save-waveform", "save-pwd", "save-image-ink-saver"):
+            assert not supported(command, model)
     assert not supported("check-error", tbs2074)
     assert not supported("check-error", tds2024b)
     for model in (tbs2074, tds2024b):
@@ -62,7 +68,9 @@ def test_catalog_admits_only_registered_tek_operations():
     setup = catalog["setup-save"]["presentation"]["models"]
     for model in tek_models:
         assert setup[model]["fields"]["target"]["options"] == ["slot"]
-        assert setup[model]["fields"]["slot"]["options"] == list(range(1, 10))
+        assert setup[model]["fields"]["slot"]["options"] == (list(range(1, 10)) if model == tbs2074 else [])
+        if model != tbs2074:
+            assert setup[model]["fields"]["slot"]["disabled"] is True
         projected_file = setup[model]["fields"]["file"]
         assert projected_file["disabled"] is True
         assert projected_file.get("hidden") is not True
@@ -213,16 +221,19 @@ def test_webui_install_does_not_enable_native_results(model_id, tmp_path):
             parameters={"source_channel": 1, "item": "vpp"} if command == "measure-install" else {}, artifact_dir=tmp_path)
         assert result["exit_code"] == 0
     assert not catalog["measure-results"]["presentation"]["models"][model_id]["supported"]
-    assert catalog["screenshot"]["presentation"]["models"][model_id]["supported"] is (model_id != "tektronix-tbs1052b")
+    assert catalog["screenshot"]["presentation"]["models"][model_id]["supported"] is True
     with pytest.raises(WebUIRequestError, match="unsupported"):
         _validate_parameters("measure-results", {}, "simulate", model_id)
 
 
 
-def test_tds2024b_screenshot_writes_bmp_and_restores_hardcopy(monkeypatch, tmp_path):
+@pytest.mark.parametrize("model_id,format_name,signature", [
+    ("tektronix-tds2024b", "bmp", b"BM"), ("tektronix-tbs1052b", "jpeg", b"\xff\xd8"),
+])
+def test_legacy_tektronix_screenshot_writes_native_format_and_restores_hardcopy(monkeypatch, tmp_path, model_id, format_name, signature):
     from pathlib import Path
     from scopes_tool_core.tektronix_simulator import TektronixSimulatorBackend
-    backend = TektronixSimulatorBackend(physical_model_id="tektronix-tds2024b",
+    backend = TektronixSimulatorBackend(physical_model_id=model_id,
         resource_name="USB0::FAKE::INSTR")
     backend.hardcopy_port = "FILE"
     backend.hardcopy_format = "EPS"
@@ -234,7 +245,9 @@ def test_tds2024b_screenshot_writes_bmp_and_restores_hardcopy(monkeypatch, tmp_p
         resource="USB0::FAKE::INSTR", model_id=None, parameters={"background": "white"}, artifact_dir=tmp_path)
     assert result["exit_code"] == 0
     path = Path(result["artifacts"][0]["path"])
-    assert path.suffix == ".bmp" and path.read_bytes().startswith(b"BM")
+    assert path.suffix == f".{format_name}" and path.read_bytes().startswith(signature)
+    if format_name == "jpeg":
+        assert path.read_bytes().endswith(b"\xff\xd9")
     assert (backend.timeout, backend.hardcopy_port, backend.hardcopy_format, backend.hardcopy_inksaver) == original
 
 
@@ -286,7 +299,7 @@ def test_waveform_source_projection_and_execution(tmp_path):
         assert field["required"] and not field["hidden"]
     assert models["keysight-dsox4024a"]["fields"]["source_channel"]["hidden"]
     result = command_execution.execute_command("save-waveform", mode="simulate", resource=None,
-        model_id="tektronix-tbs1052b", parameters={"filename": "wave.csv", "source_channel": 2}, artifact_dir=tmp_path)
+        model_id="tektronix-tbs2074", parameters={"filename": "wave.csv", "source_channel": 2}, artifact_dir=tmp_path)
     assert result["exit_code"] == 0
     assert result["result"]["save"]["command"] == 'SAVe:WAVEform CH2,"wave.csv"'
     png = command_execution.execute_command("screenshot", mode="simulate", resource=None,

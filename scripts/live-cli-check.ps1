@@ -19,17 +19,7 @@ param(
 
     [string] $OutputRoot = ".tmp_tests\live_cli_check",
 
-    [switch] $DebugArtifacts,
-
-    [switch] $IncludeAcquisitionActions,
-    [switch] $IncludeStorageWrites,
-    [string] $ImageFilename,
-    [string] $WaveformFilename,
-    [ValidateRange(1, 4)][int] $WaveformSourceChannel,
-    [switch] $IncludeConfigurationActions,
-    [switch] $IncludeScreenshot,
-    [ValidateRange(1, 9)][int] $SetupSlot,
-    [ValidateRange(1, 2)][int] $ReferenceSlot
+    [switch] $DebugArtifacts
 )
 
 Set-StrictMode -Version Latest
@@ -99,19 +89,6 @@ $script:BackendName = if (
     $script:LiveConnectionArguments -contains "--visa-library"
 ) { "pyvisa_py" } else { "system_visa" }
 
-if ($script:IsTektronix) {
-    Assert-TektronixCliOptions -BoundParameters $PSBoundParameters
-} else {
-    foreach ($option in @(
-        "IncludeAcquisitionActions", "IncludeStorageWrites",
-        "ImageFilename", "WaveformFilename", "WaveformSourceChannel",
-        "IncludeConfigurationActions", "IncludeScreenshot", "SetupSlot", "ReferenceSlot"
-    )) {
-        if ($PSBoundParameters.ContainsKey($option)) {
-            Write-LiveUsageError -Domain cli "-$option applies only to Tektronix validation."
-        }
-    }
-}
 
 function ConvertTo-InvariantString {
     param(
@@ -2189,16 +2166,18 @@ if ($script:IsTektronix) {
     $tektronixPassed = 0
     $tektronixFailed = 0
     $tektronixNotApplicable = 0
+    $tektronixNotTested = 0
     foreach ($entry in $script:CaseResults.GetEnumerator()) {
         $status = [string]$entry.Value.Status
         Write-Host ("{0,-5} [live][tektronix] {1}" -f $status, $entry.Key)
         if ($status -eq "PASS") { $tektronixPassed += 1 }
         elseif ($status -eq "FAIL") { $tektronixFailed += 1 }
         elseif ($status -eq "N/A") { $tektronixNotApplicable += 1 }
+        elseif ($status -eq "NOT TESTED") { $tektronixNotTested += 1 }
     }
     Write-Host ""
-    Write-Host ("Totals: {0} PASS / {1} FAIL / {2} N/A" -f
-        $tektronixPassed, $tektronixFailed, $tektronixNotApplicable)
+    Write-Host ("Totals: {0} PASS / {1} FAIL / {2} N/A / {3} NOT TESTED" -f
+        $tektronixPassed, $tektronixFailed, $tektronixNotApplicable, $tektronixNotTested)
     Write-Host ""
     Write-Host "[live][tektronix] artifacts: $($script:RunDirectory)"
 

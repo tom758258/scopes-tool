@@ -236,7 +236,7 @@ _CAPABILITY_PROFILES = {
         supports_word_format=False, supports_raw_points_mode=False,
         supports_measurements=True, supports_delay_measurement=False,
         supports_segmented_memory=False,
-        supports_serial_decode=False, reference_waveforms=2,
+        supports_serial_decode=False, reference_waveforms=0,
         supports_simulator=True, math_function_count=1,
         screenshot_formats=("bmp",), cursor_auto_vertical=False,
         display_persistence_seconds=(1.0, 2.0, 5.0),
@@ -253,11 +253,14 @@ _CAPABILITY_PROFILES = {
         trigger_holdoff_min_seconds=500e-9,
         trigger_holdoff_max_seconds=10.0,
         autoscale_supports_optional_controls=False,
-        setup_slots=tuple(range(1, 10)),
+        setup_slots=(),
         supports_setup_file_target=False,
-        supported_operations=_TEK_COMMON_OPERATIONS | {
+        supported_operations=_TEK_COMMON_OPERATIONS - {
+            "setup-save", "setup-recall", "reference-save", "reference-display",
+            "reference-query", "save-image", "save-waveform", "save-pwd",
+        } | {
             "timebase-position", "display-vectors", "cursor-set",
-            "trigger-tv", "save-image-ink-saver", "screenshot",
+            "trigger-tv", "screenshot",
         },
     ),
     "tektronix-tbs1052b": ScopeCapabilities(
@@ -273,9 +276,9 @@ _CAPABILITY_PROFILES = {
         supports_word_format=False, supports_raw_points_mode=False,
         supports_measurements=True, supports_delay_measurement=False,
         supports_segmented_memory=False,
-        supports_serial_decode=False, reference_waveforms=2,
+        supports_serial_decode=False, reference_waveforms=0,
         supports_simulator=True, math_function_count=1,
-        screenshot_formats=(), cursor_auto_vertical=False,
+        screenshot_formats=("jpeg",), cursor_auto_vertical=False,
         display_persistence_seconds=(1.0, 2.0, 5.0),
         cursor_single_axis_only=True,
         tv_standards=("ntsc", "pal"),
@@ -290,11 +293,14 @@ _CAPABILITY_PROFILES = {
         trigger_holdoff_min_seconds=500e-9,
         trigger_holdoff_max_seconds=10.0,
         autoscale_supports_optional_controls=False,
-        setup_slots=tuple(range(1, 10)),
+        setup_slots=(),
         supports_setup_file_target=False,
-        supported_operations=_TEK_COMMON_OPERATIONS | {
+        supported_operations=_TEK_COMMON_OPERATIONS - {
+            "setup-save", "setup-recall", "reference-save", "reference-display",
+            "reference-query", "save-image", "save-waveform", "save-pwd",
+        } | {
             "timebase-position", "display-vectors", "cursor-set",
-            "trigger-tv", "save-image-ink-saver",
+            "trigger-tv", "screenshot",
         },
     ),
     "keysight-infiniivision-2000x": ScopeCapabilities(

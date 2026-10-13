@@ -519,7 +519,10 @@ Enum values must be canonical strings and `ink_saver` must be a JSON boolean.
 setting fields. Unknown keys, aliases, wrong JSON types, invalid values, and
 mixed query/capture forms are rejected before enqueue, accepted counters,
 artifact creation, backend open, or SCPI. The format is available only when
-the worker's selected model has a 4000X capability profile.
+the selected Core profile admits it: 4000X accepts `png|bmp|bmp8bit`,
+TDS2024B accepts `bmp`, and TBS1052B accepts `jpeg`. Legacy Tektronix captures
+require USBTMC in live mode. Unsupported formats and storage operations remain
+rejected by model validation.
 
 Triggered capture is an explicit opt-in extension of `capture`; it is not a new
 worker command:

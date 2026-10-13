@@ -268,28 +268,18 @@ $connection = "usb"
 $resource = "USB0::FAKE::INSTR"
 for ($index = 0; $index -lt $arguments.Count; $index++) {
     $name = $arguments[$index].TrimStart('-')
-    if ($name -in @("IncludeAcquisitionActions", "IncludeStorageWrites", "IncludeConfigurationActions", "IncludeScreenshot", "DebugArtifacts")) {
+    if ($name -eq "DebugArtifacts") {
         $parameterValues[$name] = $true
-    } elseif ($name -in @("SetupSlot", "ReferenceSlot", "ImageFilename", "WaveformFilename", "WaveformSourceChannel", "Connection", "Resource")) {
+    } elseif ($name -in @("Connection", "Resource")) {
         $index++
         if ($name -eq "Connection") { $connection = $arguments[$index] }
-        elseif ($name -eq "Resource") { $resource = $arguments[$index] }
-        else { $parameterValues[$name] = $arguments[$index] }
+        else { $resource = $arguments[$index] }
     }
 }
 $script:Connection = $connection
 $script:LiveConnectionArguments = @(Get-LiveConnectionArguments -Resource $resource)
 $Resource = $resource
-$IncludeAcquisitionActions = [bool]$parameterValues["IncludeAcquisitionActions"]
-$IncludeStorageWrites = [bool]$parameterValues["IncludeStorageWrites"]
-$IncludeConfigurationActions = [bool]$parameterValues["IncludeConfigurationActions"]
-$IncludeScreenshot = [bool]$parameterValues["IncludeScreenshot"]
 $DebugArtifacts = [bool]$parameterValues["DebugArtifacts"]
-$SetupSlot = if ($parameterValues.ContainsKey("SetupSlot")) { [int]$parameterValues["SetupSlot"] } else { 1 }
-$ReferenceSlot = if ($parameterValues.ContainsKey("ReferenceSlot")) { [int]$parameterValues["ReferenceSlot"] } else { 1 }
-$ImageFilename = [string]$parameterValues["ImageFilename"]
-$WaveformFilename = [string]$parameterValues["WaveformFilename"]
-$WaveformSourceChannel = if ($parameterValues.ContainsKey("WaveformSourceChannel")) { [int]$parameterValues["WaveformSourceChannel"] } else { 1 }
 
 # Run the real Tektronix branch tail from live-cli-check.ps1 instead of a local
 # copy, so the fake harness observes the same Summary, totals, and exit codes as

@@ -481,8 +481,11 @@ def _model_command_presentation(
                 override["options"] = ("slot",)
             elif name == "slot" and capabilities.setup_slots is not None:
                 override["options"] = capabilities.setup_slots
-                override["minimum"] = min(capabilities.setup_slots)
-                override["maximum"] = max(capabilities.setup_slots)
+                if capabilities.setup_slots:
+                    override["minimum"] = min(capabilities.setup_slots)
+                    override["maximum"] = max(capabilities.setup_slots)
+                else:
+                    override["disabled"] = True
             elif name == "file" and not capabilities.supports_setup_file_target:
                 override["disabled"] = True
         subset = {

@@ -15,7 +15,7 @@ SCREENSHOT_PALETTE = "COLor"
 SCREENSHOT_TIMEOUT_MS = 10000
 DEFAULT_SCREENSHOT_BACKGROUND = "black"
 SCREENSHOT_BACKGROUND_CHOICES = ("black", "white")
-SCREENSHOT_FORMAT_CHOICES = ("png", "bmp", "bmp8bit")
+SCREENSHOT_FORMAT_CHOICES = ("png", "bmp", "bmp8bit", "jpeg")
 HARDCOPY_PALETTE_CHOICES = ("color", "grayscale", "none")
 HARDCOPY_LAYOUT_CHOICES = ("landscape", "portrait")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -282,7 +282,7 @@ def hardcopy_screen_dump_data_query(format_name: str) -> str:
 
 
 def screenshot_format_scpi(format_name: str) -> str:
-    return {"png": "PNG", "bmp": "BMP", "bmp8bit": "BMP8bit"}[
+    return {"png": "PNG", "bmp": "BMP", "bmp8bit": "BMP8bit", "jpeg": "JPEG"}[
         normalize_screenshot_format(format_name)
     ]
 
@@ -365,11 +365,13 @@ def screenshot_bytes_from_values_for_format(
     data = bytes(_validate_byte_value(value) for value in values)
     if not data:
         raise ScreenshotResponseError("Screenshot data query returned no bytes.")
-    signature = PNG_SIGNATURE if format_name == "png" else BMP_SIGNATURE
+    signature = {"png": PNG_SIGNATURE, "jpeg": b"\xff\xd8"}.get(format_name, BMP_SIGNATURE)
     if not data.startswith(signature):
         raise ScreenshotResponseError(
             f"Screenshot data is not a {screenshot_format_scpi(format_name)} image."
         )
+    if format_name == "jpeg" and not data.endswith(b"\xff\xd9"):
+        raise ScreenshotResponseError("JPEG screenshot is incomplete: missing end marker.")
     return data
 
 

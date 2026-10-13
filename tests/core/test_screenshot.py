@@ -96,10 +96,11 @@ def test_hardcopy_parsers_reject_malformed_readbacks(parser, response):
 
 def test_screenshot_option_normalizers_are_strict():
     assert normalize_screenshot_format("BMP8BIT") == "bmp8bit"
+    assert normalize_screenshot_format("JPEG") == "jpeg"
     assert normalize_hardcopy_palette("GRAYScale") == "grayscale"
     assert normalize_hardcopy_layout("LANDSCAPE") == "landscape"
     with pytest.raises(ParameterValidationError):
-        normalize_screenshot_format("jpeg")
+        normalize_screenshot_format("gif")
 
 
 @pytest.mark.parametrize(
