@@ -2,7 +2,6 @@ import argparse
 
 import pytest
 
-from scopes_tool_cli import cli
 from scopes_tool_cli import parser as cli_parser
 from scopes_tool_cli._worker_commands_math import (
     _MATH_DOMAIN_COMMANDS,

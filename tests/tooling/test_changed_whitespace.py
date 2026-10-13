@@ -205,5 +205,8 @@ def test_workflow_wires_event_range_with_full_history() -> None:
     assert "PUSH_BEFORE: ${{ github.event.before }}" in workflow
     assert "PUSH_SHA: ${{ github.sha }}" in workflow
     assert "python scripts/check_changed_whitespace.py" in workflow
+    assert workflow.index("python scripts/check_text_hygiene.py") < workflow.index(
+        "python scripts/check_changed_whitespace.py"
+    ) < workflow.index("./.venv/bin/python -m ruff check src tests")
     assert "hash-object -t tree" not in workflow
     assert "check_full_tree" not in workflow

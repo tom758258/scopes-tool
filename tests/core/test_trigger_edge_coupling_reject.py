@@ -3,10 +3,6 @@ from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.errors import ParameterValidationError, TriggerResponseError
 from scopes_tool_core.trigger import (
-    EdgeTriggerCouplingController,
-    EdgeTriggerCouplingState,
-    EdgeTriggerRejectController,
-    EdgeTriggerRejectState,
     trigger_edge_coupling_command,
     trigger_edge_coupling_query,
     trigger_edge_reject_command,

@@ -1,6 +1,5 @@
 """Tests for acquisition configuration."""
 
-import math
 import pytest
 
 from scopes_tool_core.acquisition import (
@@ -17,6 +16,7 @@ from scopes_tool_core.acquisition import (
 )
 from scopes_tool_core.errors import ParameterValidationError, AcquisitionResponseError
 from scopes_tool_core.fake_backend import FakeBackend
+from scopes_tool_core.operations import query_acquisition_readouts
 from scopes_tool_core.scope import Oscilloscope
 
 
@@ -314,7 +314,6 @@ class TestScopeAcquisitionMethods:
         assert backend.history == ["*IDN?", ":ACQuire:TYPE?", ":ACQuire:COUNt?"]
 
 
-from scopes_tool_core.operations import query_acquisition_readouts
 
 
 def test_query_acquisition_readouts_2000X_no_record_length() -> None:

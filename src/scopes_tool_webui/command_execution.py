@@ -38,12 +38,12 @@ from scopes_tool_core.planning import (
 from scopes_tool_core.segmented_capture import plan_segmented_capture
 
 from .command_execution_support import (
-    _capture_batch_request,
+    _capture_batch_request as _capture_batch_request,
     _capture_monitor_request,
     _capture_output_paths,
     _capture_until_request,
     _jsonable,
-    _measure_log_request,
+    _measure_log_request as _measure_log_request,
     _measure_request,
     _measure_sweep_request,
     _measure_until_request,

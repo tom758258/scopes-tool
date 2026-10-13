@@ -36,8 +36,8 @@ from .planning import (
 )
 from .screenshot import (
     DEFAULT_SCREENSHOT_BACKGROUND,
-    hardcopy_inksaver_command,
-    hardcopy_inksaver_for_background,
+    hardcopy_inksaver_command as hardcopy_inksaver_command,
+    hardcopy_inksaver_for_background as hardcopy_inksaver_for_background,
     normalize_screenshot_background,
 )
 from .scope import Oscilloscope

@@ -6,7 +6,6 @@ import time
 
 import pytest
 
-import scopes_tool_webui.command_execution as command_execution
 import scopes_tool_webui.command_execution_general as command_execution_general
 from scopes_tool_webui.command_validation import validate_job_request
 from scopes_tool_webui.jobs import JobManager

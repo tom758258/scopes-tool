@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .. import preflight, runtime
+from .. import preflight as preflight, runtime
 from .. import _preflight_serial as preflight_serial_module
 from scopes_tool_core.capabilities import ScopeCapabilities
 from scopes_tool_core.output_files import (

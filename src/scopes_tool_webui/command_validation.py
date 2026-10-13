@@ -16,7 +16,7 @@ from ._validation_shared import (
     _require_boolean,
 )
 from ._validation_advanced import (
-    _segmented_capture_request,
+    _segmented_capture_request as _segmented_capture_request,
     _validate_measure_sweep_parameters,
     _validate_trigger_search_serial_segmented_workflow_parameters,
 )

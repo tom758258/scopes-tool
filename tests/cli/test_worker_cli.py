@@ -30,31 +30,18 @@ from scopes_tool_core.acquisition import (
     sample_rate_query,
 )
 from scopes_tool_core.capabilities import (
-    capabilities_for_model,
     capabilities_for_model_id,
 )
 from scopes_tool_core.channel import (
     channel_impedance_command,
-    channel_impedance_query,
-    channel_invert_command,
-    channel_invert_query,
     channel_probe_skew_command,
-    channel_probe_skew_query,
     channel_range_command,
-    channel_range_query,
-    channel_units_command,
-    channel_units_query,
-    channel_vernier_command,
-    channel_vernier_query,
 )
 from scopes_tool_core.display import (
     display_clear_command,
-    display_intensity_command,
     display_intensity_query,
     display_persistence_command,
-    display_persistence_query,
     display_vectors_command,
-    display_vectors_query,
 )
 from scopes_tool_core.errors import ParameterValidationError, OscilloscopeError
 from scopes_tool_core.idn import parse_idn

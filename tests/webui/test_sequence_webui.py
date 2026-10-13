@@ -581,7 +581,7 @@ def test_sequence_editor_loadfile_uses_raw_text_fail_closed() -> None:
 
 
 def test_sequence_save_results_catalog_and_validation() -> None:
-    definition = next(item for item in command_catalog() if item["id"] == "sequence")
+    next(item for item in command_catalog() if item["id"] == "sequence")
     # Catalog should expose save_results reuse if present, but WebUI currently uses dedicated editor checkbox
     # Validate request allows save_results false and defaults to true
     request = validate_job_request(

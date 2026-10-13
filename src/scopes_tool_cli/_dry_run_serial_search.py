@@ -38,7 +38,7 @@ from scopes_tool_core.serial import (
 )
 from scopes_tool_core.trigger import trigger_mode_query
 
-from . import preflight
+from . import preflight as preflight
 from . import _preflight_serial as preflight_serial_module
 from .commands import serial, trigger_search
 

@@ -35,8 +35,8 @@ from .simulator_support import (
 )
 from .serial import (
     SERIAL_MODE_TOKENS,
-    normalize_serial_can_trigger_id_mode,
-    validate_serial_can_trigger_data_length,
+    normalize_serial_can_trigger_id_mode as normalize_serial_can_trigger_id_mode,
+    validate_serial_can_trigger_data_length as validate_serial_can_trigger_data_length,
 )
 from .trigger import OPERATION_CONDITION_RUI_ENAB_MASK, OPERATION_CONDITION_RUN_MASK
 from .wgen import (
@@ -1828,7 +1828,7 @@ class SimulatorBackend:
         return self.timebase_position - self._waveform_window_s() / 2.0
 
     def _waveform_voltage_at_index(self, index: int) -> float:
-        time_s = self._waveform_x_origin() + index * self._waveform_x_increment()
+        self._waveform_x_origin() + index * self._waveform_x_increment()
         acquisition_type = self.acquisition_type.upper()
         if acquisition_type.startswith("HRES"):
             return sum(
@@ -1966,7 +1966,7 @@ class SimulatorBackend:
         signal = self._signal(channel)
         frequency = signal["frequency"]
         period = signal["period"]
-        amplitude = signal["amplitude"]
+        signal["amplitude"]
         window_s = self._waveform_window_s()
         cycles = frequency * window_s
         if self.acquisition_type.upper().startswith("PEAK"):

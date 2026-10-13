@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.errors import OscilloscopeError
@@ -33,6 +33,10 @@ from scopes_tool_core.math import (
     math_vertical_commands,
     math_vertical_query_commands,
 )
+
+
+if TYPE_CHECKING:
+    from .worker import WorkerRuntime
 
 
 _MATH_WORKER_ARGUMENTS = {

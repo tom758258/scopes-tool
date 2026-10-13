@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .acquisition import (
-    AcquisitionResponseError,
+    AcquisitionResponseError as AcquisitionResponseError,
     normalize_acquisition_type,
     validate_acquisition_count,
 )
@@ -65,7 +65,7 @@ from .segmented import (
 from .trigger import (
     parse_trigger_mode,
     trigger_mode_query,
-    wait_for_trigger_completion,
+    wait_for_trigger_completion as wait_for_trigger_completion,
 )
 from .waveform import (
     MultiChannelWaveformCapture,

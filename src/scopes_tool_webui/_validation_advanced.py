@@ -356,16 +356,21 @@ def _validate_trigger_search_serial_segmented_workflow_parameters(command: str, 
         if action == "set":
             if protocol == "uart":
                 parameters["mode"] = validate_uart_search_mode(parameters["mode"])
-                if "data" in parameters: parameters["data"] = validate_uart_data(parameters["data"])
-                if "qualifier" in parameters: parameters["qualifier"] = validate_search_qualifier(parameters["qualifier"])
+                if "data" in parameters:
+                    parameters["data"] = validate_uart_data(parameters["data"])
+                if "qualifier" in parameters:
+                    parameters["qualifier"] = validate_search_qualifier(parameters["qualifier"])
             elif protocol == "i2c":
                 parameters["mode"] = validate_i2c_search_mode(parameters["mode"])
                 for name in ("address", "data", "data2"):
-                    if name in parameters: parameters[name] = validate_i2c_pattern_value(_integer(parameters[name], name), name)
-                if "qualifier" in parameters: parameters["qualifier"] = validate_search_qualifier(parameters["qualifier"])
+                    if name in parameters:
+                        parameters[name] = validate_i2c_pattern_value(_integer(parameters[name], name), name)
+                if "qualifier" in parameters:
+                    parameters["qualifier"] = validate_search_qualifier(parameters["qualifier"])
             elif protocol == "spi":
                 parameters["mode"] = validate_spi_search_mode(parameters["mode"])
-                if "width" in parameters: parameters["width"] = _integer(parameters["width"], "width")
+                if "width" in parameters:
+                    parameters["width"] = _integer(parameters["width"], "width")
                 validate_spi_search_pattern_width(parameters.get("data"), parameters.get("width"))
             else:
                 parameters["mode"] = validate_can_search_mode(parameters["mode"])
@@ -375,9 +380,12 @@ def _validate_trigger_search_serial_segmented_workflow_parameters(command: str, 
         names = {"search-state": ("enabled",), "search-mode": ("mode",), "search-event": ("event",)}[command]
         action = _validate_action_fields(parameters, command, names)
         if action == "set":
-            if command == "search-state": _require_boolean(parameters["enabled"], "enabled")
-            elif command == "search-mode": parameters["mode"] = validate_search_mode(parameters["mode"], capabilities)
-            else: parameters["event"] = validate_search_event(_integer(parameters["event"], "event"))
+            if command == "search-state":
+                _require_boolean(parameters["enabled"], "enabled")
+            elif command == "search-mode":
+                parameters["mode"] = validate_search_mode(parameters["mode"], capabilities)
+            else:
+                parameters["event"] = validate_search_event(_integer(parameters["event"], "event"))
         return
     if command == "search-count":
         return
@@ -482,7 +490,8 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
         else:
             _require_parameter(parameters, "time_seconds", command)
             parameters["time_seconds"] = validate_trigger_time(_finite_number(parameters["time_seconds"], "time_seconds"))
-        if "level" in parameters: parameters["level"] = validate_trigger_level(_finite_number(parameters["level"], "level"))
+        if "level" in parameters:
+            parameters["level"] = validate_trigger_level(_finite_number(parameters["level"], "level"))
         glitch_trigger_configure_commands(channel=parameters["channel"], polarity=parameters["polarity"],
             qualifier=parameters["qualifier"], time_seconds=parameters.get("time_seconds"),
             min_time_seconds=parameters.get("min_time_seconds"), max_time_seconds=parameters.get("max_time_seconds"),
@@ -527,7 +536,8 @@ def _validate_trigger_parameters(command: str, parameters: dict[str, Any], capab
         parameters["slope"] = normalize_edge_burst_slope(parameters["slope"])
         parameters["count"] = validate_edge_burst_count(_integer(parameters["count"], "count"))
         parameters["idle_time"] = validate_edge_burst_idle_time(_finite_number(parameters["idle_time"], "idle_time"))
-        if "level" in parameters: parameters["level"] = validate_trigger_level(_finite_number(parameters["level"], "level"))
+        if "level" in parameters:
+            parameters["level"] = validate_trigger_level(_finite_number(parameters["level"], "level"))
     elif command == "trigger-tv":
         tv_trigger_configure_commands(source_channel=_integer(parameters["source_channel"], "source_channel"),
             standard=parameters["standard"], mode=parameters["mode"], polarity=parameters["polarity"],
@@ -591,17 +601,20 @@ def _validate_serial_parameters(command: str, parameters: dict[str, Any], capabi
         return
     if command == "serial-mode":
         action = _validate_action_fields(parameters, command, ("mode",))
-        if action == "set": parameters["mode"] = validate_serial_mode(parameters["mode"], capabilities)
+        if action == "set":
+            parameters["mode"] = validate_serial_mode(parameters["mode"], capabilities)
         return
     if command == "serial-display":
         action = _validate_action_fields(parameters, command, ("enabled",))
-        if action == "set": _require_boolean(parameters["enabled"], "enabled")
+        if action == "set":
+            _require_boolean(parameters["enabled"], "enabled")
         return
     if command.startswith("serial-trigger-"):
         protocol = command.removeprefix("serial-trigger-")
         names = ("type", "data", "qualifier", "address", "data2", "width", "id", "id_mode", "data_length")
         action = _validate_action_fields(parameters, command, names)
-        if action != "set": return
+        if action != "set":
+            return
         try:
             if protocol == "uart":
                 validate_serial_uart_trigger_request(parameters["bus"], type=parameters.get("type"), data=parameters.get("data"), qualifier=parameters.get("qualifier"), capabilities=capabilities)
@@ -616,34 +629,52 @@ def _validate_serial_parameters(command: str, parameters: dict[str, Any], capabi
         return
     protocol = command.removeprefix("serial-")
     action = _validate_action_fields(parameters, command, tuple(key for key in parameters if key not in {"action", "bus"}))
-    if action != "set": return
+    if action != "set":
+        return
     values = {key: value for key, value in parameters.items() if key not in {"action", "bus"}}
     if not values:
         raise WebUIRequestError(f"{command} set requires at least one setting")
     try:
         if protocol == "uart":
-            if "rx_source" in values: values["rx_source"] = normalize_serial_source(values["rx_source"], capabilities)
-            if "tx_source" in values: values["tx_source"] = normalize_serial_source(values["tx_source"], capabilities)
-            if "baud_rate" in values: values["baud_rate"] = validate_uart_baud_rate(values["baud_rate"], capabilities)
-            if "parity" in values: values["parity"] = normalize_uart_parity(values["parity"])
-            if "polarity" in values: values["polarity"] = normalize_uart_polarity(values["polarity"])
-            if "bit_order" in values: values["bit_order"] = normalize_serial_bit_order(values["bit_order"])
+            if "rx_source" in values:
+                values["rx_source"] = normalize_serial_source(values["rx_source"], capabilities)
+            if "tx_source" in values:
+                values["tx_source"] = normalize_serial_source(values["tx_source"], capabilities)
+            if "baud_rate" in values:
+                values["baud_rate"] = validate_uart_baud_rate(values["baud_rate"], capabilities)
+            if "parity" in values:
+                values["parity"] = normalize_uart_parity(values["parity"])
+            if "polarity" in values:
+                values["polarity"] = normalize_uart_polarity(values["polarity"])
+            if "bit_order" in values:
+                values["bit_order"] = normalize_serial_bit_order(values["bit_order"])
         elif protocol == "i2c":
             for name in ("clock_source", "data_source"):
-                if name in values: values[name] = normalize_serial_source(values[name], capabilities)
-            if "address_size" in values: values["address_size"] = normalize_i2c_address_size(values["address_size"])
+                if name in values:
+                    values[name] = normalize_serial_source(values[name], capabilities)
+            if "address_size" in values:
+                values["address_size"] = normalize_i2c_address_size(values["address_size"])
         elif protocol == "spi":
             for name in ("clock_source", "mosi_source", "miso_source", "frame_source"):
-                if name in values: values[name] = normalize_serial_source(values[name], capabilities)
-            if "clock_slope" in values: values["clock_slope"] = normalize_spi_clock_slope(values["clock_slope"])
-            if "bit_order" in values: values["bit_order"] = normalize_serial_bit_order(values["bit_order"])
-            if "framing" in values: values["framing"] = normalize_spi_framing(values["framing"])
-            if "clock_timeout" in values: validate_spi_framing_clock_timeout(values.get("framing"), values.get("clock_timeout"))
+                if name in values:
+                    values[name] = normalize_serial_source(values[name], capabilities)
+            if "clock_slope" in values:
+                values["clock_slope"] = normalize_spi_clock_slope(values["clock_slope"])
+            if "bit_order" in values:
+                values["bit_order"] = normalize_serial_bit_order(values["bit_order"])
+            if "framing" in values:
+                values["framing"] = normalize_spi_framing(values["framing"])
+            if "clock_timeout" in values:
+                validate_spi_framing_clock_timeout(values.get("framing"), values.get("clock_timeout"))
         else:
-            if "source" in values: values["source"] = normalize_serial_source(values["source"], capabilities)
-            if "baud_rate" in values: values["baud_rate"] = validate_can_baud_rate(values["baud_rate"])
-            if "sample_point" in values: values["sample_point"] = validate_can_sample_point(values["sample_point"], capabilities)
-            if "signal_definition" in values: values["signal_definition"] = normalize_can_signal_definition(values["signal_definition"])
+            if "source" in values:
+                values["source"] = normalize_serial_source(values["source"], capabilities)
+            if "baud_rate" in values:
+                values["baud_rate"] = validate_can_baud_rate(values["baud_rate"])
+            if "sample_point" in values:
+                values["sample_point"] = validate_can_sample_point(values["sample_point"], capabilities)
+            if "signal_definition" in values:
+                values["signal_definition"] = normalize_can_signal_definition(values["signal_definition"])
     except Exception as exc:
         raise WebUIRequestError(str(exc)) from exc
     parameters.update(values)

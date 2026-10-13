@@ -10,7 +10,8 @@ from scopes_tool_core.operation_types import OperationResult
 
 
 def test_segmented_capture_dispatch_forwards_stop_requested(monkeypatch) -> None:
-    stop_requested = lambda: True
+    def stop_requested():
+        return True
     received = {}
 
     def fake_command(args, *, stop_requested=None):
@@ -25,7 +26,8 @@ def test_segmented_capture_dispatch_forwards_stop_requested(monkeypatch) -> None
 
 
 def test_segmented_capture_command_forwards_stop_requested(monkeypatch) -> None:
-    stop_requested = lambda: True
+    def stop_requested():
+        return True
     request = object()
     scope = object()
     received = {}

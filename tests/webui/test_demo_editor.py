@@ -58,18 +58,18 @@ def test_demo_options_come_from_core_constants() -> None:
 
 def test_demo_function_options_project_by_model() -> None:
     # 2000X has only common functions, 3000X/4000X have extensions
-    catalog_2000 = next(
+    next(
         entry for entry in command_catalog_module.command_catalog() if entry["id"] == "demo-function"
     )
     # Need to inspect per-model presentation
-    from scopes_tool_webui.command_catalog import _model_command_presentation, _command_presentation
+    from scopes_tool_webui.command_catalog import _model_command_presentation
 
     # Find raw command entry
     raw_2000 = next(entry for entry in command_catalog_module.COMMANDS if entry["id"] == "demo-function")
     raw_3000 = raw_2000
     cap_2000 = capabilities_for_model_id("keysight-dsox2004a")
     cap_3000 = capabilities_for_model_id("keysight-dsox3024a")
-    cap_4000 = capabilities_for_model_id("keysight-dsox4024a")
+    capabilities_for_model_id("keysight-dsox4024a")
     present_2000 = _model_command_presentation(raw_2000, "keysight-dsox2004a")
     present_3000 = _model_command_presentation(raw_3000, "keysight-dsox3024a")
     present_4000 = _model_command_presentation(raw_3000, "keysight-dsox4024a")

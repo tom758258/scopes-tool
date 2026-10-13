@@ -87,7 +87,7 @@ from scopes_tool_core.trigger import (
     validate_trigger_level,
 )
 
-from .. import preflight, runtime
+from .. import preflight as preflight, runtime
 from .. import _preflight_serial as preflight_serial_module
 
 

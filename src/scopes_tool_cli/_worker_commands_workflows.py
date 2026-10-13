@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.errors import OscilloscopeError
@@ -12,6 +12,10 @@ from scopes_tool_core.segmented_capture import (
     validate_segmented_capture_request,
 )
 from scopes_tool_core.waveform import SUPPORTED_WAVEFORM_POINTS
+
+
+if TYPE_CHECKING:
+    from .worker import WorkerRuntime
 
 
 _OPTIONAL_PERSISTENCE_COMMANDS = frozenset(

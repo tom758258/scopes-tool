@@ -37,6 +37,18 @@ jobs:
       - name: Install packages
         run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
 
+      - name: Check tracked text hygiene
+        run: python scripts/check_text_hygiene.py
+
+      - name: Check committed range whitespace
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+        run: python scripts/check_changed_whitespace.py
+
       - name: Run Ruff
         run: ./.venv/bin/python -m ruff check src tests
 
@@ -67,18 +79,6 @@ jobs:
           tests/webui/test_frontend_state_results.py
           tests/webui/test_frontend_state_serial.py
           tests/webui/test_frontend_state_workspaces.py
-
-      - name: Check tracked text hygiene
-        run: python scripts/check_text_hygiene.py
-
-      - name: Check committed range whitespace
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PUSH_BEFORE: ${{ github.event.before }}
-          PUSH_SHA: ${{ github.sha }}
-        run: python scripts/check_changed_whitespace.py
 
   pytest-linux:
     name: Linux Python ${{ matrix.python-version }}

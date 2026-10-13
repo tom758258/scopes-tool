@@ -16,7 +16,6 @@ from scopes_tool_core.run_config import ResolvedRunConfig, RunModeOptions, open_
 from scopes_tool_core.simulator_backend import SimulatorBackendError
 from scopes_tool_core.operations import query_acquisition_readouts, query_instrument_summary
 from scopes_tool_core.screenshot import ScreenshotOptions
-from scopes_tool_core.errors import ScreenshotResponseError
 
 
 MODELS = (
@@ -557,7 +556,8 @@ def test_high_risk_subsets_reject_before_scpi():
         lambda: scope.configure_math_display(2, True),
     ):
         before = list(backend.history)
-        with pytest.raises(ParameterValidationError): action()
+        with pytest.raises(ParameterValidationError):
+            action()
         assert backend.history == before
 
 
@@ -575,7 +575,8 @@ def test_tds2000b_tbs1000b_subsets(model_id):
         lambda: scope.configure_save_image_format("bmp"),
     ):
         before = list(backend.history)
-        with pytest.raises(ParameterValidationError): action()
+        with pytest.raises(ParameterValidationError):
+            action()
         assert backend.history == before
 
 
@@ -588,7 +589,8 @@ def test_measurement_results_and_png_stay_fail_closed(model_id, _, __):
                         lambda: scope.capture_screenshot(options=ScreenshotOptions()),
                         lambda: scope.capture_screenshot(options=ScreenshotOptions(format="png"))])
     for action in actions:
-        with pytest.raises(ParameterValidationError): action()
+        with pytest.raises(ParameterValidationError):
+            action()
     assert backend.history == ["*IDN?"]
 
 
@@ -670,7 +672,8 @@ def test_save_uses_actual_readback_completion_and_restores_timeout():
     assert backend.history[-2:] == ['SAVe:IMAge "caller.bmp"', "*OPC?"]
     assert backend.timeout_history == [15000, 3210]
     del backend.responses["*OPC?"]
-    with pytest.raises(OscilloscopeError): scope.save_image("failed.bmp")
+    with pytest.raises(OscilloscopeError):
+        scope.save_image("failed.bmp")
     assert backend.timeout == 3210
 
 
@@ -725,7 +728,8 @@ def test_simulator_roundtrips_and_slot_safety(model_id, _, __):
         for slot in scope.backend.tek_measurements.values():
             slot.update(TYPE="MEAN", SOURCE="CH2", SOURCE1="CH2", STATE="ON")
         start = len(scope.backend.history)
-        with pytest.raises(ParameterValidationError, match="full"): scope.install_measurement(1, "vpp")
+        with pytest.raises(ParameterValidationError, match="full"):
+            scope.install_measurement(1, "vpp")
         assert all(command.endswith("?") for command in scope.backend.history[start:])
         scope.clear_measurements()
         scope.install_measurement(1, "vpp")

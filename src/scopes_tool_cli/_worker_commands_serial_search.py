@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scopes_tool_core.capabilities import ScopeCapabilities, capabilities_for_model_id
 from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
@@ -29,6 +29,10 @@ from scopes_tool_core.serial import (
     validate_serial_spi_trigger_request,
     validate_serial_uart_trigger_request,
 )
+
+
+if TYPE_CHECKING:
+    from .worker import WorkerRuntime
 
 
 def _normalize_serial_search_worker_arguments(

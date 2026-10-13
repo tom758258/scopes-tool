@@ -21,7 +21,6 @@ from scopes_tool_core.status import SystemErrorEntry
 from scopes_tool_core.visa_backend import VisaLiveVerification, VisaResourceListing
 from tests.cli.support import (
     byte_waveform_capture,
-    install_scope,
     word_waveform_capture,
 )
 from scopes_tool_core.waveform import (

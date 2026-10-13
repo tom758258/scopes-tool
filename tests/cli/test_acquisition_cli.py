@@ -5,7 +5,6 @@ import pytest
 from scopes_tool_cli import cli, runtime
 from scopes_tool_core.acquisition import validate_acquisition_count
 from scopes_tool_core.capabilities import capabilities_for_model
-from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.idn import parse_idn
 from scopes_tool_core.status import SystemErrorEntry
 
@@ -207,7 +206,7 @@ def test_acquisition_cli_requires_resource_or_type(monkeypatch, capsys):
 
 
 def test_acquisition_cli_prints_session_info(monkeypatch, capsys):
-    scope = _install_acquisition_scope(monkeypatch)
+    _install_acquisition_scope(monkeypatch)
 
     assert cli.main(["acquisition", "--resource", "USB0::FAKE::INSTR", "--query"]) == 0
 

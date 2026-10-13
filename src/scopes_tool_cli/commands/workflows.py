@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
 from .. import preflight, runtime
 from scopes_tool_core.setup import (
@@ -70,6 +70,10 @@ from scopes_tool_core.trigger import TriggerWaitConfig
 from scopes_tool_core.triggered_capture import TriggeredCaptureSeriesRequest, run_triggered_capture_series
 from scopes_tool_core.triggered_measurement import TriggeredMeasureLoopRequest, run_triggered_measure_loop
 from scopes_tool_core.workflow import StopRequested
+
+if TYPE_CHECKING:
+    from scopes_tool_core.scope import Oscilloscope
+
 
 _CAPTURE_DEFAULT_TIMEZONE = timezone(timedelta(hours=8), name="UTC+8")
 
@@ -774,7 +778,7 @@ def _cmd_screenshot(args: argparse.Namespace) -> int:
     resource = runtime._require_resource(args)
     if resource is None:
         return 2
-    mode = runtime._resolve_cli_mode(args)
+    runtime._resolve_cli_mode(args)
     options = preflight._screenshot_options(args)
 
     runtime._configure_scpi_logging(args)

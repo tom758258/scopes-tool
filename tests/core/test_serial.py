@@ -25,15 +25,11 @@ from scopes_tool_core.serial import (
     serial_mode_query,
     parse_serial_uart_trigger_qualifier,
     parse_serial_uart_trigger_type,
-    parse_serial_can_trigger_id_mode,
     parse_serial_can_trigger_type,
-    parse_serial_i2c_trigger_qualifier,
     parse_serial_i2c_trigger_type,
     parse_serial_spi_trigger_type,
     parse_serial_trigger_pattern,
-    validate_serial_can_trigger_request,
     validate_serial_i2c_trigger_request,
-    validate_serial_spi_trigger_request,
     validate_serial_bus,
 )
 from dataclasses import replace

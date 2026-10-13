@@ -6,7 +6,6 @@ import pytest
 
 from scopes_tool_core import OperationResult
 from scopes_tool_webui.command_catalog import command_catalog
-from scopes_tool_webui import command_execution as command_execution_module
 from scopes_tool_webui import command_execution_advanced as command_execution_advanced
 from scopes_tool_webui.command_execution import execute_command
 from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
@@ -240,8 +239,10 @@ def test_monitor_webui_execution_keeps_final_result_compact(tmp_path):
 
 
 def test_monitor_webui_stop_and_transient_callbacks_reach_core(monkeypatch, tmp_path):
-    stop_requested = lambda: True
-    sample_reporter = lambda _update: None
+    def stop_requested():
+        return True
+    def sample_reporter(_update):
+        return None
     received = []
 
     def fake_runner(

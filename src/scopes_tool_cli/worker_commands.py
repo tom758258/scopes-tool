@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scopes_tool_core.errors import OscilloscopeError
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.channel import validate_analog_channel
 from scopes_tool_core.demo import validate_demo_function, validate_demo_phase
-from scopes_tool_core.identity import physical_model_for_id
+from scopes_tool_core.identity import physical_model_for_id as physical_model_for_id
 from scopes_tool_core.save_export import (
     SAVE_IMAGE_FORMATS,
     SAVE_IMAGE_PALETTES,
@@ -71,6 +71,10 @@ from ._worker_commands_workflows import (
     _normalize_triggered_capture_series_worker_arguments,
     _normalize_triggered_measure_loop_worker_arguments,
 )
+
+
+if TYPE_CHECKING:
+    from .worker import WorkerRuntime
 
 
 WORKER_SCHEMA_VERSION = 2

@@ -1283,7 +1283,8 @@ class TektronixOscilloscope(Oscilloscope):
         raw = {name: self.scpi.query(f"{root}:{name}?") for name in (
             "NR_Pt", "XINcr", "XZEro", "YMUlt", "YZEro", "YOFf", "YUNit"
         )}
-        number = lambda name: _number(raw[name], f"{root}:{name}?")
+        def number(name):
+            return _number(raw[name], f"{root}:{name}?")
         preamble = WaveformPreamble(
             raw=";".join(raw.values()), format_code=0, type_code=0,
             points=int(number("NR_Pt")), count=1,

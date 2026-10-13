@@ -11,7 +11,7 @@ from scopes_tool_core.acquisition import (
     sample_rate_maximum_query,
     sample_rate_query,
 )
-from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
+from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError as ParameterValidationError
 
 from .. import runtime
 

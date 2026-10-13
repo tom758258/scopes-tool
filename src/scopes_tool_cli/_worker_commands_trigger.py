@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scopes_tool_core.capabilities import capabilities_for_model_id
 from scopes_tool_core.channel import validate_analog_channel
 from scopes_tool_core.errors import OscilloscopeError
+
+
+if TYPE_CHECKING:
+    from .worker import WorkerRuntime
 
 
 def _normalize_trigger_edge_worker_arguments(

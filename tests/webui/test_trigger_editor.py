@@ -11,7 +11,7 @@ import pytest
 from scopes_tool_core.capabilities import capabilities_for_model_id, operation_supported
 from scopes_tool_core.trigger import TRIGGER_MODES, TriggerModeState
 from scopes_tool_webui import command_execution as command_execution_module
-from scopes_tool_webui.command_validation import WebUIRequestError, validate_job_request
+from scopes_tool_webui.command_validation import validate_job_request
 from scopes_tool_webui.command_catalog import COMMANDS, command_catalog
 
 

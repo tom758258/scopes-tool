@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from scopes_tool_core.capabilities import capabilities_for_model
 from scopes_tool_core.planning import (

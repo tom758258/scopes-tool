@@ -831,7 +831,8 @@ def test_single_wait_validation_and_execution_use_core_config(tmp_path: Path) ->
                 capture_allowed=True,
             )
 
-    stop_requested = lambda: False
+    def stop_requested():
+        return False
     result = command_execution_module._execute_scope_command(
         FakeScope(),
         "single-wait",
@@ -1161,7 +1162,8 @@ def test_measure_sweep_execution_forwards_stop_requested(monkeypatch, tmp_path: 
         command_execution_general, "run_measure_sweep", fake_run_measure_sweep
     )
     scope = type("FakeScope", (), {"capabilities": object()})()
-    sentinel = lambda: False
+    def sentinel():
+        return False
     result = command_execution_module._execute_scope_command(
         scope,
         "measure-sweep",
@@ -2989,7 +2991,8 @@ def test_long_workflows_receive_existing_core_stop_callback(
     runner_name,
     parameters,
 ) -> None:
-    stop_requested = lambda: True
+    def stop_requested():
+        return True
     received_stop = []
     received_progress = []
 
@@ -3806,7 +3809,7 @@ def test_system_information_snapshot_parser_failure_not_masked() -> None:
     # AcquisitionResponseError catch masking errors for sample_rate / acquisition_points.
     import importlib.util
     spec = importlib.util.spec_from_file_location("execution", "src/scopes_tool_webui/command_execution.py")
-    module = importlib.util.module_from_spec(spec)
+    importlib.util.module_from_spec(spec)
     source = (Path(__file__).resolve().parents[2] / "src" / "scopes_tool_webui" / "command_execution.py").read_text()
     # Verify the old `_read_acquisition_value` with broad AcquisitionResponseError catch is removed.
     assert "_read_acquisition_value" not in source

@@ -184,7 +184,7 @@ class TestSuccessfulSingleTargetPreflight:
         self, successful_single_target_run
     ) -> None:
         context = successful_single_target_run
-        run_dir: Path = context["run_dir"]
+        context["run_dir"]
         for case in context["private_report"]["cases"]:
             assert case["target"] == "keysight-dsox3024a"
             assert case["exit_code"] == 0

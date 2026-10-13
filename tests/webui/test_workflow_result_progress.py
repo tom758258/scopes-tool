@@ -10,7 +10,6 @@ import pytest
 
 from scopes_tool_webui.jobs import Job, JobManager
 from scopes_tool_core.workflow import WorkflowProgress
-import scopes_tool_webui.command_execution as command_execution
 import scopes_tool_webui.command_execution_advanced as command_execution_advanced
 
 
