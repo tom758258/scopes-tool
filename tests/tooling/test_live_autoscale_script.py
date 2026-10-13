@@ -118,6 +118,9 @@ def test_registered_model_transport_flow_and_restore(tmp_path: Path, target: str
                 assert any(inv["stage"] == f"readback-ch{channel}-channel-{kind}" for inv in report["invocations"])
         assert "partial coverage only" in c["restore"]["detail"]
     assert ("Please Select" in result.stdout) == (target == TARGETS[3])
+    for note in ("Auto Scale is run directly from the front panel", "not a Scopes Tool SAVE failure",
+                 "Reselect the USB destination"):
+        assert (note in result.stdout) == (target == TARGETS[3])
     totals = report["summary_counts"]
     assert totals["cases"] == len(c)
     for status, key in (("PASS", "passed"), ("FAIL", "failed"), ("N/A", "na")):
@@ -133,6 +136,8 @@ def test_registered_model_transport_flow_and_restore(tmp_path: Path, target: str
                   "timebase/delay", "trigger", "acquisition", "cursor", "measurement", "Math", "Reference",
                   "Error/event", "Enter", "cancels"):
         assert token in result.stdout
+    assert "A PASS result confirms Auto command execution and status checks" in result.stdout
+    assert "does not prove optimal waveform scaling or signal recognition" in result.stdout
 
 
 @requires_powershell
@@ -251,12 +256,16 @@ def test_snapshot_restore_uses_real_public_simulated_cli(tmp_path: Path) -> None
 
 @requires_powershell
 def test_non_edge_and_inactive_average_are_explicit_limits(tmp_path: Path) -> None:
-    result, report, _ = fake_run(tmp_path, trigger_mode="pulse-width", acquisition_type="normal")
+    result, report, _ = fake_run(tmp_path, trigger_mode="glitch", acquisition_type="normal")
     assert result.returncode == 0, result.stdout + result.stderr
     assert cases(report)["restore"]["status"] == "PASS"
     assert not any(inv["arguments"][0].startswith("trigger-edge") for inv in report["invocations"])
     assert "non-Edge parameters" in " ".join(report["diagnostics"]["restore-limitations"])
     assert "inactive average count" in result.stdout
+    restore_mode = next(inv for inv in report["invocations"] if inv["stage"] == "restore-trigger-mode")
+    assert "--mode=glitch" in restore_mode["arguments"]
+    assert _build_parser().parse_args(restore_mode["arguments"]).mode == "glitch"
+    assert any("Original trigger mode is glitch" in note for note in report["diagnostics"]["restore-limitations"])
 
 
 @requires_powershell
@@ -312,7 +321,7 @@ def test_original_cli_rejects_removed_autoscale_option() -> None:
     result = ps_run(REPO_ROOT / "scripts/live-cli-check.ps1", "-Target", TARGETS[4], "-Connection", "usb",
                     "-Resource", "USB0::FAKE::INSTR", "-IncludeAutoscale")
     assert result.returncode != 0
-    assert "IncludeAutoscale" in result.stderr
+    assert "NamedParameterNotFound" in result.stderr
     assert "Detected instrument:" not in result.stdout
 
 

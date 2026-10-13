@@ -6,7 +6,13 @@ $ErrorActionPreference = "Stop"
 $fixture = Get-Content -LiteralPath $FixturePath -Raw | ConvertFrom-Json
 $script:ValidatorRoot = Split-Path -Parent $ScriptPath
 $script:FakeState = @{}
-foreach ($property in $fixture.state.PSObject.Properties) { $script:FakeState[$property.Name] = $property.Value }
+foreach ($property in $fixture.state.PSObject.Properties) {
+    # Keep fixture floats consistent with the fake instrument's Double setters.
+    foreach ($field in $property.Value.PSObject.Properties) {
+        if ($field.Value -is [decimal]) { $field.Value = [double]$field.Value }
+    }
+    $script:FakeState[$property.Name] = $property.Value
+}
 
 function Read-Host {
     switch ($fixture.confirmation) {

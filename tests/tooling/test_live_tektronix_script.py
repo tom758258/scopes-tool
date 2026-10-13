@@ -1105,8 +1105,11 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
     assert result.stdout.rstrip().endswith("PASS  [live][tektronix] baseline live validation")
 
     # No optional action was requested, so none may be described as planned.
-    for action in ("Acquisition", "Autoscale", "Configuration", "Storage Writes", "Screenshot"):
+    for action in ("Acquisition", "Configuration", "Storage Writes", "Screenshot"):
         assert f"- {action}: {NOT_REQUESTED}" in result.stdout, action
+    assert "Autoscale" not in result.stdout
+    assert "autoscale" not in cases
+    assert all(inv["arguments"][0] != "autoscale" for inv in report["invocations"])
     # Without -IncludeConfigurationActions or -IncludeStorageWrites the default
     # screen must not demand a CH1 fixture or writable instrument storage.
     for absent in (

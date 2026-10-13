@@ -3032,6 +3032,8 @@ basic Auto, while CH1 selection is N/A and remains unverified. This basic check
 does not test acquisition-mode or channel-selection Auto options. Tektronix uses
 bare `autoscale`, verifies `AUTOSet EXECute` and native status, and sends no
 unsupported optional Auto controls.
+A PASS confirms Auto command execution and status checks; it does not prove
+optimal waveform scaling or signal recognition.
 
 Keysight snapshots all analog channels' display, coupling, probe ratio, scale,
 and offset; timebase scale/reference/position; acquisition type and active
@@ -3045,7 +3047,8 @@ state are not restored. Tektronix does not attempt automatic restore. Operators
 must review uncovered settings and restore them manually. Error/event reads and
 baseline draining/clearing consume diagnostic state; that state cannot be restored.
 On DSO-X 4034A, Auto may leave front-panel Save To at `Please Select`; reselect the
-USB destination if needed.
+USB destination if needed. This can also occur when Auto Scale is run directly
+from the front panel and does not mean the Scopes Tool SAVE function failed.
 
 Console results include actual Auto commands, fallback, restore results,
 limitations, and PASS/FAIL/N/A totals. Independent privacy-protected reports are

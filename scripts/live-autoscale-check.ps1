@@ -175,6 +175,7 @@ function Confirm-AutoOperator {
     Write-Host "Connection: $($script:Connection); backend: $($script:BackendName)"
     Write-Host "Auto operation: $(if ($script:IsTektronix) { 'autoscale (no optional controls)' } else { 'autoscale --source-channel 1' })"
     Write-Host "Expected command: $($script:ExpectedAuto)"
+    Write-Host "A PASS result confirms Auto command execution and status checks; it does not prove optimal waveform scaling or signal recognition."
     Write-Host ""
     Write-Host "PHYSICAL SETUP"
     Write-Host "Connect a suitable, stable test signal to CH1 and confirm the probe attenuation matches the instrument setting."
@@ -198,6 +199,7 @@ function Confirm-AutoOperator {
     Write-Host "Errors and events cannot be restored. Restore failures are reported as FAIL. Review the report and manually recover any uncovered settings."
     if ($script:Target -eq "keysight-dsox4034a") {
         Write-Host 'DSO-X 4034A Auto may leave front-panel Save To at "Please Select". Reselect the USB destination if front-panel saving is needed.'
+        Write-Host "This can also occur when Auto Scale is run directly from the front panel; it is not a Scopes Tool SAVE failure."
     }
     Write-Host ""
     Write-Host "Press Enter only after reviewing these warnings and preparing the physical setup. Any other input cancels."
@@ -413,7 +415,7 @@ try {
         } else { Add-AutoCase "restore" "FAIL" ($restoreErrors -join " | ") }
     } else { Add-AutoCase "restore" "N/A" $(if ($script:IsTektronix) { "Not attempted: Tektronix automatic restore is not supported by this validator." } else { "Not attempted: Auto was not executed." }) }
     if ($autoStarted -and $script:Target -eq "keysight-dsox4034a") {
-        $note = 'DSO-X 4034A Auto may leave Save To at "Please Select"; manually reselect the USB destination if needed.'
+        $note = 'DSO-X 4034A Auto may leave Save To at "Please Select", including after front-panel Auto Scale; this is not a Scopes Tool SAVE failure. Manually reselect the USB destination if needed.'
         Add-Diagnostic -Name "manual-action" -Message $note
         Write-Host $note
     }
