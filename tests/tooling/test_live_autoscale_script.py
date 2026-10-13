@@ -321,7 +321,7 @@ def test_original_cli_rejects_removed_autoscale_option() -> None:
     result = ps_run(REPO_ROOT / "scripts/live-cli-check.ps1", "-Target", TARGETS[4], "-Connection", "usb",
                     "-Resource", "USB0::FAKE::INSTR", "-IncludeAutoscale")
     assert result.returncode != 0
-    assert "NamedParameterNotFound" in result.stderr
+    assert "IncludeAutoscale" in re.sub(r"\s+", "", result.stderr)
     assert "Detected instrument:" not in result.stdout
 
 
