@@ -26,7 +26,7 @@ TARGETS = (
     "keysight-dsox2004a", "keysight-dsox3024a", "keysight-dsox4024a", "keysight-dsox4034a",
     "tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b",
 )
-PAIRS = [(target, "usb") for target in TARGETS] + [(target, "tcpip") for target in TARGETS[2:4]]
+PAIRS = [(target, connection) for connection in ("usb", "tcpip") for target in TARGETS]
 
 
 def ps_run(path: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -317,8 +317,11 @@ def test_private_shareable_privacy_and_retention(tmp_path: Path, debug: bool, sc
 @pytest.mark.windows_powershell
 @requires_powershell
 @pytest.mark.parametrize("changes", [
-    ["-Target", "all"], ["-Target", "unknown"], ["-Connection", "serial"],
-    ["-Connection", "tcpip"], ["-Resource", "TCPIP0::example::INSTR"],
+    pytest.param(["-Target", "all"], id="multiple-targets"),
+    pytest.param(["-Target", "unknown"], id="unregistered-target"),
+    pytest.param(["-Connection", "serial"], id="invalid-connection"),
+    pytest.param(["-Connection", "tcpip"], id="tcpip-with-usb-resource"),
+    pytest.param(["-Resource", "TCPIP0::example::INSTR"], id="usb-with-tcpip-resource"),
     ["-Resource", "USB0::"], ["-Backend", "@other"], ["-OutputRoot", "docs"],
 ])
 def test_invalid_inputs_are_rejected_before_hardware(tmp_path: Path, changes: list[str]) -> None:
@@ -327,6 +330,15 @@ def test_invalid_inputs_are_rejected_before_hardware(tmp_path: Path, changes: li
     args[changes[0]] = changes[1]
     result = ps_run(SCRIPT, *(item for pair in args.items() for item in pair))
     assert result.returncode != 0
+    expected_error = {
+        ("-Target", "all"): "Live validation requires one exact registered target",
+        ("-Target", "unknown"): "Unsupported target",
+        ("-Connection", "serial"): "Unsupported connection",
+        ("-Connection", "tcpip"): "Connection does not match resource",
+        ("-Resource", "TCPIP0::example::INSTR"): "Connection does not match resource",
+    }.get(tuple(changes))
+    if expected_error is not None:
+        assert expected_error in result.stdout + result.stderr
     assert "Detected instrument:" not in result.stdout
     assert "Actual commands:" not in result.stdout
 

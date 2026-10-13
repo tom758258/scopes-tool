@@ -3009,7 +3009,8 @@ Run `scripts/live-autoscale-check.ps1` with one exact registered target, an
 explicit VISA resource, and an operator at the instrument. USB validation accepts
 `keysight-dsox2004a`, `keysight-dsox3024a`, `keysight-dsox4024a`,
 `keysight-dsox4034a`, `tektronix-tbs2074`, `tektronix-tds2024b`, and
-`tektronix-tbs1052b`. TCPIP validation is limited to the two 4000X targets.
+`tektronix-tbs1052b`. Each registered target accepts USB or TCPIP validation
+with a matching VISA resource.
 System VISA is the default; `-Backend "@py"` selects pyvisa-py.
 
 ```powershell

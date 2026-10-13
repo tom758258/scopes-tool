@@ -29,10 +29,6 @@ try {
     $script:Target = $resolved[0]
     $script:Connection = $Connection.Trim().ToLowerInvariant()
     if ($script:Connection -notin @("usb", "tcpip")) { throw "Unsupported connection. Use usb or tcpip." }
-    # Keep this validator within the existing nine model/transport acceptance pairs.
-    if ($script:Connection -eq "tcpip" -and $script:Target -notin @("keysight-dsox4024a", "keysight-dsox4034a")) {
-        throw "TCPIP validation is available only for keysight-dsox4024a and keysight-dsox4034a."
-    }
     if (($script:Connection -eq "usb" -and $Resource -notmatch "^(?i)USB\d*::") -or
         ($script:Connection -eq "tcpip" -and $Resource -notmatch "^(?i)TCPIP\d*::")) {
         throw "Connection does not match resource; supply an explicit USB or TCPIP VISA resource of the selected type."
