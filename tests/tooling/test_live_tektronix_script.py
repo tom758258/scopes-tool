@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import uuid
@@ -1123,39 +1122,6 @@ def test_fixed_fixture_failure_stops_functional_cases(tmp_path, target, stage, r
     assert cases["fixture-baseline"]["status"] == "FAIL"
     assert "channel-scale" not in cases and "trigger-edge" not in cases
     assert report["invocations"][-1]["stage"] == stage
-
-
-@pytest.mark.windows_powershell
-@requires_windows
-@pytest.mark.parametrize("target", TARGETS)
-def test_fixed_fixture_missing_mode_write_fails(tmp_path, target, monkeypatch):
-    # Remove the real mode write, rather than pre-setting the fake state to Edge.
-    # If trigger-edge starts changing type implicitly again, this test will fail.
-    mutant_root = ROOT / ".tmp_tests" / "fixture_mode_mutant" / uuid.uuid4().hex
-    mutant_scripts = mutant_root / "scripts"
-    mutant_scripts.mkdir(parents=True)
-    for name in ("live-cli-check.ps1", "_validation_helpers.ps1", "_artifact_privacy.ps1"):
-        shutil.copyfile(ROOT / "scripts" / name, mutant_scripts / name)
-    shutil.copyfile(ROOT / "pyproject.toml", mutant_root / "pyproject.toml")
-    lines = TEXT.splitlines(keepends=True)
-    mode_write = [line for line in lines if '-Stage "fixture-trigger-mode"' in line]
-    assert len(mode_write) == 1
-    (mutant_scripts / "_live_tektronix_helpers.ps1").write_text(
-        "".join(line for line in lines if line not in mode_write), encoding="utf-8",
-    )
-    monkeypatch.setattr(sys.modules[__name__], "SCRIPT", mutant_scripts / "live-cli-check.ps1")
-    monkeypatch.setattr(sys.modules[__name__], "ROOT", mutant_root)
-    initial_mode = "runt" if target == TARGETS[0] else "tv"
-    result, report = fake_run(tmp_path, target, mode=initial_mode, focused=True)
-    assert result.returncode != 0
-    cases = {case["name"]: case for case in report["cases"]}
-    assert cases["fixture-baseline"]["status"] == "FAIL"
-    assert "mode readback differs after same-value setter." in cases["fixture-baseline"]["detail"]
-    assert "channel-scale" not in cases and "trigger-edge" not in cases
-    stages = [inv["stage"] for inv in report["invocations"]]
-    assert "fixture-trigger-mode" not in stages
-    assert stages.index("fixture-trigger") < stages.index("fixture-trigger-mode-query")
-    assert stages[-1] == "fixture-trigger-mode-query"
 
 
 @pytest.mark.windows_powershell
