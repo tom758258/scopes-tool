@@ -64,6 +64,29 @@ def test_pc_output_folder_selector_unavailable(monkeypatch) -> None:
     assert response.json()["detail"] == "folder selection dialog is unavailable"
 
 
+@pytest.mark.parametrize("stdout", (r"C:\Scope Data", ""))
+def test_pc_output_selector_starts_powershell_without_console(monkeypatch, stdout) -> None:
+    def fake_run(command, **kwargs):
+        assert command[:4] == ["powershell.exe", "-NoProfile", "-STA", "-Command"]
+        assert "BrowseForFolder" in command[4]
+        assert kwargs == {
+            "check": False,
+            "capture_output": True,
+            "text": True,
+            "creationflags": 0x08000000,
+        }
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(
+        desktop_module.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False
+    )
+    monkeypatch.setattr(desktop_module.subprocess, "run", fake_run)
+
+    assert desktop_module.select_directory_with_dialog() == (
+        Path(stdout) if stdout else None
+    )
+
+
 @pytest.mark.parametrize("raw_path", (None, ""))
 def test_open_pc_output_folder_blank_uses_default(monkeypatch, raw_path) -> None:
     opened = []
