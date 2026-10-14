@@ -7,7 +7,7 @@ import subprocess
 import pytest
 
 from tests.tooling.test_live_tektronix_script import (
-    TARGETS, fake_workflow_run, requires_windows, run_script,
+    TARGETS, fake_workflow_run, requires_windows,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
