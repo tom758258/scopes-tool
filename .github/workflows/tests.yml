@@ -64,11 +64,17 @@ jobs:
             node --check "$file"
           done
 
+      - name: Prepare pytest temp root
+        run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
+
       - name: Run WebUI Node runtime tests
         run: >-
           ./.venv/bin/python -m pytest -q -rs
           --basetemp .tmp_tests/ci-quality-webui
           -m frontend_node tests/webui
+
+      - name: Run Desktop Node runtime tests
+        run: node --test tests/webui/desktop-main.test.cjs
 
   pytest-linux:
     name: Linux Python ${{ matrix.python-version }}

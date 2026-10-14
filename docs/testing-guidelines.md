@@ -62,6 +62,8 @@ examples, and internal structure require a clear maintenance benefit.
   checks, and every `frontend_node` test under `tests/webui/`. Mark individual
   Node runtime cases, including those in mixed Python/JavaScript files. Node.js
   is required: missing Node must fail these tests rather than skip them.
+  This job also runs `tests/webui/desktop-main.test.cjs` with the built-in
+  Node test runner.
 - **Linux Python 3.13** runs the primary no-hardware Python suite, excluding
   `frontend_node` and `windows_powershell` tests. Python 3.10, 3.11, and 3.12
   run explicit compatibility selections covering identity, capabilities,
