@@ -1150,7 +1150,7 @@ def test_fixed_fixture_missing_mode_write_fails(tmp_path, target, monkeypatch):
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["fixture-baseline"]["status"] == "FAIL"
-    assert "trigger-mode" in cases["fixture-baseline"]["detail"]
+    assert "mode readback differs after same-value setter." in cases["fixture-baseline"]["detail"]
     assert "channel-scale" not in cases and "trigger-edge" not in cases
     stages = [inv["stage"] for inv in report["invocations"]]
     assert "fixture-trigger-mode" not in stages
