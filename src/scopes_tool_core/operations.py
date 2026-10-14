@@ -305,7 +305,7 @@ def run_measure(
     else:
         measurement = scope.query_measurement(channel, item, **kwargs)
     result = {"command": command, **_measurement_result_json(measurement, parameters=kwargs)}
-    entry = scope.post_command_status("measure") if _establish_error_boundary else scope.workflow_status()
+    entry = _measurement_status(scope, measurement, establish_error_boundary=_establish_error_boundary)
     if not getattr(entry, "is_system_error_queue", True):
         result["post_command_status"] = entry.to_json()
     human.extend(
@@ -552,6 +552,13 @@ def run_smoke(scope: Oscilloscope, resource: str, request: SmokeRequest) -> Oper
                     **_measurement_result_json(measurement, parameters={}),
                     "system_error": None,
                 }
+                if hasattr(scope, "_measurement_status"):
+                    entry = _measurement_status(scope, measurement)
+                    record["post_command_status"] = entry.to_json()
+                    if entry.events:
+                        report.setdefault("warnings", []).append(entry.format())
+                    if entry.is_error:
+                        raise OscilloscopeError(f"Smoke measurement failed: {entry.format()}")
                 measurements.append(record)
                 if record.get("valid") is False:
                     warnings = report.setdefault("warnings", [])
@@ -1000,6 +1007,13 @@ def measure_sweep_summary(measurements: Sequence[dict[str, object]]) -> dict[str
     }
 
 
+def _measurement_status(scope, measurement, *, establish_error_boundary=False):
+    native = getattr(scope, "_measurement_status", None)
+    if native is not None:
+        return native(measurement)
+    return scope.post_command_status("measure") if establish_error_boundary else scope.workflow_status()
+
+
 def _run_sweep_measurement(
     scope: Oscilloscope,
     command: str,
@@ -1008,7 +1022,7 @@ def _run_sweep_measurement(
 ) -> dict[str, object]:
     try:
         result = scope.query_measurement(channel, item)
-        system_error = scope.workflow_status()
+        system_error = _measurement_status(scope, result)
         return {
             "command": command,
             **_measurement_result_json(result, parameters={}),

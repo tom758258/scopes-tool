@@ -26,6 +26,7 @@ from .channel import validate_analog_channel
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import measurement_query, validate_statistics_items
 from .operation_types import OperationResult
+from .operations import _measurement_status
 from .planning import OperationPlan, MeasurePlanRequest, plan_measure
 from .scope import Oscilloscope
 from .workflow import (
@@ -227,7 +228,7 @@ def run_measure_until(
 
                     current_sample = int(manifest["completed_count"]) + 1
                     measurement = scope.query_measurement(channel, item)
-                    entry = scope.workflow_status()
+                    entry = _measurement_status(scope, measurement)
                     last_system_error = system_error_manifest_dict(entry)
                     if entry.is_error:
                         error = {

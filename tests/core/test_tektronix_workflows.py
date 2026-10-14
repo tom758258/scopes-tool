@@ -99,7 +99,7 @@ def test_workflow_matrix(model, workflow, tmp_path):
             assert all(m["system_error"] is None and m["post_command_status"]["complete"] for m in result.result["measurements"])
 
 
-@pytest.mark.parametrize("code,category,is_error", [(401,"event",False),(402,"event",False),(403,"event",False),(468,"event",False),(100,"error",True),(200,"error",True),(300,"error",True),(410,"error",True),(528,"warning",True),(350,"error",True)])
+@pytest.mark.parametrize("code,category,is_error", [(401,"event",False),(402,"event",False),(403,"event",False),(468,"event",False),(100,"error",True),(200,"error",True),(300,"error",True),(410,"error",True),(528,"warning",True),(540,"warning",True),(549,"warning",True),(350,"error",True)])
 def test_native_event_categories(code, category, is_error):
     with scope_for(MODELS[0]) as scope:
         scope.backend.inject_event(code, 'A message, with "quotes"')
@@ -226,7 +226,254 @@ def test_bad_checkpoint_does_not_retry_or_continue_sweep(monkeypatch):
         assert result.exit_code == 1
         assert len(result.result["measurements"]) == 1
         assert reads == 2
-        assert scope.backend.history[-1] == "ALLEv?"
+        assert "MEASUrement:IMMed:VALue?" not in scope.backend.history
+        assert scope.backend.history[-2:] == [
+            "MEASUrement:IMMed:TYPe FREQuency", "MEASUrement:IMMed:SOUrce1 CH1",
+        ]
+
+
+def _warning_measurement(scope, monkeypatch, *, codes=(540,), value="0.75", bits=None, events=None):
+    original = scope.backend.query
+    pending = False
+
+    def query(command):
+        nonlocal pending
+        response = original(command)
+        if command == "MEASUrement:IMMed:VALue?":
+            for code in codes:
+                scope.backend.inject_event(code, f"Measurement event {code}")
+            if bits is not None:
+                scope.backend.standard_event_status = bits
+            pending = True
+            return value
+        if command == "ALLEv?" and pending:
+            pending = False
+            if events is not None:
+                return events
+        return response
+
+    monkeypatch.setattr(scope.backend, "query", query)
+
+
+def _run_measurement_workflow(scope, workflow, tmp_path):
+    from scopes_tool_core import measure_log, measure_until, sequence, triggered_measurement
+    from scopes_tool_core.operation_types import MeasureRequest, MeasureSweepRequest, MeasureLogRequest
+    from scopes_tool_core.operations import run_measure, run_measure_sweep
+    if workflow == "measure":
+        return run_measure(scope, "SIM::INSTR", MeasureRequest("rise_time", channel=1))
+    if workflow == "sweep":
+        return run_measure_sweep(scope, "SIM::INSTR", MeasureSweepRequest([1], items="rise_time,fall_time"))
+    if workflow == "log":
+        return measure_log.run_measure_log(scope, "SIM::INSTR", MeasureLogRequest(
+            [1], items="rise_time,fall_time", requested_count=1, interval_seconds=0, output_dir=tmp_path))
+    if workflow == "until":
+        return measure_until.run_measure_until(scope, "SIM::INSTR", measure_until.MeasureUntilRequest(
+            1, "rise_time", "gt", -1, 1, interval_seconds=0, output_dir=tmp_path))
+    if workflow == "triggered":
+        return triggered_measurement.run_triggered_measure_loop(scope, "SIM::INSTR",
+            triggered_measurement.TriggeredMeasureLoopRequest(
+                1, 1, channels=[1], items="rise_time,fall_time", output_dir=tmp_path))
+    doc = sequence.normalize_sequence_document({"version": 1, "steps": [
+        {"action": "measure", "parameters": {"item": "rise_time", "channel": 1}},
+        {"action": "measure", "parameters": {"item": "fall_time", "channel": 1}},
+    ]})
+    return sequence.run_sequence(scope, "SIM::INSTR", sequence.SequenceRequest(doc, output_dir=tmp_path))
+
+
+@pytest.mark.parametrize("model", MODELS)
+@pytest.mark.parametrize("codes,value,bits,events,passes", [
+    ((), "0.75", 0, None, True),
+    (tuple(range(540, 550)), "0.75", 16, None, True),
+    ((540,), "0.75", 0, None, True),
+    ((221,), "0.75", 16, None, False),
+    ((540, 221), "0.75", 16, None, False),
+    ((540, 100), "0.75", 48, None, False),
+    ((540,), "0.75", 20, None, False),
+    ((540,), "0.75", 24, None, False),
+    ((540,), "0.75", 16, '0,"No events"', False),
+    ((540,), "0.75", 16, '350,"Too many events"', False),
+    ((540,), "0.75", 16, '540,""', False),
+    ((528,), "0.75", 16, None, False),
+    ((401,), "0.75", 128, None, False),
+    ((540,), "9.9E37", 16, None, False),
+    ((540,), "NaN", 16, None, False),
+    ((540,), "inf", 16, None, False),
+])
+def test_measurement_warning_status_matrix(model, codes, value, bits, events, passes, monkeypatch, tmp_path):
+    with scope_for(model) as scope:
+        _warning_measurement(scope, monkeypatch, codes=codes, value=value, bits=bits, events=events)
+        if value in {"NaN", "inf"}:
+            from scopes_tool_core.errors import MeasurementResponseError
+            with pytest.raises(MeasurementResponseError):
+                _run_measurement_workflow(scope, "measure", tmp_path)
+            assert scope.backend.history.count("MEASUrement:IMMed:VALue?") == 1
+            return
+        result = _run_measurement_workflow(scope, "measure", tmp_path)
+        assert (result.exit_code == 0) is passes
+        status = result.result["post_command_status"]
+        assert status["value"] == bits and status["raw"] == str(bits)
+        assert status["is_error"] is not passes
+        if passes:
+            assert result.result["value"] == 0.75
+            assert [event["code"] for event in status["events"]] == list(codes)
+            assert all(event["category"] == "warning" and event["message"] for event in status["events"])
+        history = scope.backend.history
+        for index, command in enumerate(history):
+            if command == "*ESR?":
+                assert history[index + 1] == "ALLEv?"
+        assert history.count("*ESR?") == 3
+
+
+@pytest.mark.parametrize("model", MODELS)
+@pytest.mark.parametrize("workflow", ["measure", "sweep", "log", "until", "triggered", "sequence"])
+@pytest.mark.parametrize("scenario", ["warning", "mixed", "invalid", "malformed", "unparseable", "communication"])
+def test_measurement_warning_workflows(model, workflow, scenario, monkeypatch, tmp_path):
+    from scopes_tool_core.errors import OscilloscopeError, VisaBackendError
+    with scope_for(model) as scope:
+        codes = (540,) if scenario != "mixed" else (540, 221)
+        value = "9.9E37" if scenario == "invalid" else "not a number" if scenario == "unparseable" else "0.75"
+        events = '540,"unterminated' if scenario == "malformed" else None
+        _warning_measurement(scope, monkeypatch, codes=codes, value=value, events=events)
+        if scenario == "communication":
+            scope.backend.query_failures["MEASUrement:IMMed:VALue?"] = VisaBackendError("Disconnected")
+        try:
+            result = _run_measurement_workflow(scope, workflow, tmp_path)
+        except OscilloscopeError as exc:
+            assert workflow in {"measure", "log"} and scenario in {"malformed", "unparseable", "communication"}
+            if workflow == "log":
+                assert exc.result.exit_code == 1
+            assert scope.backend.history.count("MEASUrement:IMMed:VALue?") == 1
+            return
+        assert (result.exit_code == 0) is (scenario == "warning"), result.result
+        if scenario == "warning":
+            # Existing result/manifest fields retain every measurement's warning.
+            import json
+            evidence = json.dumps(result.result)
+            for manifest in tmp_path.rglob("manifest.json"):
+                evidence += manifest.read_text()
+            assert '"code": 540' in evidence and '"value": 16' in evidence
+            assert "Measurement event 540" in evidence
+        if scenario == "malformed":
+            # No retry of the failed cohort and no second measurement.
+            assert scope.backend.history.count("MEASUrement:IMMed:VALue?") == 1
+
+
+@pytest.mark.parametrize("model", MODELS)
+@pytest.mark.parametrize("stage", ["setup", "units", "restore", "trigger"])
+def test_measurement_warning_never_relaxes_other_work(model, stage, monkeypatch, tmp_path):
+    from scopes_tool_core.errors import OscilloscopeError
+    with scope_for(model) as scope:
+        original_write = scope.backend.write
+        original_query = scope.backend.query
+        source_writes = 0
+
+        def write(command):
+            nonlocal source_writes
+            original_write(command)
+            if "IMMed:SOUrce" in command:
+                source_writes += 1
+                if (stage == "setup" and source_writes == 1) or (stage == "restore" and source_writes == 2):
+                    scope.backend.inject_event(540, "Warning outside value query")
+            if stage == "trigger" and command == "ACQuire:STATE ON":
+                scope.backend.inject_event(540, "Trigger warning")
+
+        def query(command):
+            response = original_query(command)
+            if stage == "units" and command == "MEASUrement:IMMed:UNIts?":
+                scope.backend.inject_event(540, "Units warning")
+            return response
+
+        monkeypatch.setattr(scope.backend, "write", write)
+        monkeypatch.setattr(scope.backend, "query", query)
+        if stage == "trigger":
+            result = _run_measurement_workflow(scope, "triggered", tmp_path)
+            assert result.exit_code == 1
+        else:
+            with pytest.raises(OscilloscopeError, match="setup failed|restoration failed"):
+                _run_measurement_workflow(scope, "measure", tmp_path)
+
+
+@pytest.mark.parametrize("model", MODELS)
+def test_fixed_fixture_driver_readbacks(model):
+    with scope_for(model) as scope:
+        scope.set_channel_display(1, False)
+        scope.set_channel_scale(1, 0.5)
+        scope.configure_trigger_edge(1, 2.44444, "negative")
+        scope.set_channel_display(1, True)
+        scope.set_channel_scale(1, 2)
+        scope.set_acquisition_type("normal")
+        scope.configure_trigger_edge(1, 1, "positive")
+        assert scope.query_channel_display(1) is True
+        assert scope.query_channel_scale(1) == 2
+        assert scope.query_acquisition_config().type == "normal"
+        assert scope.query_trigger_mode().mode == "edge"
+        trigger = scope.query_trigger_edge()
+        assert (trigger.source_channel, trigger.slope, trigger.level_volts) == (1, "positive", 1)
+
+
+@pytest.mark.parametrize("model", MODELS)
+@pytest.mark.parametrize("item", ["rise_time", "fall_time"])
+@pytest.mark.parametrize("scenario", ["warning", "mixed", "invalid"])
+def test_measurement_warning_cli_diagnostics(model, item, scenario, monkeypatch, capsys, caplog):
+    import json
+    import logging
+    from scopes_tool_cli import cli
+    caplog.set_level(logging.DEBUG)
+    original = TektronixSimulatorBackend.query
+
+    def query(backend, command):
+        response = original(backend, command)
+        if command == "MEASUrement:IMMed:VALue?":
+            backend.inject_event(540, "Measurement quality warning")
+            if scenario == "mixed":
+                backend.inject_event(221, "Settings conflict")
+            return "9.9E37" if scenario == "invalid" else "0.75"
+        return response
+
+    monkeypatch.setattr(TektronixSimulatorBackend, "query", query)
+    code = cli.main(["measure", "--item", item, "--channel", "1",
+                     "--model", model, "--simulate", "--json", "--log-scpi"])
+    output = capsys.readouterr()
+    assert (code == 0) is (scenario == "warning")
+    payload = json.loads(output.out)
+    status = payload["result"]["post_command_status"]
+    assert status["raw"] == "16" and status["value"] == 16
+    assert status["events"][0]["code"] == 540
+    assert "Measurement quality warning" in caplog.text
+    assert "*ESR?" in caplog.text and "ALLEv?" in caplog.text
+    assert "MEASUrement:IMMed:VALue?" in payload["scpi"]["sent"]
+
+
+@pytest.mark.parametrize("model", MODELS)
+def test_measurement_warning_does_not_relax_following_capture(model, monkeypatch, tmp_path):
+    from scopes_tool_core.errors import OscilloscopeError
+    from scopes_tool_core.operation_types import CaptureRequest
+    from scopes_tool_core.operations import run_capture
+    with scope_for(model) as scope:
+        _warning_measurement(scope, monkeypatch)
+        assert _run_measurement_workflow(scope, "measure", tmp_path).exit_code == 0
+        scope.backend.inject_event(540, "Capture warning")
+        with pytest.raises(OscilloscopeError, match="raw SESR '16'"):
+            run_capture(scope, "SIM::INSTR", CaptureRequest([1], 1000, csv_path=tmp_path / "capture.csv"))
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_smoke_measurement_warning_keeps_capture_status_strict(mixed, monkeypatch):
+    from scopes_tool_core.errors import OscilloscopeError
+    from scopes_tool_core.operation_types import SmokeRequest
+    from scopes_tool_core.operations import run_smoke
+    with scope_for(MODELS[0]) as scope:
+        scope.backend.tek_settings["HORIZONTAL:DELAY:MODE"] = "ON"
+        _warning_measurement(scope, monkeypatch, codes=(540, 221) if mixed else (540,))
+        if mixed:
+            with pytest.raises(OscilloscopeError, match="Smoke measurement failed"):
+                run_smoke(scope, "SIM::INSTR", SmokeRequest(save_artifacts=False))
+        else:
+            result = run_smoke(scope, "SIM::INSTR", SmokeRequest(save_artifacts=False))
+            assert result.exit_code == 0
+            assert all(record["post_command_status"]["events"][0]["code"] == 540
+                       for record in result.result["measurements"])
+            assert result.result["post_command_status"]["value"] == 0
 
 
 @pytest.mark.parametrize("model", MODELS)

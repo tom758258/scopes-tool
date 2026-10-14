@@ -67,11 +67,14 @@ class TekPostStatus:
     event_raw: str | None = None
     events: tuple[dict[str, object], ...] = ()
     complete: bool = True
+    _measurement_is_error: bool | None = None
     status_label = "Standard event status"
     is_system_error_queue = False
 
     @property
     def is_error(self) -> bool:
+        if self._measurement_is_error is not None:
+            return self._measurement_is_error
         return not self.complete or bool(self.value & 0x3C) or any(
             event["category"] == "error" for event in self.events
         )
@@ -564,6 +567,29 @@ class TektronixOscilloscope(Oscilloscope):
         if int(number) & 0x3C and not events:
             complete = False
         return TekPostStatus(int(number), raw, event_raw, tuple(events), complete)
+
+    def _measurement_status(self, measurement: MeasurementResult) -> TekPostStatus:
+        """Return the cohort captured for this result, without another SESR read."""
+        cached = getattr(self, "_last_measurement", None)
+        if cached is None or cached[0] is not measurement:
+            raise OscilloscopeError("Tek measurement status does not match the result")
+        return cached[1]
+
+    def _measurement_cycle_status(self, statuses: Sequence[TekPostStatus]) -> TekPostStatus:
+        # The final checkpoint is strict: trigger/acquisition and other work never
+        # inherit the measurement-only exception. Keep all measured cohorts.
+        final = self.workflow_status()
+        cohorts = [*statuses, final]
+        value = 0
+        for status in cohorts:
+            value |= status.value
+        return TekPostStatus(
+            value, "; ".join(status.raw for status in cohorts),
+            "; ".join(status.event_raw or "" for status in cohorts),
+            tuple(event for status in cohorts for event in status.events),
+            all(status.complete for status in cohorts),
+            _measurement_is_error=any(status.is_error for status in cohorts),
+        )
 
     def preflight_status(self, *, diagnostic: bool = False, max_reads: int = 30) -> tuple:
         if max_reads < 1:
@@ -1281,6 +1307,7 @@ class TektronixOscilloscope(Oscilloscope):
 
     def query_measurement(self, channel: int, item: str, **kwargs: object) -> MeasurementResult:
         self.measurement_query_command(channel, item, **kwargs)
+        self._last_measurement = None
         item = normalize_measurement_item(item)
         root = "MEASUrement:IMMed"
         source = "SOUrce1" if self._is_tbs2000 else "SOUrce"
@@ -1289,15 +1316,36 @@ class TektronixOscilloscope(Oscilloscope):
         try:
             self.scpi.write(f"{root}:TYPe {self._measurement_types()[item]}")
             self.scpi.write(f"{root}:{source} CH{channel}")
-            raw = self.scpi.query(f"{root}:VALue?")
             self._query(f"{root}:UNIts?")
+            # Consume preceding work/configuration before the value query so that
+            # only this measurement can qualify for the warning exception.
+            before = self.workflow_status()
+            if before.is_error:
+                raise OscilloscopeError(f"Tek measurement setup failed: {before.format()}")
+            raw = self.scpi.query(f"{root}:VALue?")
             result = parse_measurement_result(_payload(raw, f"{root}:VALue?"), item=item, channel=channel)
-            return replace(result, raw_value=raw)
+            result = replace(result, raw_value=raw)
+            status = self.workflow_status()
+            allowed = (
+                result.valid and result.value is not None and math.isfinite(result.value)
+                and status.complete and not status.value & 0x2C
+                and (not status.value & 16 or bool(status.events))
+                and all(540 <= event["code"] <= 549 and str(event["message"]).strip()
+                        for event in status.events)
+            )
+            status = replace(status, _measurement_is_error=not allowed)
         finally:
             try:
                 self.scpi.write(f"{root}:TYPe {original_type}")
             finally:
                 self.scpi.write(f"{root}:{source} {original_source}")
+        # Restoration keeps its existing writes and strict error rules. A failed
+        # measurement checkpoint never retries its destructive read in cleanup.
+        restored = self.workflow_status()
+        if restored.is_error:
+            raise OscilloscopeError(f"Tek measurement restoration failed: {restored.format()}")
+        self._last_measurement = (result, status)
+        return result
 
     def capture_waveform_byte(self, channel: int, points: int = 1000) -> WaveformCapture:
         channel = validate_analog_channel(channel, self.capabilities)

@@ -329,12 +329,18 @@ def log_measurements_workflow(
                 }
 
                 # Single channel queries
+                measurement_statuses = []
                 for ch in channels:
                     for item in items:
                         col = f"ch{ch}_{item}"
                         val = "NaN"
                         try:
                             res = scope.query_measurement(ch, item)
+                            native_status = getattr(scope, "_measurement_status", None)
+                            if native_status is not None:
+                                measurement_statuses.append(native_status(res))
+                                if not measurement_statuses[-1].complete:
+                                    raise OscilloscopeError(measurement_statuses[-1].format())
                             if res.valid and res.value is not None:
                                 val = f"{res.value:.12g}"
                                 row_human.append(f"  {col}: {val} {res.unit}")
@@ -343,7 +349,7 @@ def log_measurements_workflow(
                                     f"  {col}: NaN ({res.reason or 'invalid sentinel'})"
                                 )
                         except OscilloscopeError as exc:
-                            if isinstance(exc, VisaBackendError) and not operation_supported(scope.capabilities, "check-error"):
+                            if not operation_supported(scope.capabilities, "check-error"):
                                 raise
                             LOGGER.warning("%s: NaN (query failed: %s)", col, exc)
                         row_data[col] = val
@@ -381,7 +387,8 @@ def log_measurements_workflow(
                                 last_system_error,
                             )
 
-                system_err = scope.workflow_status()
+                native_cycle = getattr(scope, "_measurement_cycle_status", None)
+                system_err = native_cycle(measurement_statuses) if native_cycle else scope.workflow_status()
 
                 row_vals = [row_data[h] for h in headers]
                 if writer is not None:
@@ -423,7 +430,10 @@ def log_measurements_workflow(
                     reporter_failed = True
                     raise
 
-                if (stop_on_error and system_err.is_error) or not getattr(system_err, "complete", True):
+                if (
+                    ((stop_on_error or native_cycle is not None) and system_err.is_error)
+                    or not getattr(system_err, "complete", True)
+                ):
                     LOGGER.error(
                         "stop-on-error triggered by system error: %s",
                         system_err.format(),

@@ -391,16 +391,16 @@ seam perform one internal `*ESR?` after the business response completes. Only
 SESR bits 5-2 (CME, EXE, DDE, QYE) are operation errors. PON, URQ, RQC, and OPC
 alone do not indicate operation failure.
 
-Ordinary post-checks do not issue `EVENT?`, `EVMsg?`, `ALLEv?`, or `EVQty?`,
-do not emulate a normalized system-error queue, and do not populate top-level
+Ordinary non-measurement post-checks do not issue `EVENT?`, `EVMsg?`, `ALLEv?`,
+or `EVQty?`, do not emulate a normalized system-error queue, and do not populate top-level
 `system_error`. A nonzero error mask follows the existing structured error path
 and retains raw SESR. Because `*ESR?` is destructive, `system-standard-event`
 gets exactly its requested read; `system-clear-status`, `system-status-byte`,
 and `system-opc` do not receive an extra hidden SESR read. Post-checking is not
 a completion wait and never makes an unsupported operation supported. The
-`measure` and `capture` primitives use this post-command seam; composed
-workflows use the native workflow checkpoint below rather than performing a
-second primitive SESR read.
+`capture` primitive uses this post-command seam; `measure` and composed
+workflows use the native workflow checkpoint below without a second primitive
+SESR read.
 
 ### Native workflow status
 
@@ -415,9 +415,21 @@ source `tektronix-sesr`, raw SESR/event responses, decoded events/categories,
 completeness, and destructive-read flags. Samples and sequence/acquisition steps
 use the same representation. Command, execution, device, and query error bits
 fail the checkpoint; informational events alone do not. A warning that sets an
-error bit still fails. Malformed responses, queue overflow (350), and incomplete
-status fail closed and prevent further workflow steps. No retry may consume a
+error bit still fails outside the measurement exception below. Malformed
+responses, queue overflow (350), and incomplete status fail closed and prevent
+further workflow steps. No retry may consume a
 second SESR to hide an unread or malformed cohort.
+
+Immediate measurements permit events 540–549 only when the value is valid and
+finite, the SESR has no other error bits besides Execution bit 4, and the event
+cohort is complete and contains only these measurement warnings with messages.
+The value, raw SESR, event codes and warning messages remain in the existing
+measurement status fields. A strict checkpoint after TYPE/SOURCE and units
+configuration separates earlier work from the value query; restoration receives
+a separate strict checkpoint. This rule applies to measure, sweep, log, until,
+triggered measurement loops, sequence measurement steps and Smoke measurements.
+Invalid values, other events, mixed errors and communication failures still fail.
+Capture, acquisition, trigger and cleanup checkpoints retain their error rules.
 
 Doctor stops on preexisting errors. Other workflows report stale events before
 proceeding according to the existing preflight policy; an incomplete preflight

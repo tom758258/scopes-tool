@@ -897,7 +897,8 @@ def test_immediate_measurement_restores_type_and_source(model_id, _, __, query_f
             result = scope.query_measurement(1, "vpp")
             assert result.valid and result.item == "vpp" and result.channel == 1
             assert result.value == pytest.approx(0.5) and result.unit == "V"
-        assert scope.backend.history[-2:] == [f"{root}:TYPe PERIod", f"{root}:{source} CH2"]
+        restored = scope.backend.history[-2:] if query_failure else scope.backend.history[-5:-3]
+        assert restored == [f"{root}:TYPe PERIod", f"{root}:{source} CH2"]
         assert scope.scpi.query(f"{root}:TYPe?") == "PERIod"
         assert scope.scpi.query(f"{root}:{source}?") == "CH2"
         assert not any(command.startswith(":MEASure:") for command in scope.backend.history)
@@ -1041,7 +1042,9 @@ def test_primitive_runners_use_native_status_and_capture_wait(model_id, _, __, t
             csv_path=tmp_path / "wave.csv", trigger_wait=TriggerWaitConfig(20, 1)))
         for result in (measured, captured):
             assert result.exit_code == 0 and result.system_error is None
-            assert result.result["post_command_status"] == {"raw": "0", "value": 0}
+        assert measured.result["post_command_status"]["is_error"] is False
+        assert measured.result["post_command_status"]["events"] == []
+        assert captured.result["post_command_status"] == {"raw": "0", "value": 0}
         assert captured.result["trigger"]["poll_command"] == "BUSY?"
         assert (tmp_path / "wave.csv").exists()
         assert not any(command.startswith((":SYSTem", ":WAVeform", ":OPERegister")) for command in scope.backend.history)
@@ -1079,6 +1082,7 @@ def test_cli_new_primitives_simulate_and_plan(model_id, _, __, tmp_path):
 @pytest.mark.parametrize("item,native_unit,canonical_unit", [("vpp", "VOLTS", "V"), ("frequency", "HERTZ", "Hz")])
 def test_immediate_measurement_accepts_abbreviated_native_headers(item, native_unit, canonical_unit):
     scope, backend = make_scope(responses={
+        "DESE?": "255", "ALLEv?": '0,"No events"',
         "MEASUrement:IMMed:TYPe?": ":MEASU:IMM:TYP PERIod",
         "MEASUrement:IMMed:SOUrce1?": ":MEASU:IMM:SOU1 CH2",
         "MEASUrement:IMMed:VALue?": ":MEASU:IMM:VAL 0.75",
@@ -1087,7 +1091,7 @@ def test_immediate_measurement_accepts_abbreviated_native_headers(item, native_u
     result = scope.query_measurement(1, item)
     assert result.value == 0.75 and result.unit == canonical_unit
     assert result.raw_value == ":MEASU:IMM:VAL 0.75"
-    assert backend.history[-2:] == ["MEASUrement:IMMed:TYPe PERIod", "MEASUrement:IMMed:SOUrce1 CH2"]
+    assert backend.history[-5:-3] == ["MEASUrement:IMMed:TYPe PERIod", "MEASUrement:IMMed:SOUrce1 CH2"]
 
 
 @pytest.mark.parametrize("model_id,_,channels", MODELS)

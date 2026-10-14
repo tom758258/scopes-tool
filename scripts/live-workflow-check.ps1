@@ -410,7 +410,7 @@ function Invoke-ModeCli {
     $payload = Invoke-Cli -Stage $Stage -Arguments $allArguments
     if ($script:IsTektronix -and $ModeArguments -notcontains "--dry-run") {
         if ($Command -in $script:WorkflowCommands) {
-            Assert-TektronixWorkflowStatus -Payload $payload
+            Assert-TektronixWorkflowStatus -Payload $payload -Measurement:($Command -in @("measure-sweep", "measure-log", "measure-until", "triggered-measure-loop"))
         } elseif ($Command -in @("run", "stop-acquisition")) {
             Assert-TektronixCommandStatus -Payload $payload
         }
@@ -1097,7 +1097,7 @@ if (-not $script:FunctionalFailed) {
             throw "measure-until timeout case returned unexpected error type: $($errorValue.type)"
         }
         if ($script:IsTektronix) {
-            Assert-TektronixWorkflowStatus -Payload $invocation.Payload
+            Assert-TektronixWorkflowStatus -Payload $invocation.Payload -Measurement
         }
         Assert-ExpectedFiles -OutputDir $outputDir `
             -Names @("measurements.csv", "manifest.json", "scpi.log") `

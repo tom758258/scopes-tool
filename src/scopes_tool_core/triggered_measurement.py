@@ -25,6 +25,7 @@ from .capabilities import ScopeCapabilities
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import pair_measurement_query
 from .operation_types import OperationResult
+from .operations import _measurement_status
 from .planning import (
     OperationPlan, MeasurePlanRequest, plan_measure, workflow_step_scpi,
     parse_measurement_item_list,
@@ -246,11 +247,16 @@ def run_triggered_measure_loop(
                     trigger_elapsed_seconds = trigger.elapsed_ms / 1000.0
                     values: dict[str, str] = {}
                     row_human = [f"Cycle {index}/{request.count}:"]
+                    measurement_statuses = []
 
                     for channel in normalized["channels"]:
                         for item in normalized["items"]:
                             column = f"ch{channel}_{item}"
                             measurement = scope.query_measurement(channel, item)
+                            if hasattr(scope, "_measurement_status"):
+                                measurement_statuses.append(_measurement_status(scope, measurement))
+                                if measurement_statuses[-1].is_error:
+                                    break
                             values[column] = _measurement_value(measurement)
                             row_human.append(
                                 _measurement_human_line(column, values[column], measurement)
@@ -261,6 +267,9 @@ def run_triggered_measure_loop(
                                     scpi_log_path, files, human, idn, last_system_error,
                                     scope, error=None,
                                 )
+
+                        if measurement_statuses and measurement_statuses[-1].is_error:
+                            break
 
                     for source, reference in normalized["pairs"]:
                         for item in normalized["pair_items"]:
@@ -277,7 +286,8 @@ def run_triggered_measure_loop(
                                     scope, error=None,
                                 )
 
-                    entry = scope.workflow_status()
+                    native_cycle = getattr(scope, "_measurement_cycle_status", None)
+                    entry = native_cycle(measurement_statuses) if native_cycle else scope.workflow_status()
                     last_system_error = system_error_manifest_dict(entry)
                     if entry.is_error:
                         error = {

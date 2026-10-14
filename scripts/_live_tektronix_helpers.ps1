@@ -38,10 +38,26 @@ function Assert-TektronixCommandStatus {
 }
 
 function Assert-TektronixWorkflowStatus {
-    param([Parameter(Mandatory = $true)][object]$Payload)
+    param([Parameter(Mandatory = $true)][object]$Payload, [switch]$Measurement)
 
-    Assert-TektronixCommandStatus -Payload $Payload
     $status = $Payload.result.post_command_status
+    if ($Measurement) {
+        if ($null -eq $status -or $status.value -isnot [int] -or
+            $status.value -lt 0 -or $status.value -gt 255 -or
+            ($status.value -band 44) -ne 0 -or [string]::IsNullOrWhiteSpace($status.raw)) {
+            throw "Missing, invalid, or error-bearing native measurement status."
+        }
+        foreach ($event in @($status.events)) {
+            if ($event.code -lt 540 -or $event.code -gt 549 -or $event.category -cne "warning") {
+                throw "Measurement status contains an event outside 540-549."
+            }
+        }
+        if (($status.value -band 16) -ne 0 -and @($status.events).Count -eq 0) {
+            throw "Measurement execution bit has no warning evidence."
+        }
+    } else {
+        Assert-TektronixCommandStatus -Payload $Payload
+    }
     if ($null -ne $Payload.system_error -or $status.source -cne "tektronix-sesr" -or
         $status.complete -cne $true -or $status.is_error -cne $false -or
         $status.destructive_read -cne $true -or
@@ -426,7 +442,7 @@ print(json.dumps({
         $physicalPreparation = [System.Collections.Generic.List[string]]@(
             "Confirm the correct oscilloscope is connected.",
             "Disconnect unknown or sensitive DUT signals, and any signal the test must not disturb.",
-            "Default checks use the instrument's current state; a fixed CH1/CH2 Probe Comp fixture is not required."
+            "The runner actively establishes a fixed CH1 fixture before functional checks."
         )
         if ($script:Target -eq "tektronix-tbs2074") {
             $physicalPreparation.Add(
@@ -435,7 +451,7 @@ print(json.dumps({
         $physicalPreparation.Add(
             "Connect a suitable, stable signal to CH1 (for example, the oscilloscope's Probe Comp / Demo output).")
         $physicalPreparation.Add(
-            "Ensure CH1 display is ON and a stable waveform is visible. Measurement and capture checks require CH1 to be displayed.")
+            "Fixture: CH1 display ON, CH1 scale 2 V/div, acquisition Normal, Edge trigger CH1 Positive at 1 V; every setting is read back.")
         if (@($script:CoreProfile.supported_operations) -contains "setup-save") {
             $physicalPreparation.Add(
                 "Reference Save requires CH1 display ON; otherwise the reference-save case is N/A.")
@@ -449,6 +465,7 @@ print(json.dumps({
             "Read the instrument status byte.",
             "Read the Standard Event Status register; that read is destructive and clears it.",
             "Send a status clear, which discards the current status and event state.",
+            "Actively set and verify the fixed CH1 fixture; fixture failure stops functional validation.",
             "Query the current channel, timebase, acquisition, and trigger settings.",
             "Perform supported same-value setters, read each value back, then attempt to restore the original value.",
             "Report a case as N/A when the model or the current instrument state is outside the supported subset, instead of changing state to force a result."
@@ -457,6 +474,7 @@ print(json.dumps({
         $cleanupLimitations = [System.Collections.Generic.List[string]]@(
             "Same-value setters are real instrument writes, not read-only checks.",
             "Not every setting is guaranteed to be fully restored.",
+            "The original CH1 display/scale, acquisition mode, and trigger configuration are not restored after establishing the fixture.",
             "Status reads and the status clear may consume or discard existing error and event state that was pending before validation.",
             "Waveform transfer settings have no public restore path and may remain changed."
         )
@@ -543,6 +561,26 @@ print(json.dumps({
         return
     }
 
+    function Invoke-FixtureBaseline {
+        $null = Invoke-Cli -Stage "fixture-display" -Command "channel-display" -Options @("--channel", "1", "--on")
+        $null = Invoke-Cli -Stage "fixture-scale" -Command "channel-scale" -Options @("--channel", "1", "--volts-per-division", "2")
+        $null = Invoke-Cli -Stage "fixture-acquisition" -Command "acquisition" -Options @("--type", "normal")
+        $null = Invoke-Cli -Stage "fixture-trigger" -Command "trigger-edge" -Options @("--source-channel", "1", "--level", "1", "--slope", "positive")
+
+        $display = Invoke-Cli -Stage "fixture-display-query" -Command "channel-display" -Options @("--channel", "1", "--query")
+        Assert-ReadbackEqual $true (Get-Readback $display "display") "channel-display" "display"
+        $scale = Invoke-Cli -Stage "fixture-scale-query" -Command "channel-scale" -Options @("--channel", "1", "--query")
+        Assert-ReadbackEqual 2.0 (Get-Readback $scale "volts_per_division") "channel-scale" "volts_per_division"
+        $acquisition = Invoke-Cli -Stage "fixture-acquisition-query" -Command "acquisition" -Options @("--query")
+        Assert-ReadbackEqual "normal" (Get-Readback $acquisition "type") "acquisition" "type"
+        $mode = Invoke-Cli -Stage "fixture-trigger-mode-query" -Command "trigger-mode" -Options @("--query")
+        Assert-ReadbackEqual "edge" (Get-Readback $mode "mode") "trigger-mode" "mode"
+        $trigger = Invoke-Cli -Stage "fixture-trigger-query" -Command "trigger-edge" -Options @("--query")
+        Assert-ReadbackEqual 1 (Get-Readback $trigger "source_channel") "trigger-edge" "source_channel"
+        Assert-ReadbackEqual "positive" (Get-Readback $trigger "slope") "trigger-edge" "slope"
+        Assert-ReadbackEqual 1.0 (Get-Readback $trigger "level_volts") "trigger-edge" "level_volts"
+    }
+
     try {
         # The first live invocation is identify. No state-changing case may precede this gate.
         $detectedModel = ""
@@ -576,6 +614,15 @@ print(json.dumps({
                 Add-Case -Name "pre-run-clean-baseline" -Status "PASS" -Detail "No SESR error bits after clear; value $bits"
             } catch {
                 Add-Case -Name "pre-run-clean-baseline" -Status "FAIL" -Detail $_.Exception.Message
+                $script:StopAfterIdentity = $true
+            }
+        }
+        if (-not $script:StopAfterIdentity) {
+            try {
+                Invoke-FixtureBaseline
+                Add-Case "fixture-baseline" "PASS" "CH1 ON, 2 V/div; Normal acquisition; Edge CH1 Positive 1 V verified"
+            } catch {
+                Add-Case "fixture-baseline" "FAIL" $_.Exception.Message
                 $script:StopAfterIdentity = $true
             }
         }
@@ -691,17 +738,13 @@ print(json.dumps({
                 if ($triggerMode -ne "edge") {
                     Add-Case "trigger-edge" $triggerBlockedStatus "Current trigger type is not edge or could not be verified; no setter executed"
                 } else {
-                    $source = Invoke-Cli -Stage "trigger-edge-source-precondition" -Command "trigger-edge-source" -Options @("--query")
-                    if ($source.result.source -ne "analog-channel") {
-                        Add-Case "trigger-edge" "N/A" "Combined edge requires a current analog source; source is not changed"
-                    } else {
-                        $before = Invoke-Cli -Stage "trigger-edge-before" -Command "trigger-edge" -Options @("--query")
-                        Invoke-SameValueCase "trigger-edge" "trigger-edge" $before @(
-                            "--source-channel", (Format-Setting (Get-Readback $before "source_channel")),
-                            "--level", (Format-Setting (Get-Readback $before "level_volts")),
-                            "--slope", (Get-Readback $before "slope")
-                        ) @("source_channel", "level_volts", "slope")
-                    }
+                    $before = Invoke-Cli -Stage "trigger-edge-before" -Command "trigger-edge" -Options @("--query")
+                    Assert-ReadbackEqual 1 (Get-Readback $before "source_channel") "trigger-edge" "source_channel"
+                    Assert-ReadbackEqual 1.0 (Get-Readback $before "level_volts") "trigger-edge" "level_volts"
+                    Assert-ReadbackEqual "positive" (Get-Readback $before "slope") "trigger-edge" "slope"
+                    Invoke-SameValueCase "trigger-edge" "trigger-edge" $before @(
+                        "--source-channel", "1", "--level", "1", "--slope", "positive"
+                    ) @("source_channel", "level_volts", "slope")
                 }
             } catch { Add-Case "trigger-edge" "FAIL" $_.Exception.Message }
 
@@ -818,7 +861,13 @@ print(json.dumps({
                                 [string]::IsNullOrWhiteSpace([string](Get-Readback $measurement "unit"))) {
                                 throw "Invalid CH1 $item measurement result format or non-finite value."
                             }
-                            Add-Case $name "PASS" "Valid finite CH1 measurement"
+                            $detail = "Valid finite CH1 measurement"
+                            $statusProperty = $measurement.result.PSObject.Properties["post_command_status"]
+                            if ($null -ne $statusProperty -and $null -ne $statusProperty.Value.PSObject.Properties["events"] -and
+                                @($statusProperty.Value.events).Count -gt 0) {
+                                $detail += "; " + ($statusProperty.Value | ConvertTo-Json -Depth 8 -Compress)
+                            }
+                            Add-Case $name "PASS" $detail
                         } catch { Add-Case $name "FAIL" $_.Exception.Message }
                     }
                     $csv = Join-Path $script:RunPaths.Private "waveform.csv"

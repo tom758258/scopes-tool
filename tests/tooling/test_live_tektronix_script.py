@@ -718,20 +718,21 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
 @pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize(("target", "mode"), [(TARGETS[0], "runt"), (TARGETS[1], "tv"), (TARGETS[2], "tv")])
-def test_non_edge_mode_preserves_trigger_configuration(tmp_path: Path, target: str, mode: str) -> None:
+def test_non_edge_mode_is_replaced_by_fixed_fixture(tmp_path: Path, target: str, mode: str) -> None:
     result, report = fake_run(tmp_path, target, mode=mode)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     special = "trigger-runt" if mode == "runt" else "trigger-tv"
-    assert cases[special]["status"] == "PASS", cases[special]
+    assert cases["fixture-baseline"]["status"] == "PASS"
+    assert cases[special]["status"] == "N/A", cases[special]
     for name in ("trigger-edge", "trigger-edge-source", "trigger-edge-slope", "trigger-edge-coupling"):
-        assert cases[name]["status"] == "N/A"
+        assert cases[name]["status"] == "PASS"
     for inv in report["invocations"]:
         args = inv["arguments"]
-        if args[0].startswith("trigger-edge"):
-            assert "--query" in args
+        if args[0] == "trigger-edge" and "--query" not in args:
+            assert args[args.index("--level") + 1] == "1"
         if args[0] == "trigger-mode" and "--mode" in args:
-            assert args[args.index("--mode") + 1] == mode
+            assert args[args.index("--mode") + 1] == "edge"
         if args[0] == "trigger-runt" and "--query" not in args:
             assert "--time-seconds" not in args  # Unqualified runt preserves dormant width.
 
@@ -1056,15 +1057,90 @@ def test_identity_gate_and_vectors_safety_are_explicit() -> None:
     assert "no public OFF setter" in TEXT
 
 
+def test_fixed_fixture_is_gated_and_uses_cli_readbacks() -> None:
+    gate = TEXT.index('Invoke-Cli -Stage "pre-run-standard-event-verify"')
+    fixture = TEXT.index("                Invoke-FixtureBaseline", gate)
+    functional = TEXT.index('Invoke-SimpleCase -Name "system-status-byte"', fixture)
+    assert gate < fixture < functional
+    fixture_text = TEXT[TEXT.index("    function Invoke-FixtureBaseline {"):TEXT.index("    try {\n        # The first live invocation")]
+    for stage in ("display", "scale", "acquisition", "trigger"):
+        assert f'"fixture-{stage}"' in fixture_text
+        assert f'"fixture-{stage}-query"' in fixture_text
+    assert '"fixture-trigger-mode-query"' in fixture_text
+    assert '"--volts-per-division", "2"' in fixture_text
+    assert '"--source-channel", "1", "--level", "1", "--slope", "positive"' in fixture_text
+    assert 'Add-Case "fixture-baseline" "FAIL"' in TEXT[fixture:functional]
+    assert "$script:StopAfterIdentity = $true" in TEXT[fixture:functional]
+
+
 @pytest.mark.windows_powershell
 @requires_windows
-def test_pulse_width_roundtrip_preserves_current_glitch_mode(tmp_path):
+@pytest.mark.parametrize("target", TARGETS)
+def test_fixed_fixture_harness_readbacks_and_operator_warning(tmp_path, target):
+    result, report = fake_run(tmp_path, target, mode="tv", focused=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["fixture-baseline"]["status"] == "PASS"
+    stages = [inv["stage"] for inv in report["invocations"]]
+    assert stages.index("pre-run-standard-event-verify") < stages.index("fixture-display")
+    assert stages.index("fixture-trigger-query") < stages.index("system-status-byte")
+    for expected in ("CH1 display ON", "2 V/div", "acquisition Normal", "CH1 Positive at 1 V",
+                     "Not every setting is guaranteed to be fully restored.",
+                     "original CH1 display/scale, acquisition mode, and trigger configuration are not restored"):
+        assert expected in result.stdout
+    trigger = next(inv["arguments"] for inv in report["invocations"] if inv["stage"] == "fixture-trigger")
+    assert trigger[trigger.index("--level") + 1] == "1"
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize("stage,response", [
+    ("fixture-display", {"ExitCode": 1, "Payload": {"ok": False}}),
+    ("fixture-scale", {"ExitCode": 1, "Payload": {"ok": False}}),
+    ("fixture-acquisition", {"ExitCode": 1, "Payload": {"ok": False}}),
+    ("fixture-trigger", {"ExitCode": 1, "Payload": {"ok": False}}),
+    ("fixture-display-query", {"ExitCode": 0, "Payload": {"ok": True, "result": {"display": False}}}),
+    ("fixture-scale-query", {"ExitCode": 0, "Payload": {"ok": True, "result": {"volts_per_division": 1.0}}}),
+    ("fixture-acquisition-query", {"ExitCode": 0, "Payload": {"ok": True, "result": {"type": "average"}}}),
+    ("fixture-trigger-mode-query", {"ExitCode": 0, "Payload": {"ok": True, "result": {"mode": "tv"}}}),
+    ("fixture-trigger-query", {"ExitCode": 0, "Payload": {"ok": True, "result": {"source_channel": 1, "level_volts": 2.48, "slope": "positive"}}}),
+])
+def test_fixed_fixture_failure_stops_functional_cases(tmp_path, target, stage, response):
+    result, report = fake_run(tmp_path, target, focused=True, stage_responses={stage: response})
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["fixture-baseline"]["status"] == "FAIL"
+    assert "channel-scale" not in cases and "trigger-edge" not in cases
+    assert report["invocations"][-1]["stage"] == stage
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+def test_measurement_warning_is_retained_in_cli_report(tmp_path):
+    status = {"source": "tektronix-sesr", "raw": "16", "value": 16,
+              "event_raw": '540,"Measurement warning"', "complete": True,
+              "destructive_read": True, "is_error": False,
+              "events": [{"code": 540, "message": "Measurement warning", "category": "warning"}]}
+    response = {"ExitCode": 0, "Payload": {"ok": True, "result": {
+        "valid": True, "value": 0.75, "unit": "s", "post_command_status": status,
+    }}}
+    result, report = fake_run(tmp_path, TARGETS[2], stage_responses={"measure-rise_time": response})
+    assert result.returncode == 0, result.stdout + result.stderr
+    case = next(case for case in report["cases"] if case["name"] == "measure-rise_time")
+    assert case["status"] == "PASS" and '"code":540' in case["detail"]
+    assert '"value":16' in case["detail"] and "Measurement warning" in case["detail"]
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+def test_fixed_fixture_skips_dormant_glitch_setters(tmp_path):
     result, report = fake_run(tmp_path, TARGETS[0], mode="glitch")
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
-    assert cases["trigger-pulse-width"]["status"] == "PASS"
+    assert cases["trigger-pulse-width"]["status"] == "N/A"
     calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][0] == "trigger-pulse-width"]
-    assert len(calls) == 3  # Query, same-value set, and readback preserve the current settings.
+    assert len(calls) == 1 and "--query" in calls[0]
     assert all("range" not in call for call in calls)
 
 
@@ -1168,7 +1244,7 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
         "Hardware-free preflight passed.",
         "Live instrument identity matches the selected target.",
         "Disconnect unknown or sensitive DUT signals",
-        "Default checks use the instrument's current state; a fixed CH1/CH2 Probe Comp fixture is not required.",
+        "The runner actively establishes a fixed CH1 fixture before functional checks.",
         "that read is destructive and clears it.",
         "Perform supported same-value setters",
         "Same-value setters are real instrument writes, not read-only checks.",
@@ -1203,7 +1279,7 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
     )
     assert result.stdout.rstrip().endswith("PASS  [live][tektronix] baseline live validation")
 
-    assert "Measurement and capture checks require CH1 to be displayed." in result.stdout
+    assert "Fixture: CH1 display ON, CH1 scale 2 V/div" in result.stdout
     assert "Acquisition: Run/Stop state changes" in result.stdout
     assert "Storage Writes: Not requested." not in result.stdout
     assert "autoscale" not in cases
@@ -1307,7 +1383,7 @@ def test_tbs2074_first_gen_runt_channel_four_and_20ns_holdoff_are_accepted(tmp_p
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
-    assert cases["trigger-runt"]["status"] == "PASS", cases["trigger-runt"]
+    assert cases["trigger-runt"]["status"] == "N/A", cases["trigger-runt"]
     assert cases["trigger-holdoff"]["status"] == "PASS", cases["trigger-holdoff"]
     assert "foreach ($candidate in @(1, 2, 3, 4))" in TEXT
 
@@ -1472,8 +1548,8 @@ def test_cli_final_io_failure_preserves_case_failure(tmp_path: Path) -> None:
 @pytest.mark.parametrize("target,command,expected,actual,passed", [
     (TARGETS[1], "trigger-edge", 1.0, 1.0005, True),
     (TARGETS[1], "trigger-edge", 1.0, 1.002, False),
-    (TARGETS[1], "trigger-edge", 0.0, 5e-13, True),
-    (TARGETS[1], "trigger-edge", 0.0, 2e-12, False),
+    (TARGETS[0], "trigger-edge-level", 0.0, 5e-13, True),
+    (TARGETS[0], "trigger-edge-level", 0.0, 2e-12, False),
     (TARGETS[0], "trigger-edge-level", 1.0, 1.0005, True),
     (TARGETS[0], "trigger-edge-level", 1.0, 1.002, False),
 ])
@@ -1500,7 +1576,7 @@ def test_edge_readback_tolerance(tmp_path, target, command, expected, actual, pa
 def test_unrelated_readback_retains_strict_tolerance(tmp_path):
     result, report = fake_run(tmp_path, TARGETS[1], stage_responses={
         "channel-scale-after": {"ExitCode": 0, "Payload": {
-            "ok": True, "result": {"volts_per_division": 1.0005},
+            "ok": True, "result": {"volts_per_division": 2.001},
         }},
     })
     assert result.returncode != 0

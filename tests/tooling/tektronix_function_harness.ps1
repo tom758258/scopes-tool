@@ -42,6 +42,24 @@ function Invoke-FakeTransport {
     $response = $scenario.stage_responses.PSObject.Properties[$Stage]
     if ($null -ne $response -and $null -ne $response.Value.PSObject.Properties["Payload"]) { return $response.Value }
     $property = $scenario.values.PSObject.Properties[$Command]
+    # Model the fixed fixture writes so later queries observe the new baseline.
+    if ($Stage -in @("fixture-display", "fixture-scale", "fixture-acquisition", "fixture-trigger")) {
+        switch ($Command) {
+            "channel-display" { $property.Value.display = $true }
+            "channel-scale" { $property.Value.volts_per_division = 2.0 }
+            "acquisition" { $property.Value.type = "normal" }
+            "trigger-edge" {
+                $property.Value.source_channel = 1
+                $property.Value.level_volts = 1.0
+                $property.Value.slope = "positive"
+                $scenario.values.'trigger-mode'.mode = "edge"
+                $scenario.values.'trigger-edge-source'.source = "analog-channel"
+                $scenario.values.'trigger-edge-source'.source_channel = 1
+                $scenario.values.'trigger-edge-slope'.slope = "positive"
+                $scenario.values.'trigger-edge-level'.level_volts = 1.0
+            }
+        }
+    }
     $value = [pscustomobject]@{}
     if ($null -ne $property) {
         # Clone only this result; the wrapper preserves null and array values.
