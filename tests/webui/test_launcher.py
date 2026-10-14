@@ -48,6 +48,10 @@ class FakeRoot:
     def __init__(self):
         self.destroyed = False
         self.deiconified = False
+        self.window_icon = None
+
+    def iconbitmap(self, *, default):
+        self.window_icon = default
 
     def destroy(self):
         self.destroyed = True
@@ -265,14 +269,50 @@ def test_launcher_constructor_initializes_shutdown_state(monkeypatch):
         lambda *_args, **kwargs: FakeVar(kwargs.get("value")),
     )
 
+    icon_roots = []
+    monkeypatch.setattr(launcher, "_set_window_icon", icon_roots.append)
     job_manager = FakeJobManager()
-    app = launcher.LauncherApp(FakeRoot(), job_manager_instance=job_manager)
+    root = FakeRoot()
+    app = launcher.LauncherApp(root, job_manager_instance=job_manager)
 
+    assert icon_roots == [root]
     assert app._job_manager is job_manager
     assert app._shutdown_thread is None
     assert app._shutdown_in_progress is False
     assert app._jobs_shutdown_complete is False
     assert app._server_loop_ready.is_set() is False
+
+
+def test_launcher_uses_ico_from_frozen_windows_bundle(monkeypatch, tmp_path):
+    icon_path = tmp_path / "desktop" / "assets" / "scopes-icon.ico"
+    icon_path.parent.mkdir(parents=True)
+    icon_path.write_bytes(b"icon")
+    monkeypatch.setattr(launcher.sys, "platform", "win32")
+    monkeypatch.setattr(launcher.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(launcher.sys, "_MEIPASS", str(tmp_path), raising=False)
+
+    root = FakeRoot()
+    launcher._set_window_icon(root)
+
+    assert root.window_icon == str(icon_path)
+
+
+def test_launcher_missing_optional_source_icon_keeps_window_operable(monkeypatch, tmp_path):
+    monkeypatch.setattr(launcher.sys, "platform", "win32")
+    monkeypatch.setattr(launcher.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(launcher, "_launcher_icon_path", lambda: tmp_path / "missing.ico")
+
+    root = FakeRoot()
+    launcher._set_window_icon(root)
+
+    assert root.window_icon is None
+
+
+def test_launcher_does_not_set_windows_icon_on_other_platforms(monkeypatch):
+    monkeypatch.setattr(launcher.sys, "platform", "linux")
+    root = FakeRoot()
+    launcher._set_window_icon(root)
+    assert root.window_icon is None
 
 
 def test_default_port_and_auto_fallback(monkeypatch):
