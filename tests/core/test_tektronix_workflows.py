@@ -396,12 +396,16 @@ def test_measurement_warning_never_relaxes_other_work(model, stage, monkeypatch,
 @pytest.mark.parametrize("model", MODELS)
 def test_fixed_fixture_driver_readbacks(model):
     with scope_for(model) as scope:
+        initial_mode = "runt" if model == "tektronix-tbs2074" else "tv"
+        scope.configure_trigger_mode(initial_mode)
         scope.set_channel_display(1, False)
         scope.set_channel_scale(1, 0.5)
         scope.configure_trigger_edge(1, 2.44444, "negative")
+        assert scope.query_trigger_mode().mode == initial_mode
         scope.set_channel_display(1, True)
         scope.set_channel_scale(1, 2)
         scope.set_acquisition_type("normal")
+        scope.configure_trigger_mode("edge")
         scope.configure_trigger_edge(1, 1, "positive")
         assert scope.query_channel_display(1) is True
         assert scope.query_channel_scale(1) == 2

@@ -429,6 +429,8 @@ configuration separates earlier work from the value query; restoration receives
 a separate strict checkpoint. This rule applies to measure, sweep, log, until,
 triggered measurement loops, sequence measurement steps and Smoke measurements.
 Invalid values, other events, mixed errors and communication failures still fail.
+Tektronix Smoke also fails on invalid measurement sentinels; the Keysight Smoke
+policy of reporting invalid sentinels as warnings is unchanged.
 Capture, acquisition, trigger and cleanup checkpoints retain their error rules.
 
 Doctor stops on preexisting errors. Other workflows report stale events before

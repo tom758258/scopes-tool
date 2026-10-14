@@ -2322,8 +2322,12 @@ queries CH1 `vpp` and `vrms`, captures CH1 BYTE waveform data at 1000 points,
 captures a black-background screenshot, and performs a final system error
 post-check. The Smoke report uses schema version `2`; its capture CSV,
 metadata, and nested capture summary retain the selected `vertical_unit`.
-Invalid measurement sentinels are warnings; capture, screenshot, backend,
-output, or system-error failures make the command return non-zero.
+For Keysight, invalid measurement sentinels are warnings. For Tektronix Smoke,
+invalid measurements fail. Measurement warnings 540–549 are accepted only for
+valid finite values with a complete status cohort containing only these warnings
+and no other SESR error bits besides Execution bit 4; native diagnostics are retained.
+Capture, screenshot, backend, output, or system-error failures make the command
+return non-zero.
 
 Capture waveform data:
 

@@ -565,6 +565,7 @@ print(json.dumps({
         $null = Invoke-Cli -Stage "fixture-display" -Command "channel-display" -Options @("--channel", "1", "--on")
         $null = Invoke-Cli -Stage "fixture-scale" -Command "channel-scale" -Options @("--channel", "1", "--volts-per-division", "2")
         $null = Invoke-Cli -Stage "fixture-acquisition" -Command "acquisition" -Options @("--type", "normal")
+        $null = Invoke-Cli -Stage "fixture-trigger-mode" -Command "trigger-mode" -Options @("--mode", "edge")
         $null = Invoke-Cli -Stage "fixture-trigger" -Command "trigger-edge" -Options @("--source-channel", "1", "--level", "1", "--slope", "positive")
 
         $display = Invoke-Cli -Stage "fixture-display-query" -Command "channel-display" -Options @("--channel", "1", "--query")

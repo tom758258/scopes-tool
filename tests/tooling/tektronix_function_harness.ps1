@@ -42,6 +42,10 @@ function Invoke-FakeTransport {
     $response = $scenario.stage_responses.PSObject.Properties[$Stage]
     if ($null -ne $response -and $null -ne $response.Value.PSObject.Properties["Payload"]) { return $response.Value }
     $property = $scenario.values.PSObject.Properties[$Command]
+    if ($Command -eq "trigger-mode" -and $Options -contains "--mode") {
+        $property.Value.mode = $Options[[Array]::IndexOf($Options, "--mode") + 1]
+        $property.Value.raw_mode = $property.Value.mode
+    }
     # Model the fixed fixture writes so later queries observe the new baseline.
     if ($Stage -in @("fixture-display", "fixture-scale", "fixture-acquisition", "fixture-trigger")) {
         switch ($Command) {
@@ -52,7 +56,6 @@ function Invoke-FakeTransport {
                 $property.Value.source_channel = 1
                 $property.Value.level_volts = 1.0
                 $property.Value.slope = "positive"
-                $scenario.values.'trigger-mode'.mode = "edge"
                 $scenario.values.'trigger-edge-source'.source = "analog-channel"
                 $scenario.values.'trigger-edge-source'.source_channel = 1
                 $scenario.values.'trigger-edge-slope'.slope = "positive"

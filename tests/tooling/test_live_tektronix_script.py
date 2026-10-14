@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import uuid
@@ -1063,10 +1064,11 @@ def test_fixed_fixture_is_gated_and_uses_cli_readbacks() -> None:
     functional = TEXT.index('Invoke-SimpleCase -Name "system-status-byte"', fixture)
     assert gate < fixture < functional
     fixture_text = TEXT[TEXT.index("    function Invoke-FixtureBaseline {"):TEXT.index("    try {\n        # The first live invocation")]
-    for stage in ("display", "scale", "acquisition", "trigger"):
+    for stage in ("display", "scale", "acquisition", "trigger", "trigger-mode"):
         assert f'"fixture-{stage}"' in fixture_text
         assert f'"fixture-{stage}-query"' in fixture_text
-    assert '"fixture-trigger-mode-query"' in fixture_text
+    assert fixture_text.index('"fixture-trigger-mode"') < fixture_text.index('"fixture-trigger"')
+    assert '"--mode", "edge"' in fixture_text
     assert '"--volts-per-division", "2"' in fixture_text
     assert '"--source-channel", "1", "--level", "1", "--slope", "positive"' in fixture_text
     assert 'Add-Case "fixture-baseline" "FAIL"' in TEXT[fixture:functional]
@@ -1075,14 +1077,19 @@ def test_fixed_fixture_is_gated_and_uses_cli_readbacks() -> None:
 
 @pytest.mark.windows_powershell
 @requires_windows
-@pytest.mark.parametrize("target", TARGETS)
-def test_fixed_fixture_harness_readbacks_and_operator_warning(tmp_path, target):
-    result, report = fake_run(tmp_path, target, mode="tv", focused=True)
+@pytest.mark.parametrize("target,mode", [
+    (TARGETS[0], "runt"), (TARGETS[0], "glitch"),
+    (TARGETS[1], "tv"), (TARGETS[1], "glitch"),
+    (TARGETS[2], "tv"), (TARGETS[2], "glitch"),
+])
+def test_fixed_fixture_harness_readbacks_and_operator_warning(tmp_path, target, mode):
+    result, report = fake_run(tmp_path, target, mode=mode, focused=True)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["fixture-baseline"]["status"] == "PASS"
     stages = [inv["stage"] for inv in report["invocations"]]
     assert stages.index("pre-run-standard-event-verify") < stages.index("fixture-display")
+    assert stages.index("fixture-trigger-mode") < stages.index("fixture-trigger")
     assert stages.index("fixture-trigger-query") < stages.index("system-status-byte")
     for expected in ("CH1 display ON", "2 V/div", "acquisition Normal", "CH1 Positive at 1 V",
                      "Not every setting is guaranteed to be fully restored.",
@@ -1090,6 +1097,8 @@ def test_fixed_fixture_harness_readbacks_and_operator_warning(tmp_path, target):
         assert expected in result.stdout
     trigger = next(inv["arguments"] for inv in report["invocations"] if inv["stage"] == "fixture-trigger")
     assert trigger[trigger.index("--level") + 1] == "1"
+    mode_set = next(inv["arguments"] for inv in report["invocations"] if inv["stage"] == "fixture-trigger-mode")
+    assert mode_set[mode_set.index("--mode") + 1] == "edge"
 
 
 @pytest.mark.windows_powershell
@@ -1099,6 +1108,7 @@ def test_fixed_fixture_harness_readbacks_and_operator_warning(tmp_path, target):
     ("fixture-display", {"ExitCode": 1, "Payload": {"ok": False}}),
     ("fixture-scale", {"ExitCode": 1, "Payload": {"ok": False}}),
     ("fixture-acquisition", {"ExitCode": 1, "Payload": {"ok": False}}),
+    ("fixture-trigger-mode", {"ExitCode": 1, "Payload": {"ok": False}}),
     ("fixture-trigger", {"ExitCode": 1, "Payload": {"ok": False}}),
     ("fixture-display-query", {"ExitCode": 0, "Payload": {"ok": True, "result": {"display": False}}}),
     ("fixture-scale-query", {"ExitCode": 0, "Payload": {"ok": True, "result": {"volts_per_division": 1.0}}}),
@@ -1113,6 +1123,39 @@ def test_fixed_fixture_failure_stops_functional_cases(tmp_path, target, stage, r
     assert cases["fixture-baseline"]["status"] == "FAIL"
     assert "channel-scale" not in cases and "trigger-edge" not in cases
     assert report["invocations"][-1]["stage"] == stage
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS)
+def test_fixed_fixture_missing_mode_write_fails(tmp_path, target, monkeypatch):
+    # Remove the real mode write, rather than pre-setting the fake state to Edge.
+    # If trigger-edge starts changing type implicitly again, this test will fail.
+    mutant_root = ROOT / ".tmp_tests" / "fixture_mode_mutant" / uuid.uuid4().hex
+    mutant_scripts = mutant_root / "scripts"
+    mutant_scripts.mkdir(parents=True)
+    for name in ("live-cli-check.ps1", "_validation_helpers.ps1", "_artifact_privacy.ps1"):
+        shutil.copyfile(ROOT / "scripts" / name, mutant_scripts / name)
+    shutil.copyfile(ROOT / "pyproject.toml", mutant_root / "pyproject.toml")
+    lines = TEXT.splitlines(keepends=True)
+    mode_write = [line for line in lines if '-Stage "fixture-trigger-mode"' in line]
+    assert len(mode_write) == 1
+    (mutant_scripts / "_live_tektronix_helpers.ps1").write_text(
+        "".join(line for line in lines if line not in mode_write), encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "SCRIPT", mutant_scripts / "live-cli-check.ps1")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", mutant_root)
+    initial_mode = "runt" if target == TARGETS[0] else "tv"
+    result, report = fake_run(tmp_path, target, mode=initial_mode, focused=True)
+    assert result.returncode != 0
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["fixture-baseline"]["status"] == "FAIL"
+    assert "trigger-mode" in cases["fixture-baseline"]["detail"]
+    assert "channel-scale" not in cases and "trigger-edge" not in cases
+    stages = [inv["stage"] for inv in report["invocations"]]
+    assert "fixture-trigger-mode" not in stages
+    assert stages.index("fixture-trigger") < stages.index("fixture-trigger-mode-query")
+    assert stages[-1] == "fixture-trigger-mode-query"
 
 
 @pytest.mark.windows_powershell
