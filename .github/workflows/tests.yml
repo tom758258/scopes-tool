@@ -10,6 +10,35 @@ permissions:
   contents: read
 
 jobs:
+  detect-windows-validation-changes:
+    name: Detect Windows validation changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      validation: ${{ steps.filter.outputs.validation }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Detect Windows validation inputs
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          base: ${{ github.ref }}
+          filters: |
+            validation:
+              - 'tests/tooling/**'
+              - 'scripts/*.ps1'
+              - 'scripts/*.py'
+              - 'src/scopes_tool_cli/**'
+              - 'src/scopes_tool_core/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/tests.yml'
+
   quality-webui:
     name: Code quality & WebUI
     runs-on: ubuntu-latest
@@ -207,6 +236,8 @@ jobs:
 
   pytest-windows-validation:
     name: Windows validation scripts Python 3.13
+    needs: detect-windows-validation-changes
+    if: needs.detect-windows-validation-changes.outputs.validation == 'true'
     runs-on: windows-latest
 
     steps:
