@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import textwrap
 import threading
@@ -511,7 +510,7 @@ def test_pc_output_command_reports_unusable_root_when_it_writes(tmp_path) -> Non
         asyncio.run(manager.shutdown())
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_pc_output_frontend_controls_context_and_command_note() -> None:
     html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
     app_source = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
@@ -606,7 +605,7 @@ def test_pc_output_helper_text_is_plain_localized_text() -> None:
         assert "`" not in helper_text
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_pc_output_command_note_follows_runtime_locale() -> None:
     script = textwrap.dedent(
         r'''

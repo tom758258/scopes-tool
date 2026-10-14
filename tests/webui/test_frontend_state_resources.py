@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 
@@ -51,7 +50,7 @@ def test_live_context_and_controls_use_detected_identity() -> None:
     assert '"command.identify": "讀取裝置資訊"' in chinese
     assert '"description.identify": "讀取儀器識別資訊"' in chinese
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_live_command_gating_allows_identify_retry_until_identity_is_ready() -> None:
     app_source = read_static("app.js")
     command_available = extract_function_declaration(app_source, "function commandAvailable(command)")
@@ -122,7 +121,7 @@ def test_resource_controls_match_the_powers_initial_presentation() -> None:
     assert '"device.resourcePlaceholder":' in english
     assert '"device.resourcePlaceholder":' in chinese
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
     device_path = STATIC_ROOT / "device-resource.js"
     script = textwrap.dedent(
@@ -327,10 +326,7 @@ def test_selected_resource_refresh_uses_a_formal_identify_job_flow() -> None:
     assert "renderJob(elements.results, job, null);" in present
     assert "resources[1]" not in extract_function(device_source, "async scan()")
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_selected_resource_snapshot_serializes_latest_requested_context() -> None:
     app_source = read_static("app.js")
     declarations = "\n".join(
@@ -473,10 +469,7 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_runs() -> None:
     app_source = read_static("app.js")
     declarations = "\n".join(
@@ -598,7 +591,7 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_scan_busy_change_refreshes_live_data_once_identity_ready() -> None:
     app_source = read_static("app.js")
     declarations = "\n".join(
@@ -673,7 +666,7 @@ def test_scan_busy_change_refreshes_live_data_once_identity_ready() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
     jobs_path = STATIC_ROOT / "jobs.js"
     script = textwrap.dedent(
@@ -732,7 +725,7 @@ def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_scan_submit_failure_reports_raw_error_and_preserves_scan_failure_state() -> None:
     device_path = STATIC_ROOT / "device-resource.js"
     script = textwrap.dedent(
@@ -815,7 +808,7 @@ def test_scan_submit_failure_reports_raw_error_and_preserves_scan_failure_state(
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection() -> None:
     device_path = STATIC_ROOT / "device-resource.js"
     script = textwrap.dedent(

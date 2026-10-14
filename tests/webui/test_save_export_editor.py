@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -223,7 +222,7 @@ SAVE_EXPORT_EDITOR_HARNESS = r'''
         };
 '''
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_shows_only_the_selected_mode() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -252,7 +251,7 @@ def test_save_export_editor_shows_only_the_selected_mode() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_preserves_unsupported_setting_slots_without_execution() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -302,7 +301,7 @@ def test_save_export_editor_preserves_unsupported_setting_slots_without_executio
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_explicit_read_lifecycle_and_mode_change() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -356,7 +355,7 @@ def test_save_export_editor_explicit_read_lifecycle_and_mode_change() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_reads_and_displays_the_current_save_path() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -379,7 +378,7 @@ def test_save_export_editor_reads_and_displays_the_current_save_path() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_read_progress_is_one_based() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -398,7 +397,7 @@ def test_save_export_editor_read_progress_is_one_based() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_failed_read_does_not_unlock() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -422,7 +421,7 @@ def test_save_export_editor_failed_read_does_not_unlock() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_does_not_validate_clean_path_before_save() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -451,7 +450,7 @@ def test_save_export_editor_does_not_validate_clean_path_before_save() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_submits_image_settings_then_final_image_save() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -491,7 +490,7 @@ def test_save_export_editor_submits_image_settings_then_final_image_save() -> No
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_submits_waveform_settings_then_final_waveform_save() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -535,7 +534,7 @@ def test_save_export_editor_submits_waveform_settings_then_final_waveform_save()
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_keeps_default_base_filename_in_advanced_settings() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -553,7 +552,7 @@ def test_save_export_editor_keeps_default_base_filename_in_advanced_settings() -
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context_change() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -599,7 +598,7 @@ def test_save_export_editor_reads_each_workspace_state_once_on_entry_and_context
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_retries_an_interrupted_read_without_premarking_loaded() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -645,7 +644,7 @@ def test_save_export_editor_retries_an_interrupted_read_without_premarking_loade
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_invalidates_loaded_state_before_interrupted_forced_read() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -691,7 +690,7 @@ def test_save_export_editor_invalidates_loaded_state_before_interrupted_forced_r
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_resyncs_format_after_explicit_image_and_waveform_extensions() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -773,7 +772,7 @@ def test_save_export_editor_resyncs_format_after_explicit_image_and_waveform_ext
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_invalidates_loaded_state_when_format_resync_becomes_stale() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -834,7 +833,7 @@ def test_save_export_editor_invalidates_loaded_state_when_format_resync_becomes_
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_keeps_successful_save_when_format_resync_fails() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -889,7 +888,7 @@ def test_save_export_editor_keeps_successful_save_when_format_resync_fails() -> 
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_resumes_initial_and_forced_reads_after_global_busy() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -946,7 +945,7 @@ def test_save_export_editor_resumes_initial_and_forced_reads_after_global_busy()
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_applies_advanced_filename_only_when_requested() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -978,7 +977,7 @@ def test_save_export_editor_applies_advanced_filename_only_when_requested() -> N
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_preserves_advanced_filename_after_failed_apply() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1006,7 +1005,7 @@ def test_save_export_editor_preserves_advanced_filename_after_failed_apply() -> 
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_primary_save_button_tracks_busy_and_availability() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1039,7 +1038,7 @@ def test_save_export_editor_primary_save_button_tracks_busy_and_availability() -
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1066,7 +1065,7 @@ def test_save_export_editor_blocks_final_save_after_prerequisite_failure() -> No
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1132,7 +1131,7 @@ def test_save_export_editor_updates_preview_for_formats_and_empty_filename() -> 
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1165,7 +1164,7 @@ def test_save_export_editor_setup_mode_has_no_readback_io() -> None:
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_editor_setup_save_submits_target_parameters() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1201,7 +1200,7 @@ def test_save_export_status_locale_keys_are_unique() -> None:
         assert english.count(f'"{key}":') == 1, key
         assert chinese.count(f'"{key}":') == 1, key
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_non_read_failure_does_not_present_read_failure_status() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1242,7 +1241,7 @@ def test_save_export_non_read_failure_does_not_present_read_failure_status() -> 
     completed = run_node(script)
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_three_independent_commands_contract() -> None:
     script = textwrap.dedent(SAVE_EXPORT_EDITOR_HARNESS) + textwrap.dedent(
         r'''

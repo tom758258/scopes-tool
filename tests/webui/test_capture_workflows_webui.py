@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 
 import pytest
 
@@ -329,7 +328,7 @@ def test_monitor_status_shows_full_metrics(tmp_path):
         manager._executor.shutdown(wait=True)
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_monitor_frontend_renders_runtime_summary_and_observed_statistics():
     run_editor_behavior(
         r'''
@@ -381,7 +380,7 @@ def test_monitor_frontend_renders_runtime_summary_and_observed_statistics():
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_waveform_editor_filters_condition_channel_and_bounds_plot_chunks():
     run_editor_behavior(
         r'''
@@ -438,7 +437,7 @@ def test_waveform_editor_filters_condition_channel_and_bounds_plot_chunks():
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_existing_waveform_guidance_is_scoped_to_non_triggered_capture_workflows():
     run_editor_behavior(
         r'''

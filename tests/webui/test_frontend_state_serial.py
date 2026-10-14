@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import textwrap
 
@@ -315,7 +314,7 @@ def test_serial_workspaces_replace_generic_form_with_task_navigation() -> None:
         assert f'"{key}":' not in english, key
         assert f'"{key}":' not in chinese, key
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
     serial_editor_path = STATIC_ROOT / "serial-editor.js"
     script = textwrap.dedent(
@@ -1183,7 +1182,7 @@ def test_serial_editor_controller_sequences_reads_and_discard_gating() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_serial_readiness_partial_failures_and_pending_read_behavior() -> None:
     serial_editor_path = STATIC_ROOT / "serial-editor.js"
     script = textwrap.dedent(
@@ -1287,7 +1286,7 @@ def test_serial_readiness_partial_failures_and_pending_read_behavior() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> None:
     serial_editor_path = STATIC_ROOT / "serial-editor.js"
     script = textwrap.dedent(
@@ -1946,28 +1945,17 @@ def test_serial_workspace_views_keep_selected_bus_and_follow_mode_readback() -> 
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 def test_serial_editor_locale_keys_are_localized() -> None:
-    english = read_static("locale_en.js")
-    chinese = read_static("locale_zh_tw.js")
+    for locale in ("locale_en.js", "locale_zh_tw.js"):
+        text = read_static(locale)
+        for key in (
+            "serial.editor.unavailable", "serial.editor.unsupported", "serial.editor.discardConfirm",
+            "serial-decode.editor.title", "serial-trigger.editor.title", "serial-lister.editor.title",
+            "serial.decode.applySettings", "help.serial-trigger-uart.data", "help.serial-lister.reference",
+        ):
+            assert f'"{key}":' in text, key
 
-    assert '"serial.editor.unavailable": "Identify a supported instrument to configure Serial."' in english
-    assert '"serial.editor.unsupported": "{{protocol}} is recognized by the instrument' in english
-    assert '"serial.editor.discardConfirm": "Discard unapplied Serial changes?"' in english
-    assert '"serial.editor.unavailable": "請先連接並識別支援的儀器，再設定串列。"' in chinese
-    assert '"serial.editor.discardConfirm": "要捨棄未套用的串列變更嗎？"' in chinese
-    assert '"serial-decode.editor.title": "Serial Decode"' in english
-    assert '"serial-trigger.editor.title": "Serial Trigger"' in english
-    assert '"serial-lister.editor.title": "Serial Lister"' in english
-    assert '"serial-decode.editor.title": "串列解碼設定"' in chinese
-    assert '"serial-trigger.editor.title": "串列觸發"' in chinese
-    assert '"serial-lister.editor.title": "串列資料清單（Lister）"' in chinese
-    assert '"serial.decode.applySettings": "Apply decode settings"' in english
-    assert '"help.serial-trigger-uart.data": "8-bit data value compared by RX Data or TX Data trigger types, from 0 to 255. For example, 1 represents 0x01."' in english
-    assert '"help.serial-lister.reference": "Trigger: each row time is relative to the trigger. Previous Row: each row time is the interval from the previous Lister event."' in english
-    assert '"help.serial-trigger-uart.data": "RX Data 或 TX Data 要比對的 8-bit 資料值，範圍 0～255。例如 1 代表 0x01。"' in chinese
-    assert '"help.serial-lister.reference": "Trigger：每列時間表示該事件相對於觸發點的時間。上一列：每列時間表示該事件與前一筆 Lister 事件的時間差。"' in chinese
-    assert '"serial.decode.applySettings": "套用解碼設定"' in chinese
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_i2c_trigger_type_controls_visible_and_submitted_fields_without_io() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     command = next(
@@ -2087,7 +2075,7 @@ def test_i2c_trigger_type_controls_visible_and_submitted_fields_without_io() -> 
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_i2c_trigger_address_maximum_follows_type_without_io() -> None:
     command = next(
         entry for entry in command_catalog() if entry["id"] == "serial-trigger-i2c"
@@ -2172,7 +2160,7 @@ def test_i2c_trigger_address_maximum_follows_type_without_io() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_serial_trigger_form_refreshes_locale_without_io() -> None:
     command = next(
         entry for entry in command_catalog() if entry["id"] == "serial-trigger-i2c"

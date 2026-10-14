@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -411,7 +410,7 @@ SEARCH_EDITOR_HARNESS = r'''
 '''
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_runtime_unavailable_view_stays_visible_and_recovers() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -445,7 +444,7 @@ def test_search_runtime_unavailable_view_stays_visible_and_recovers() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_actions_follow_global_execution_admission_and_recover() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -479,7 +478,7 @@ def test_search_actions_follow_global_execution_admission_and_recover() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_basic_view_renders_only_the_selected_command() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -540,7 +539,7 @@ def test_search_basic_view_renders_only_the_selected_command() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_header_apply_follows_the_selected_command() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -576,7 +575,7 @@ def test_search_header_apply_follows_the_selected_command() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_basic_apply_writes_once_without_reconciliation() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -610,7 +609,7 @@ def test_search_basic_apply_writes_once_without_reconciliation() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_event_view_queries_applies_and_hides_when_unsupported() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -651,7 +650,7 @@ def test_search_event_view_queries_applies_and_hides_when_unsupported() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_real_command_form_displays_zero_event_readback() -> None:
     script = textwrap.dedent(
         r'''
@@ -707,7 +706,7 @@ def test_real_command_form_displays_zero_event_readback() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_event_capability_loss_shows_unavailable_state_and_recovers() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -753,7 +752,7 @@ def test_search_event_capability_loss_shows_unavailable_state_and_recovers() -> 
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -848,7 +847,7 @@ def test_search_serial_view_scopes_reads_to_active_bus_and_protocol() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_serial_view_reports_unavailable_without_fake_buses() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -887,7 +886,7 @@ def test_search_serial_view_reports_unavailable_without_fake_buses() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_serial_apply_writes_once_without_reconciliation() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -957,7 +956,7 @@ def test_search_serial_apply_writes_once_without_reconciliation() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_editor_serializes_lifecycle_and_suppresses_same_state_refresh() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1018,7 +1017,7 @@ def test_search_editor_serializes_lifecycle_and_suppresses_same_state_refresh() 
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_editor_auto_notifications_do_not_restart_command_readback() -> None:
     script = textwrap.dedent(SEARCH_EDITOR_HARNESS) + textwrap.dedent(
         r'''

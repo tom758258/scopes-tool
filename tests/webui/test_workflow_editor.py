@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -266,7 +265,7 @@ def run_editor_behavior(script: str) -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 @pytest.mark.parametrize("command_id", [
     "capture-batch", "capture-until", "capture-monitor", "triggered-capture-series",
     "measure-log", "triggered-measure-loop",
@@ -389,7 +388,7 @@ def test_workflow_empty_choices_show_feedback_and_recover(command_id: str) -> No
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_choice_feedback_is_cleared_on_command_switch_and_busy_is_preserved() -> None:
     run_editor_behavior(
         r'''
@@ -445,7 +444,7 @@ def test_workflow_choice_feedback_is_cleared_on_command_switch_and_busy_is_prese
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_choice_labels_follow_active_locale() -> None:
     run_editor_behavior(
         r'''
@@ -473,7 +472,7 @@ def test_workflow_choice_labels_follow_active_locale() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_runtime_unavailable_content_stays_visible_and_recovers() -> None:
     run_editor_behavior(
         r'''
@@ -502,7 +501,7 @@ def test_workflow_runtime_unavailable_content_stays_visible_and_recovers() -> No
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_number_fields_share_numeric_constraints() -> None:
     run_editor_behavior(
         r'''
@@ -541,7 +540,7 @@ def test_workflow_number_fields_share_numeric_constraints() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once() -> None:
     run_editor_behavior(
         r'''
@@ -621,7 +620,7 @@ def test_workflow_selection_is_passive_and_run_serializes_structured_inputs_once
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_pair_measurements_are_required_only_with_pair_rows() -> None:
     run_editor_behavior(
         r'''
@@ -707,7 +706,7 @@ def test_workflow_pair_measurements_are_required_only_with_pair_rows() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_drafts_survive_locale_rerender_but_not_context_switch_or_stale_completion() -> None:
     run_editor_behavior(
         r'''
@@ -751,7 +750,7 @@ def test_workflow_drafts_survive_locale_rerender_but_not_context_switch_or_stale
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_editor_renders_capture_batch_and_serializes() -> None:
     run_editor_behavior(
         r'''
@@ -805,7 +804,7 @@ def test_workflow_editor_renders_capture_batch_and_serializes() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_editor_renders_measure_until_and_serializes() -> None:
     run_editor_behavior(
         r'''
@@ -885,7 +884,7 @@ def test_workflow_editor_condition_locale_exists() -> None:
     assert '"workflow.editor.condition": "條件"' in chinese
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_editor_renders_triggered_capture_series_and_serializes() -> None:
     run_editor_behavior(
         r'''

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -244,7 +243,7 @@ def run_editor_behavior(script: str) -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_sequence_editor_boundaries_load_and_invalid_submission() -> None:
     run_editor_behavior(
         r'''
@@ -294,7 +293,7 @@ def test_sequence_editor_boundaries_load_and_invalid_submission() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_sequence_editor_localizes_presentation_but_submits_canonical_values() -> None:
     run_editor_behavior(
         r'''
@@ -493,7 +492,7 @@ def run_validation_message_behavior(script: str) -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_sequence_editor_validation_message_clears_success_on_invalid_mutation() -> None:
     run_validation_message_behavior(
         r'''
@@ -547,7 +546,7 @@ def test_sequence_editor_validation_message_clears_success_on_invalid_mutation()
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_sequence_editor_loadfile_uses_raw_text_fail_closed() -> None:
     run_validation_message_behavior(
         r'''
@@ -604,7 +603,7 @@ def test_sequence_save_results_catalog_and_validation() -> None:
     assert defaulted["parameters"]["save_results"] is True
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_sequence_editor_save_results_checkbox_and_submit() -> None:
     run_editor_behavior(
         r'''
@@ -628,7 +627,7 @@ def test_sequence_editor_save_results_checkbox_and_submit() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_sequence_no_save_workspace_result_hides_files() -> None:
     results_path = REPO_ROOT / "src" / "scopes_tool_webui" / "static" / "results.js"
     script = textwrap.dedent(
@@ -705,7 +704,7 @@ def test_sequence_no_save_workspace_result_hides_files() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_sequence_capture_step_shows_existing_waveform_guidance_only_for_capture() -> None:
     run_editor_behavior(
         r'''
@@ -728,7 +727,7 @@ def test_sequence_capture_step_shows_existing_waveform_guidance_only_for_capture
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_sequence_measure_channel_is_required() -> None:
     run_editor_behavior(
         r'''

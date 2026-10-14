@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -11,7 +10,7 @@ import pytest
 CHART_SOURCE = Path(__file__).resolve().parents[2] / "src" / "scopes_tool_webui" / "static" / "monitor-chart.js"
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_monitor_projection_and_exact_retained_lookup() -> None:
     script = r'''
         import assert from "node:assert/strict";
@@ -70,7 +69,7 @@ def test_monitor_projection_and_exact_retained_lookup() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required")
+@pytest.mark.frontend_node
 def test_stationary_hover_resolves_current_raw_sample_after_redraw() -> None:
     script = r'''
         import assert from "node:assert/strict";

@@ -45,10 +45,7 @@ def test_channel_offset_editor_locale_keys_exist() -> None:
         assert f'"{key}":' in en, key
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_channel_offset_div_quick_fill_behavior(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog())
     script = textwrap.dedent(

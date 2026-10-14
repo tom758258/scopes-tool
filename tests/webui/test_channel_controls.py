@@ -195,10 +195,7 @@ def test_channel_label_composes_shared_visibility_without_replacing_display_comm
     assert "channel-label-display" not in commands
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_generic_command_form_integer_options_render_as_select_and_serialize_integer(tmp_path: Path) -> None:
     measure_fields = next(
         entry["fields"] for entry in command_catalog() if entry["id"] == "measure"
@@ -855,10 +852,7 @@ def test_channel_commands_keep_groups_order_and_presentation_labels() -> None:
     assert '"group.basic": "Basic"' in en
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_channel_display_editor_checkbox_and_readback_behavior() -> None:
     catalog_json = json.dumps(command_catalog())
     script = textwrap.dedent(
@@ -1119,10 +1113,7 @@ def test_channel_scale_range_composite_workspace() -> None:
         assert f'"{key}":' in zh, key
         assert f'"{key}":' in en, key
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog())
     script = textwrap.dedent(
@@ -1565,6 +1556,7 @@ def test_channel_scale_range_editor_command_dispatch_and_readback(tmp_path: Path
     assert json.loads(completed.stdout) == {"ok": True}
 
 
+@pytest.mark.frontend_node
 def test_channel_scale_range_workspace_latest_result() -> None:
     script = textwrap.dedent(
         r'''

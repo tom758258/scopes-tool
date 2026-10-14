@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -583,7 +582,6 @@ TRIGGER_EDITOR_HARNESS = r'''
 '''
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
 def test_external_trigger_editor_routing() -> None:
     app_source = read_static("app.js")
     bootstrap_source = read_static("editor-bootstrap.js")
@@ -646,6 +644,7 @@ def test_external_trigger_range_level_composite_workspace() -> None:
     assert '"description.external-trigger-range-level":' in chinese
 
 
+@pytest.mark.frontend_node
 def test_external_trigger_level_uses_current_range() -> None:
     script = textwrap.dedent(
         EXTERNAL_TRIGGER_FAKE_DOM_HARNESS
@@ -952,7 +951,7 @@ def test_external_trigger_level_uses_current_range() -> None:
     assert json.loads(completed.stdout.strip().splitlines()[-1]) == {"ok": True}
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_external_trigger_quick_fill() -> None:
     script = textwrap.dedent(
         EXTERNAL_TRIGGER_FAKE_DOM_HARNESS
@@ -1191,6 +1190,7 @@ def test_external_trigger_quick_fill() -> None:
     assert json.loads(completed.stdout.strip().splitlines()[-1]) == {"ok": True}
 
 
+@pytest.mark.frontend_node
 def test_trigger_mode_dropdown_and_or_channel_buttons(tmp_path: Path) -> None:
     catalog_json = json.dumps([
         entry for entry in command_catalog() if entry["id"] in {
@@ -1559,7 +1559,7 @@ def test_trigger_mode_dropdown_and_or_channel_buttons(tmp_path: Path) -> None:
     assert json.loads(completed.stdout) == {"ok": True}
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_actions_follow_global_execution_admission_and_recover() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1600,7 +1600,7 @@ def test_trigger_actions_follow_global_execution_admission_and_recover() -> None
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_editor_renders_only_selected_command_and_scopes_readback_to_it() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1661,7 +1661,7 @@ def test_trigger_editor_renders_only_selected_command_and_scopes_readback_to_it(
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_editor_applies_each_command_individually() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1711,7 +1711,7 @@ def test_trigger_editor_applies_each_command_individually() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_editor_gates_busy_state_and_keeps_read_commands_explicit() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1807,7 +1807,7 @@ def test_trigger_editor_gates_busy_state_and_keeps_read_commands_explicit() -> N
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_editor_skips_unsupported_group_commands_and_keeps_projection_in_command_form() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1838,7 +1838,7 @@ def test_trigger_editor_skips_unsupported_group_commands_and_keeps_projection_in
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_editor_query_field_change_is_passive_until_refresh() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1884,7 +1884,7 @@ def test_trigger_editor_query_field_change_is_passive_until_refresh() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_editor_serializes_readback_and_disables_actions_while_busy() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -1952,7 +1952,7 @@ def test_trigger_editor_serializes_readback_and_disables_actions_while_busy() ->
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_editor_same_state_notifications_do_not_restart_group_readback() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -2001,7 +2001,7 @@ def test_trigger_editor_same_state_notifications_do_not_restart_group_readback()
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_editor_apply_uses_setter_readback_without_extra_query() -> None:
     script = textwrap.dedent(TRIGGER_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -2082,10 +2082,7 @@ def test_trigger_setting_fields_help_descriptions_and_enum_labels_are_localized(
         assert f'"{key}":' in chinese, key
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_trigger_level_div_quick_fill(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog())
     script = textwrap.dedent(
@@ -2264,10 +2261,7 @@ def test_trigger_level_div_quick_fill(tmp_path: Path) -> None:
     assert json.loads(completed.stdout) == {"ok": True}
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_trigger_edge_div_coherence_keeps_draft_source(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog())
     script = textwrap.dedent(

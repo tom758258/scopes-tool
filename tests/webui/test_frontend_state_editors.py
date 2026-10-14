@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 import textwrap
 
@@ -15,7 +14,7 @@ from tests.webui._frontend_state_test_support import (
     extract_function_declaration,
 )
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_editor_routing_is_callable_before_editor_bootstrap_completes() -> None:
     app_source = read_static("app.js")
     bootstrap_source = read_static("editor-bootstrap.js")
@@ -78,7 +77,7 @@ def test_channel_display_editor_uses_workflow_editor_layout() -> None:
         'class="channel-display-editor workflow-editor" hidden'
     ) in html
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
     editor_path = STATIC_ROOT / "diagnostics-editor.js"
     bootstrap_source = read_static("editor-bootstrap.js")
@@ -312,7 +311,7 @@ def test_diagnostics_editor_defaults_and_submits_selected_mode() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_fft_frequency_readback_dirty_only_submission() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     script = textwrap.dedent(
@@ -430,7 +429,7 @@ def test_fft_frequency_readback_dirty_only_submission() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_fft_phase_units_visibility_and_submission() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     script = textwrap.dedent(
@@ -522,7 +521,7 @@ def test_fft_phase_units_visibility_and_submission() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_fft_abbreviated_readback_syncs_canonical_values_for_apply() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     script = textwrap.dedent(
@@ -602,7 +601,7 @@ def test_fft_abbreviated_readback_syncs_canonical_values_for_apply() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_save_export_refresh_stays_hidden_in_setup_mode_on_header_resync() -> None:
     app_source = read_static("app.js")
     sync_header = extract_function_declaration(app_source, "function syncWorkspaceHeaderActions(editorKind)")

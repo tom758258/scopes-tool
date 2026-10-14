@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 import textwrap
 
@@ -25,7 +24,7 @@ RESULT_FAKE_DOM_HARNESS = r'''
 '''
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_system_result_summaries_localize_options_and_unknown_operation_bits() -> None:
     results_path = STATIC_ROOT / "results.js"
     chinese = read_static("locale_zh_tw.js")
@@ -89,7 +88,7 @@ def test_system_result_summaries_localize_options_and_unknown_operation_bits() -
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
     results_path = STATIC_ROOT / "results.js"
     script = textwrap.dedent(
@@ -129,7 +128,7 @@ def test_cursor_mode_structured_result_uses_friendly_labels() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_mode_structured_result_prefers_scoped_labels() -> None:
     results_path = STATIC_ROOT / "results.js"
     script = textwrap.dedent(
@@ -165,7 +164,7 @@ def test_trigger_mode_structured_result_prefers_scoped_labels() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_search_serial_result_uses_scoped_labels() -> None:
     source = read_static("results.js")
     commands_block = source.split("const SEARCH_RESULT_COMMANDS", 1)[1].split("]);", 1)[0]
@@ -227,7 +226,7 @@ def test_search_serial_result_uses_scoped_labels() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_wgen_aggregate_result_uses_wgen_labels() -> None:
     results_path = STATIC_ROOT / "results.js"
     script = textwrap.dedent(
@@ -344,7 +343,7 @@ def test_wgen_aggregate_result_uses_wgen_labels() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_demo_workspace_result_uses_demo_presentation() -> None:
     results_path = STATIC_ROOT / "results.js"
     script = textwrap.dedent(

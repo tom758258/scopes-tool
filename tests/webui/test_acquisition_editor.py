@@ -18,10 +18,7 @@ def read_static(name: str) -> str:
     return (STATIC_ROOT / name).read_text(encoding="utf-8")
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_acquisition_control_composite_dispatch_and_wiring(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")

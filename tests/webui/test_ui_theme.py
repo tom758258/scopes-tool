@@ -20,7 +20,7 @@ STATIC = Path(__file__).resolve().parents[2] / "src/scopes_tool_webui/static"
 
 def run_node(script: str) -> None:
     if shutil.which("node") is None:
-        pytest.skip("Node.js is required")
+        pytest.fail("Node.js is required for frontend_node tests")
     setup = r'''
         import assert from "node:assert/strict";
         import fs from "node:fs";
@@ -62,6 +62,7 @@ def run_node(script: str) -> None:
     assert result.returncode == 0, result.stderr or result.stdout
 
 
+@pytest.mark.frontend_node
 def test_theme_cycle_cookie_system_changes_and_localization() -> None:
     run_node(r'''
         const { initializeThemeUi, readSavedThemePreference } = await load("theme_ui.js");
@@ -100,6 +101,7 @@ def test_theme_cycle_cookie_system_changes_and_localization() -> None:
     ''')
 
 
+@pytest.mark.frontend_node
 def test_bootstrap_applies_theme_before_css_and_help_is_disabled() -> None:
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert html.index("<script>") < html.index('<link rel="stylesheet"')
@@ -145,6 +147,7 @@ def test_supported_projection_uses_core_identity_and_omits_unapproved_models(mon
     assert supported_devices.supported_devices_payload() == []
 
 
+@pytest.mark.frontend_node
 def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
     run_node(r'''
         const { initializeSupportedDevices } = await load("supported-devices.js");
@@ -192,6 +195,7 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
     ''')
 
 
+@pytest.mark.frontend_node
 def test_chart_repaints_theme_without_changing_samples_and_disposes_listener() -> None:
     run_node(r'''
         const { MonitorChart } = await load("monitor-chart.js");

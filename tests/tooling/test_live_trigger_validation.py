@@ -121,9 +121,9 @@ def keysight_fixture(model):
     return {"series": capabilities_for_model_id(model).series, "sets": payloads, "queries": queries}
 
 
-def run_keysight_triggers(tmp_path, model, *, plus=True, failures=None, patches=None):
+def run_keysight_triggers(tmp_path, model, *, plus=True, failures=None, patches=None, edge_faults=()):
     fixture = keysight_fixture(model)
-    fixture.update(plus=plus, failures=failures or [], patches=patches or {})
+    fixture.update(plus=plus, failures=failures or [], patches=patches or {}, edge_faults=list(edge_faults))
     path = tmp_path / "fixture.json"
     path.write_text(json.dumps(fixture), encoding="utf-8")
     body = extract_live_cli_functions_ps((
@@ -135,6 +135,7 @@ $script:FunctionalFailed = $false
 $script:SaveFixtureEstablished = $false
 $script:Calls = New-Object System.Collections.Generic.List[object]
 $script:Cases = [ordered]@{}
+$script:Edge = @{ coupling = 'dc'; reject = 'off' }
 $identity = [pscustomobject]@{ idn = @{ series = $fixture.series }; capabilities = @{ series = $fixture.series } }
 $snapshot = [pscustomobject]@{
     ChannelDisplay = $true; ChannelCoupling = 'dc'; ChannelScale = 2; ChannelOffset = 0
@@ -158,13 +159,27 @@ function Add-Diagnostic { param($Name, $Message) }
 function Drain-AfterFailure { param($Stage, $CaseName) }
 function Invoke-LiveCli {
     param($Stage, $Command, $Arguments = @())
-    $script:Calls.Add(@{ stage = $Stage; command = $Command; arguments = @($Arguments) })
+    $call = @{ stage = $Stage; command = $Command; arguments = @($Arguments)
+        edge_before = @{ coupling = $script:Edge.coupling; reject = $script:Edge.reject } }
+    $script:Calls.Add($call)
     if ($Stage -in $fixture.failures) { throw "$Stage failure" }
     $query = $Arguments -contains '--query' -or $Command -eq 'channel-summary'
     if ($query) {
         $result = $fixture.queries.PSObject.Properties[$Command].Value
+        if ($Command -eq 'trigger-edge-coupling') { $result = @{ coupling = $script:Edge.coupling } }
+        if ($Command -eq 'trigger-edge-reject') { $result = @{ reject = $script:Edge.reject } }
         $payload = [pscustomobject]@{ ok = $true; result = $result; scpi = [pscustomobject]@{ sent = @(':TRIGger:EDGE:LEVel? EXTernal') } }
     } else {
+        if ($Command -eq 'trigger-edge-coupling' -and
+            -not ($Stage -eq 'restore-trigger-edge-coupling' -and 'restore-coupling' -in $fixture.edge_faults)) {
+            $script:Edge.coupling = $Arguments[1]
+        }
+        if ($Command -eq 'trigger-edge-reject') {
+            $script:Edge.reject = $Arguments[1]
+            if ($Stage -eq 'trigger-edge-reject-set' -and 'reject-coupling' -in $fixture.edge_faults) {
+                $script:Edge.coupling = 'ac'
+            }
+        }
         $set = $fixture.sets.PSObject.Properties[$Command]
         $payload = if ($null -ne $set) { $set.Value } else { @{ ok = $true } }
     }
@@ -175,6 +190,7 @@ function Invoke-LiveCli {
             $payload.result | Add-Member -Force -NotePropertyName $field.Name -NotePropertyValue $field.Value
         }
     }
+    $call.edge_after = @{ coupling = $script:Edge.coupling; reject = $script:Edge.reject }
     return $payload
 }
 # Execute the real trigger snapshot gate and its actual field projections.
@@ -221,7 +237,10 @@ if (-not $script:FunctionalFailed) {
     }
     $casesFile = Join-Path $PSScriptRoot 'cases.ps1'
     [IO.File]::WriteAllLines($casesFile, $blocks.ToArray())
+    # Start away from the snapshot so setters must change the fake instrument.
+    $script:Edge.coupling = 'ac'; $script:Edge.reject = 'hf'
     . $casesFile
+    $script:Edge.coupling = 'ac'; $script:Edge.reject = 'hf'
     try { Restore-InstrumentState -Snapshot $snapshot; Add-CaseResult restore $true }
     catch { Add-CaseResult restore $false $_.Exception.Message }
 }
@@ -288,3 +307,31 @@ def test_keysight_restore_readback_failure_cannot_pass(tmp_path):
     })
     assert report["cases"]["restore"]["status"] == "FAIL"
     assert "Restored external level" in report["cases"]["restore"]["detail"]
+
+
+@pytest.mark.parametrize("edge_faults,edge_status,restore_status", [
+    ((), "PASS", "PASS"),
+    (("reject-coupling",), "FAIL", "PASS"),
+    (("restore-coupling",), "PASS", "FAIL"),
+    (("reject-coupling", "restore-coupling"), "FAIL", "FAIL"),
+])
+def test_keysight_edge_final_state_and_restore(tmp_path, edge_faults, edge_status, restore_status):
+    report = run_keysight_triggers(tmp_path, "keysight-dsox3024a", edge_faults=edge_faults)
+    edge = report["cases"]["trigger-edge-settings"]
+    restore = report["cases"]["restore"]
+    assert edge["status"] == edge_status, edge
+    assert restore["status"] == restore_status, restore
+    calls = {call["stage"]: call for call in report["calls"]}
+    for prefix in ("", "restore-"):
+        coupling_set = calls[prefix + "trigger-edge-coupling" + ("-set" if not prefix else "")]
+        reject_set = calls[prefix + "trigger-edge-reject" + ("-set" if not prefix else "")]
+        assert coupling_set["edge_before"] == {"coupling": "ac", "reject": "hf"}
+        assert reject_set["edge_after"]["reject"] == "off"
+        expected = "ac" if ("restore-coupling" if prefix else "reject-coupling") in edge_faults else "dc"
+        query = calls[prefix + "trigger-edge-coupling-query"]
+        assert query["edge_after"] == {"coupling": expected, "reject": "off"}
+    if edge_status == "FAIL":
+        assert "Edge coupling/reject readback" in edge["detail"]
+        assert "trigger-common" not in report["cases"]
+    if restore_status == "FAIL":
+        assert "Restored common trigger settings" in restore["detail"]

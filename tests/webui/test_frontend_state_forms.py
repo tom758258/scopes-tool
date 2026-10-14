@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 
@@ -138,7 +137,7 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_timebase_scale_presets_fill_value_without_execute() -> None:
     styles = read_static("styles.css")
     assert ".timebase-scale-presets, .channel-probe-presets {" in styles
@@ -441,7 +440,7 @@ def test_timebase_scale_presets_fill_value_without_execute() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_generic_form_multi_choice_and_two_state_boolean_presentation() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     script = textwrap.dedent(
@@ -651,7 +650,7 @@ def test_generic_form_multi_choice_and_two_state_boolean_presentation() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_query_selector_change_invalidates_pending_generic_refresh() -> None:
     run_generic_form_ownership_behavior(
         r'''
@@ -674,7 +673,7 @@ def test_query_selector_change_invalidates_pending_generic_refresh() -> None:
         '''
     )
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_trigger_nested_same_name_readback_hydrates_scalar() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     numeric_input_path = STATIC_ROOT / "numeric-input.js"
@@ -835,7 +834,7 @@ def test_trigger_nested_same_name_readback_hydrates_scalar() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_generic_rerender_rejects_stale_apply_form_updates() -> None:
     run_generic_form_ownership_behavior(
         r'''
@@ -862,11 +861,14 @@ def test_generic_rerender_rejects_stale_apply_form_updates() -> None:
         '''
     )
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_current_generic_form_still_syncs_refresh_and_apply() -> None:
     run_generic_form_ownership_behavior(
         r'''
         syncCommandSelection();
+        assert.equal(elements.selectedCommand.title, elements.selectedCommand.textContent);
+        assert.equal(elements.commandDescription.title, elements.commandDescription.textContent);
+        assert.equal(elements.commandSupportReason.title, "");
         const refresh = executeCommand("channel-scale", { action: "query", channel: 1 }, {
           intent: "readback",
           formRevision: genericFormRevision,
@@ -891,7 +893,7 @@ def test_current_generic_form_still_syncs_refresh_and_apply() -> None:
         '''
     )
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_submission_without_form_revision_cannot_update_generic_form() -> None:
     run_generic_form_ownership_behavior(
         r'''
@@ -927,7 +929,7 @@ def test_numeric_inputs_share_spinner_presentation_rules() -> None:
     assert 'from "/static/numeric-input.js";' in workflow_editor
     assert 'input.step = "any";' in helper
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     script = textwrap.dedent(
@@ -1093,7 +1095,7 @@ def test_generic_form_rejects_partial_numbers_and_fractional_integers() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_generic_form_applies_conditional_required_fields() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     script = textwrap.dedent(
@@ -1178,7 +1180,7 @@ def test_generic_form_applies_conditional_required_fields() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     script = textwrap.dedent(
@@ -1363,7 +1365,7 @@ def test_stateful_editor_readback_dirty_and_verification_flow() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_multi_select_serializes_the_existing_csv_contract() -> None:
     command_form_path = STATIC_ROOT / "command-form.js"
     script = textwrap.dedent(
@@ -1416,7 +1418,7 @@ def test_workflow_multi_select_serializes_the_existing_csv_contract() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_acquisition_form_shows_average_count_only_after_readback() -> None:
     form_path = STATIC_ROOT / "command-form.js"
     script = textwrap.dedent(

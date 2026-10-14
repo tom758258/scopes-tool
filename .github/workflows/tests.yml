@@ -68,17 +68,7 @@ jobs:
         run: >-
           ./.venv/bin/python -m pytest -q -rs
           --basetemp .tmp_tests/ci-quality-webui
-          tests/webui/test_ui_theme.py::test_theme_cycle_cookie_system_changes_and_localization
-          tests/webui/test_ui_theme.py::test_bootstrap_applies_theme_before_css_and_help_is_disabled
-          tests/webui/test_ui_theme.py::test_supported_panel_open_close_escape_outside_click_and_retry
-          tests/webui/test_ui_theme.py::test_chart_repaints_theme_without_changing_samples_and_disposes_listener
-          tests/webui/test_frontend_state_catalog.py
-          tests/webui/test_frontend_state_editors.py
-          tests/webui/test_frontend_state_forms.py
-          tests/webui/test_frontend_state_resources.py
-          tests/webui/test_frontend_state_results.py
-          tests/webui/test_frontend_state_serial.py
-          tests/webui/test_frontend_state_workspaces.py
+          -m frontend_node tests/webui
 
   pytest-linux:
     name: Linux Python ${{ matrix.python-version }}
@@ -119,8 +109,33 @@ jobs:
       - name: Prepare pytest temp root
         run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
 
-      - name: Run tests
-        run: ./.venv/bin/python -m pytest -q -m "not hardware and not windows_powershell" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}
+      - name: Run primary Python tests
+        if: matrix.python-version == '3.13'
+        run: >-
+          ./.venv/bin/python -m pytest -q
+          -m "not hardware and not windows_powershell and not frontend_node"
+          --basetemp .tmp_tests/ci-linux-py${{ matrix.python-version }}
+
+      - name: Run Python compatibility contracts
+        if: matrix.python-version != '3.13'
+        run: >-
+          ./.venv/bin/python -m pytest -q
+          -m "not hardware and not windows_powershell and not frontend_node"
+          --basetemp .tmp_tests/ci-linux-py${{ matrix.python-version }}
+          tests/core/test_identity.py tests/core/test_capabilities.py
+          tests/core/test_drivers.py tests/core/test_run_config.py tests/core/test_operations.py
+          tests/cli/test_agent_safe_cli_basics.py tests/cli/test_driver_selection_cli.py
+          tests/cli/test_sequence_cli.py tests/webui/test_webui_api.py
+          tests/test_supported_operation_surface_consistency.py::test_declared_operations_have_acceptance_cases_and_adapter_routes
+          tests/test_supported_operation_surface_consistency.py::test_legacy_tektronix_storage_is_rejected_by_public_adapters
+          tests/cli/test_worker_cli.py::test_worker_http_rejects_non_v2_requests_before_side_effects
+          tests/cli/test_worker_cli.py::test_worker_stop_cancels_multiple_queued_jobs_safely
+          tests/cli/test_worker_cli.py::test_worker_correlation_flows_through_events_and_memory
+          tests/cli/test_worker_cli.py::test_worker_lifecycle_failure_before_ready_keeps_stderr_diagnostics
+          tests/cli/test_worker_cli.py::test_worker_lifecycle_drains_stderr_without_mixing_stdout_jsonl
+          tests/cli/test_worker_cli.py::test_worker_lifecycle_validates_final_summary
+          tests/cli/test_worker_cli.py::test_real_simulation_worker_retains_settings_isolates_and_restarts
+          tests/cli/test_worker_cli.py::test_direct_json_envelope_has_schema_and_timestamp
 
   pytest-windows:
     name: Windows Python ${{ matrix.python-version }}
@@ -160,9 +175,23 @@ jobs:
       - name: Prepare pytest temp root
         run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
 
-      - name: Run tests
+      - name: Run Windows Python contracts
         run: >-
-          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and not windows_powershell" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}
+          .\.venv\Scripts\python.exe -m pytest -q
+          -m "not hardware and not windows_powershell and not frontend_node"
+          --basetemp .tmp_tests/ci-windows-py${{ matrix.python-version }}
+          tests/cli/test_agent_safe_cli_basics.py tests/cli/test_driver_selection_cli.py
+          tests/core/test_output_files.py tests/packaging/test_windows_bundle.py
+          tests/webui/test_desktop_host.py tests/webui/test_launcher.py
+          tests/webui/test_job_manager_shutdown.py
+          tests/cli/test_worker_cli.py::test_worker_http_rejects_non_v2_requests_before_side_effects
+          tests/cli/test_worker_cli.py::test_worker_stop_cancels_multiple_queued_jobs_safely
+          tests/cli/test_worker_cli.py::test_worker_correlation_flows_through_events_and_memory
+          tests/cli/test_worker_cli.py::test_worker_lifecycle_failure_before_ready_keeps_stderr_diagnostics
+          tests/cli/test_worker_cli.py::test_worker_lifecycle_drains_stderr_without_mixing_stdout_jsonl
+          tests/cli/test_worker_cli.py::test_worker_lifecycle_validates_final_summary
+          tests/cli/test_worker_cli.py::test_real_simulation_worker_retains_settings_isolates_and_restarts
+          tests/cli/test_worker_cli.py::test_direct_json_envelope_has_schema_and_timestamp
 
       - name: Run PowerShell Python boundary smoke
         if: matrix.python-version != '3.13'

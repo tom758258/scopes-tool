@@ -56,6 +56,30 @@ less brittle assertion detects the same regression. Strict assertions are
 appropriate for public contracts and safety behavior. Assertions about prose,
 examples, and internal structure require a clear maintenance benefit.
 
+## CI Responsibilities
+
+- **Code quality & WebUI** runs Ruff, both text checks, JavaScript syntax
+  checks, and every `frontend_node` test under `tests/webui/`. Mark individual
+  Node runtime cases, including those in mixed Python/JavaScript files. Node.js
+  is required: missing Node must fail these tests rather than skip them.
+- **Linux Python 3.13** runs the primary no-hardware Python suite, excluding
+  `frontend_node` and `windows_powershell` tests. Python 3.10, 3.11, and 3.12
+  run explicit compatibility selections covering identity, capabilities,
+  drivers, Core operations, CLI simulation and safety, Sequence, WebUI HTTP,
+  all-model adapter admission, legacy rejection, and Worker process contracts.
+- **Windows Python 3.10, 3.12, and 3.13** run CLI safety and driver selection,
+  output files, Desktop Host and Launcher lifecycle, job shutdown, Worker
+  subprocess/HTTP/JSONL contracts, and mocked Windows packaging. These jobs
+  exclude Node and PowerShell validation tests.
+- Every Linux and Windows Python matrix job retains package build, import,
+  and installed CLI help smoke checks. Mock packaging tests do not establish
+  that a real PyInstaller bundle builds or runs.
+
+The operation matrix validates adapter admission for every registered model.
+Dry-run and simulator execution uses one representative per driver/capability
+profile, including both legacy Tektronix channel layouts. DSOX4034A shares the
+DSOX4024A execution profile and retains its own adapter admission checks.
+
 ## Windows Live Validation Tests
 
 Core and CLI tests own model capabilities, command validation, SCPI generation,
@@ -70,5 +94,6 @@ Mark PowerShell tests with `windows_powershell`. The smaller
 `windows_boundary_smoke` subset starts the selected Python CLI and checks
 arguments, JSON parsing, and nonzero exits. CI runs ordinary Windows Python
 tests on Python 3.10, 3.12, and 3.13, boundary smoke on 3.10 and 3.12, and the
-complete PowerShell validation suite on 3.13, including boundary smoke. The
-Linux Python matrix remains independent of these Windows tests.
+complete PowerShell validation suite on 3.13, including boundary smoke. General
+Python jobs exclude these PowerShell tests; the Windows validation jobs own
+their execution.

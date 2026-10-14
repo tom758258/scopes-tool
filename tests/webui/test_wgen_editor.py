@@ -204,10 +204,7 @@ def test_wgen_frequency_set_does_not_touch_output(tmp_path: Path) -> None:
     assert aggregate["result"]["wgen"]["enabled"] is False
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")
@@ -440,10 +437,7 @@ def test_wgen_editor_aggregate_refresh_and_setter(tmp_path: Path) -> None:
     assert json.loads(completed.stdout) == {"ok": True}
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_wgen_frequency_range_warning(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")

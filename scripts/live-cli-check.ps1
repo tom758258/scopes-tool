@@ -4400,13 +4400,13 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 -Arguments @("--coupling", [string]$snapshot.TriggerEdgeCoupling)
             Assert-ScpiSentPrefix -Payload $couplingSet `
                 -ExpectedPrefix ":TRIGger:EDGE:COUPling " -Label "Edge coupling"
-            $coupling = Invoke-LiveCli -Stage "trigger-edge-coupling-query" `
-                -Command "trigger-edge-coupling" -Arguments @("--query")
             $rejectSet = Invoke-LiveCli -Stage "trigger-edge-reject-set" `
                 -Command "trigger-edge-reject" `
                 -Arguments @("--reject", [string]$snapshot.TriggerEdgeReject)
             Assert-ScpiSentPrefix -Payload $rejectSet `
                 -ExpectedPrefix ":TRIGger:EDGE:REJect " -Label "Edge reject"
+            $coupling = Invoke-LiveCli -Stage "trigger-edge-coupling-query" `
+                -Command "trigger-edge-coupling" -Arguments @("--query")
             $reject = Invoke-LiveCli -Stage "trigger-edge-reject-query" `
                 -Command "trigger-edge-reject" -Arguments @("--query")
             if ([string]$coupling.result.coupling -ne [string]$snapshot.TriggerEdgeCoupling -or

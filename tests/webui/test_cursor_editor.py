@@ -321,10 +321,7 @@ def test_cursor_execution_calls_core_without_auto_adjustment(tmp_path: Path) -> 
 
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_cursor_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")

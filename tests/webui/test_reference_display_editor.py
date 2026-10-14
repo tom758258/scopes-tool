@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -106,7 +105,7 @@ def run_harness(body: str) -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_display_editor_shows_two_slots_with_shared_actions() -> None:
     run_harness(
         r'''
@@ -131,7 +130,7 @@ def test_reference_display_editor_shows_two_slots_with_shared_actions() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_display_editor_follows_projected_slots() -> None:
     run_harness(
         r'''
@@ -151,7 +150,7 @@ def test_reference_display_editor_follows_projected_slots() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_display_read_syncs_both_checkboxes() -> None:
     run_harness(
         r'''
@@ -172,7 +171,7 @@ def test_reference_display_read_syncs_both_checkboxes() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_display_partial_read_keeps_existing_checkboxes() -> None:
     run_harness(
         r'''
@@ -192,7 +191,7 @@ def test_reference_display_partial_read_keeps_existing_checkboxes() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_display_run_applies_then_shows_final_readback() -> None:
     run_harness(
         r'''
@@ -225,7 +224,7 @@ def test_reference_display_run_applies_then_shows_final_readback() -> None:
     )
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_display_run_failure_stops_before_remaining_slots() -> None:
     run_harness(
         r'''

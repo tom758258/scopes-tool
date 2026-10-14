@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 import time
@@ -260,7 +259,7 @@ def test_command_execution_forwards_progress_reporter_to_core_runner(
     assert result["exit_code"] == 0
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_result_progress_rendering() -> None:
     script = textwrap.dedent(
         r'''

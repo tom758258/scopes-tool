@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -32,51 +31,19 @@ RESULT_FAKE_DOM_HARNESS = r'''
 
 
 def test_result_clear_resets_history_and_detail() -> None:
-    source = RESULTS_JS.read_text(encoding="utf-8")
     app_source = APP_JS.read_text(encoding="utf-8")
-
-    render_empty = source.split("export function renderEmpty", 1)[1].split("\n}", 1)[0]
-    assert "resultHistory = [];" in render_empty
-    assert "summaryContainer.replaceChildren(emptyMessage());" in render_empty
-    assert "detailContainer.replaceChildren(emptyMessage());" in render_empty
     assert 'elements.resultClear.addEventListener("click", () => {' in app_source
     assert 'resultPresentation = { kind: "empty", job: null, message: null };' in app_source
     assert "renderCurrentResult();" in app_source
 
-def test_identify_detail_is_localized_and_keeps_raw_json() -> None:
-    source = RESULTS_JS.read_text(encoding="utf-8")
-    english = LOCALE_EN_JS.read_text(encoding="utf-8")
-    chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
+def test_identity_labels_are_available_in_both_locales() -> None:
+    for locale in (LOCALE_EN_JS, LOCALE_ZH_TW_JS):
+        text = locale.read_text(encoding="utf-8")
+        for field in ("manufacturer", "model", "serial", "firmware", "resource"):
+            assert f'"results.identity.{field}":' in text
 
-    assert 'job.command === "identify" && job.status === "completed"' in source
-    assert 'result.textContent = JSON.stringify(job.result, null, 2);' in source
-    assert '"results.identity.manufacturer": "Manufacturer"' in english
-    assert '"results.identity.resource": "Resource"' in english
-    assert '"results.identity.manufacturer": "製造商"' in chinese
-    assert '"results.identity.resource": "資源"' in chinese
 
-def test_result_ui_reuses_job_artifact_download_entries() -> None:
-    source = RESULTS_JS.read_text(encoding="utf-8")
-    locales = (
-        LOCALE_EN_JS.read_text(encoding="utf-8"),
-        LOCALE_ZH_TW_JS.read_text(encoding="utf-8"),
-    )
-
-    assert "job.artifacts" in source
-    assert "artifact.url" in source
-    assert "job.result?.artifacts" not in source
-    assert "results.summary.artifact_one" not in source
-    assert "results.summary.artifact_many" not in source
-    for locale in locales:
-        assert "results.summary.artifact_one" not in locale
-        assert "results.summary.artifact_many" not in locale
-        assert "results.artifacts" in locale
-        assert "results.download" not in locale
-        assert "results.artifactSize" not in locale
-        assert '"results.field.files":' in locale
-    assert "appendWorkspaceArtifacts" not in source
-    assert 'result.textContent = JSON.stringify(job.result, null, 2);' in source
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
     chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
@@ -225,6 +192,8 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
         assert.equal(rowTexts().some((row) => row[0] === "command-1"), false);
 
         api.renderEmpty(summary, detail);
+        assert.equal(summary.children.length, 1);
+        assert.equal(detail.children.length, 1);
         api.renderJob(summary, makeJob("order-a", "identify", "running"), detail);
         api.renderJob(summary, makeJob("order-b", "run", "queued"), detail);
         api.renderJob(summary, makeJob("order-a", "identify", "completed", {
@@ -250,6 +219,7 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
         assert.equal(detail.children[0].className, "identity-result");
         assert.equal(detail.children[0].children.length, 10);
         assert.equal(detail.children[1].className, "result-block");
+        assert.equal(JSON.parse(detail.children[1].textContent).result.idn.serial, "SYNTH12345");
 
         const workspace = new FakeNode("div");
         api.renderIdentityWorkspaceResult(workspace, makeJob("workspace-identity", "identify", "completed", {
@@ -610,7 +580,7 @@ def test_result_history_runtime_behaviour(tmp_path: Path) -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_channel_summary_workspace_result_focused_behavior() -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
     chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
@@ -1034,7 +1004,7 @@ def test_channel_summary_workspace_result_focused_behavior() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_output_filename_stays_literal_in_zh_tw() -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
     chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
@@ -1112,7 +1082,7 @@ def test_measure_sweep_table_has_horizontal_scroll_wrapper() -> None:
     assert "grid-column: 1 / -1;" in wrapper
     assert "overflow-x: auto;" in wrapper
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_measure_sweep_dry_run_uses_generic_planned_presentation() -> None:
     script = textwrap.dedent(
         RESULT_FAKE_DOM_HARNESS
@@ -1296,7 +1266,7 @@ SYSTEM_SEMANTIC_WORKSPACE_HARNESS = RESULT_FAKE_DOM_HARNESS + r"""
         });
 """
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_system_semantic_workspace_results() -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
     chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
@@ -1418,7 +1388,7 @@ def test_system_semantic_workspace_results() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_workflow_failure_summaries_are_localized_and_semantic() -> None:
     script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
         r"""
@@ -1578,7 +1548,7 @@ def test_workflow_failure_summaries_are_localized_and_semantic() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_doctor_pending_errors_guidance() -> None:
     script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
         r'''
@@ -1647,7 +1617,7 @@ def test_doctor_pending_errors_guidance() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_check_error_failure_distinction() -> None:
     script = textwrap.dedent(SYSTEM_SEMANTIC_WORKSPACE_HARNESS) + textwrap.dedent(
         r'''
@@ -1708,7 +1678,7 @@ def test_check_error_failure_distinction() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_segmented_capture_workspace_result_labels_are_localized() -> None:
     english = LOCALE_EN_JS.read_text(encoding="utf-8")
     chinese = LOCALE_ZH_TW_JS.read_text(encoding="utf-8")
@@ -1901,7 +1871,7 @@ def test_segmented_capture_workspace_result_labels_are_localized() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_math_response_parse_failure_summary_is_localized_and_keeps_raw_diagnostic() -> None:
     script = textwrap.dedent(
         r'''

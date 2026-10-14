@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 
@@ -122,7 +121,7 @@ def test_hidden_commands_use_model_projection_before_refresh() -> None:
     assert "catalog.supported(definition)" in extract_function_declaration(app_source, "function commandAvailable(command)")
     assert '!commandAvailable("live-data-snapshot")' in extract_function_declaration(app_source, "async function refreshLiveDataSnapshot()")
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_command_support_consumes_backend_model_projection() -> None:
     support_path = STATIC_ROOT / "command-support.js"
     script = textwrap.dedent(
@@ -187,7 +186,7 @@ def test_command_editor_and_result_presentation_contract() -> None:
     assert "appendWorkspaceFields(container, fields);" in results_source
     assert "JSON.stringify(job.result, null, 2)" in results_source
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_command_catalog_renders_collapsible_groups_with_flat_fallback() -> None:
     catalog_path = STATIC_ROOT / "command-catalog.js"
     script = textwrap.dedent(COMMAND_CATALOG_HARNESS) + textwrap.dedent(
@@ -279,7 +278,7 @@ def test_command_catalog_renders_collapsible_groups_with_flat_fallback() -> None
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
     catalog_path = STATIC_ROOT / "command-catalog.js"
     script = textwrap.dedent(COMMAND_CATALOG_HARNESS) + textwrap.dedent(

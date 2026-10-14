@@ -230,10 +230,7 @@ def test_demo_localization_keys() -> None:
         assert f'"enum.demo-function.{key}":' in chinese, key
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_demo_editor_selected_command_presentation(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")

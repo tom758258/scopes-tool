@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -10,10 +9,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_serial_decode_workspace_latest_result() -> None:
     """
     Regression test: Serial workspaces (Decode, Trigger, Lister) must show

@@ -101,7 +101,7 @@ PARSERS = next(a.choices for a in _build_parser()._actions if isinstance(a, argp
 
 
 @pytest.mark.parametrize("model", PHYSICAL_MODEL_REGISTRY, ids=lambda model: model.model_id)
-def test_declared_operations_have_acceptance_cases_and_adapter_routes(model):
+def test_declared_operations_have_acceptance_cases_and_adapter_routes(model, tmp_path):
     caps = capabilities_for_model_id(model.model_id)
     for operation in caps.supported_operations or ():
         assert operation in CASES or operation in DISCOVERY, f"Add an acceptance case for {operation}"
@@ -113,18 +113,53 @@ def test_declared_operations_have_acceptance_cases_and_adapter_routes(model):
         if operation not in NO_WORKER | DISCOVERY:
             assert CLI_ALIASES.get(operation, operation) in DOMAIN_COMMANDS
 
+    for operation in _admitted_operations(model):
+        cli_command = CLI_ALIASES.get(operation, operation)
+        web_command = WEB_ALIASES.get(operation, operation)
+        cli_args, web_args = _arguments(operation, caps, tmp_path)
+        if operation not in WEB_ONLY:
+            assert cli_command in PARSERS
+        if operation not in NO_WORKER:
+            assert cli_command in DOMAIN_COMMANDS
+            command, arguments, _ = validate_command_request({
+                "schema_version": WORKER_SCHEMA_VERSION, "command": cli_command, "arguments": cli_args,
+            })
+            parsed = parse_domain_command(command, arguments, SimpleNamespace(
+                mode="simulate", model=model.model_id, resource=None,
+            ))
+            assert parsed.command == cli_command
+        if operation not in CLI_ONLY:
+            entry = CATALOG[web_command]
+            assert entry["presentation"]["models"][model.model_id]["supported"]
+            for mode in entry["modes"]:
+                _validate_parameters(web_command, deepcopy(web_args), mode, model.model_id)
+
+
+def _admitted_operations(model):
+    caps = capabilities_for_model_id(model.model_id)
+    for operation in sorted(CASES):
+        if not operation_supported(caps, operation):
+            continue
+        entry = CATALOG.get(WEB_ALIASES.get(operation, operation))
+        if caps.supported_operations is None:
+            if entry is None or not entry["presentation"]["models"][model.model_id]["supported"]:
+                continue
+        yield operation
+
+
+# One model per driver/profile, retaining both legacy Tektronix channel layouts.
+# DSOX4034A shares the DSOX4024A driver/profile and keeps adapter coverage above.
+EXECUTION_MODELS = (
+    "keysight-dsox2004a", "keysight-dsox3024a", "keysight-dsox4024a",
+    "tektronix-tbs2074", "tektronix-tds2024b", "tektronix-tbs1052b",
+)
+
 
 def _admitted_cases():
     for model in PHYSICAL_MODEL_REGISTRY:
-        caps = capabilities_for_model_id(model.model_id)
-        for operation in sorted(CASES):
-            if not operation_supported(caps, operation):
-                continue
-            entry = CATALOG.get(WEB_ALIASES.get(operation, operation))
-            if caps.supported_operations is None:
-                if entry is None or not entry["presentation"]["models"][model.model_id]["supported"]:
-                    continue
-            yield pytest.param(model.model_id, operation, id=f"{model.model_id}-{operation}")
+        if model.model_id in EXECUTION_MODELS:
+            for operation in _admitted_operations(model):
+                yield pytest.param(model.model_id, operation, id=f"{model.model_id}-{operation}")
 
 
 def _arguments(operation, caps, path):
@@ -175,12 +210,6 @@ def test_supported_operation_plans_executes_and_accepts_adapter_requests(model_i
             payload = json.loads(output.out)
             assert payload["ok"]
             assert payload["scpi"]["planned" if mode == "--dry-run" else "sent"]
-        if operation not in NO_WORKER:
-            command, arguments, _ = validate_command_request({
-                "schema_version": WORKER_SCHEMA_VERSION, "command": cli_command, "arguments": cli_args,
-            })
-            parsed = parse_domain_command(command, arguments, SimpleNamespace(mode="simulate", model=model_id, resource=None))
-            assert parsed.command == cli_command
     if operation not in CLI_ONLY:
         entry = CATALOG[web_command]
         assert entry["presentation"]["models"][model_id]["supported"]

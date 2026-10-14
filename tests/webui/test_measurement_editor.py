@@ -13,10 +13,7 @@ from scopes_tool_webui.command_catalog import command_catalog
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_measurement_browser_visibility_and_composite_editor_contract() -> None:
     catalog_json = json.dumps(command_catalog())
     app_source = (REPO_ROOT / "src/scopes_tool_webui/static/app.js").read_text(encoding="utf-8")

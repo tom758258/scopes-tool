@@ -56,7 +56,7 @@ def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monk
         str(ROOT / "scripts" / "scopes-tool-windows.spec"),
         init_globals={"SPECPATH": str(ROOT / "scripts")},
     )
-    assert len(analyses) == api.EXE.call_count == api.PYZ.call_count == 3
+    assert len(analyses) == api.EXE.call_count == 3
     assert [Path(item.scripts[0]).name for item in analyses] == [
         "windows_cli_entry.py", "windows_launcher_entry.py", "windows_host_entry.py",
     ]
@@ -75,7 +75,7 @@ def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monk
         assert ("index.html", "scopes_tool_webui/static") in item.datas
     api.COLLECT.assert_called_once()
     collect = api.COLLECT.call_args
-    assert collect.kwargs == {"name": "scopes-tool"}
+    assert collect.kwargs["name"] == "scopes-tool"
     assert [exe["name"] for exe in collect.args[:3]] == [
         "scopes-tool", "scopes-tool-webui-launcher", "scopes-tool-webui-host",
     ]

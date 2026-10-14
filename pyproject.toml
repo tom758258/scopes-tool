@@ -49,6 +49,7 @@ scopes_tool_webui = [
 testpaths = ["tests"]
 addopts = ["-p", "no:cacheprovider"]
 markers = [
+  "frontend_node: WebUI JavaScript runtime tests owned by the Code quality & WebUI CI job; Node.js is required",
   "hardware: opt-in tests that require a real oscilloscope",
   "windows_boundary_smoke: PowerShell starts the selected Python CLI and preserves arguments, JSON, and failures",
   "windows_powershell: PowerShell Live, Preflight, and wrapper contracts run in Windows validation CI",

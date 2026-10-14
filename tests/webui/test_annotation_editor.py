@@ -252,10 +252,7 @@ def test_annotation_split_execution_applies_only_provided_setters(tmp_path: Path
     assert calls == [("query", 3)]
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     catalog_json = json.dumps(command_catalog_module.command_catalog())
     english = read_static("locale_en.js")
@@ -597,6 +594,7 @@ def test_annotation_editor_routing_refresh_and_apply(tmp_path: Path) -> None:
     assert json.loads(completed.stdout) == {"ok": True}
 
 
+@pytest.mark.frontend_node
 def test_command_form_capability_disabled_contract(tmp_path: Path) -> None:
     """Durable behavior: production CommandForm disabled+marker, skips marker,
     setDisabled preservation, numeric 0. Real production JS executed."""

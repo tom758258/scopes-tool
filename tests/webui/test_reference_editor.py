@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -246,7 +245,7 @@ REFERENCE_EDITOR_HARNESS = r'''
 '''
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_commands() -> None:
     script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -324,7 +323,7 @@ def test_reference_workspace_stays_visible_when_unavailable_and_routes_existing_
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_editor_allows_save_and_display_without_query() -> None:
     script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -351,7 +350,7 @@ def test_reference_editor_allows_save_and_display_without_query() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_editor_does_not_submit_invalid_form_and_clear_needs_no_form() -> None:
     script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -380,7 +379,7 @@ def test_reference_editor_does_not_submit_invalid_form_and_clear_needs_no_form()
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_save_failure_short_circuits_save_and_display() -> None:
     script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -408,7 +407,7 @@ def test_reference_save_failure_short_circuits_save_and_display() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_display_failure_stops_before_readback() -> None:
     script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -442,7 +441,7 @@ def test_reference_display_failure_stops_before_readback() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_labels_editor_reads_and_applies_label_state() -> None:
     script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -505,7 +504,7 @@ def test_reference_labels_editor_reads_and_applies_label_state() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_reference_action_forms_use_command_form_layout() -> None:
     script = textwrap.dedent(REFERENCE_EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -539,7 +538,7 @@ def test_reference_action_forms_use_command_form_layout() -> None:
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_composite_workspace_results_render_underlying_command_jobs(tmp_path: Path) -> None:
     app_source = read_static("app.js")
     render_source = "function renderWorkspace() {" + (

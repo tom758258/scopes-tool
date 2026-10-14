@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -253,10 +252,7 @@ EDITOR_HARNESS = r'''
         const editor = new globalThis.SegmentedEditor(new FakeNode(), catalog, hooks);
 '''
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_segmented_editor_refresh_renders_realtime_and_segmented_state() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -322,10 +318,7 @@ def test_segmented_editor_refresh_renders_realtime_and_segmented_state() -> None
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_segmented_editor_rerender_preserves_segment_count() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -365,10 +358,7 @@ def test_segmented_editor_rerender_preserves_segment_count() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_segmented_editor_browses_acquired_segments_from_readback() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -514,10 +504,7 @@ def test_segmented_editor_browses_acquired_segments_from_readback() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -700,10 +687,7 @@ def test_segmented_editor_runs_finite_capture_with_existing_command() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_segmented_memory_workspace_hides_capture_controls() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -731,10 +715,7 @@ def test_segmented_memory_workspace_hides_capture_controls() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_segmented_capture_dry_run_uses_planning_input() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -798,10 +779,7 @@ def test_segmented_capture_dry_run_uses_planning_input() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_segmented_editor_builds_field_help_before_command_selected() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -853,10 +831,7 @@ def test_segmented_editor_builds_field_help_before_command_selected() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_segmented_editor_state_help_visibility() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''
@@ -952,10 +927,7 @@ def test_segmented_memory_select_validation_and_execution_use_core(tmp_path: Pat
     assert result["result"]["segmented"]["selected_segment"] == 20
     assert result["result"]["segmented"]["time_tag_s"] == 0.00075
 
-@pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_segmented_editor_enter_exit_and_capability_gating() -> None:
     script = textwrap.dedent(EDITOR_HARNESS) + textwrap.dedent(
         r'''

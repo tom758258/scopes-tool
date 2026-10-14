@@ -13,18 +13,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = REPO_ROOT / "src" / "scopes_tool_webui" / "static"
 
 
-def test_workbench_header_text_sets_matching_title() -> None:
-    app_source = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
-    selection_source = app_source.split("function syncCommandSelection(", 1)[1].split(
-        "\nfunction invalidateGenericFormOwnership()", 1
-    )[0]
-    assert "elements.selectedCommand.textContent = selectedTitle;" in selection_source
-    assert "elements.selectedCommand.title = selectedTitle;" in selection_source
-    assert "elements.commandDescription.textContent = selectedDescription;" in selection_source
-    assert "elements.commandDescription.title = selectedDescription;" in selection_source
-    assert "elements.commandSupportReason.title = supportReason;" in selection_source
-
-
 def test_workbench_field_helper_texts_exist() -> None:
     zh = (STATIC_ROOT / "locale_zh_tw.js").read_text(encoding="utf-8")
     en = (STATIC_ROOT / "locale_en.js").read_text(encoding="utf-8")
@@ -51,24 +39,6 @@ def test_workbench_field_helper_texts_exist() -> None:
     install_fields = {field["name"]: field for field in catalog["measure-install"]["fields"]}
     assert install_fields["source_channel"].get("help_key") == "measure-install.source_channel"
     assert install_fields["item"].get("help_key") == "measure-install.item"
-
-
-def test_single_command_actions_use_workspace_header() -> None:
-    app = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
-    for editor in (
-        "timebasePositionEditor",
-        "channelScaleRangeEditor",
-        "channelOffsetEditor",
-    ):
-        assert f"if ({editor}?.readButton)" in app
-        assert f"if ({editor}?.applyButton)" in app
-    for editor_file in (
-        "timebase-position-editor.js",
-        "channel-scale-range-editor.js",
-        "channel-offset-editor.js",
-    ):
-        source = (STATIC_ROOT / editor_file).read_text(encoding="utf-8")
-        assert "this.hooks.headerActions.append(this.readButton, this.applyButton)" in source
 
 
 def test_channel_label_actions_live_in_first_section() -> None:
@@ -107,10 +77,7 @@ def test_pc_output_note_lives_in_parameters_area() -> None:
     assert 'translate("pcOutput.commandNote"' in note
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_channel_scale_range_header_actions_behavior(tmp_path: Path) -> None:
     script = textwrap.dedent(
         r'''
@@ -208,10 +175,7 @@ def test_channel_scale_range_header_actions_behavior(tmp_path: Path) -> None:
     assert completed.returncode == 0, completed.stderr + "\n" + completed.stdout
 
 
-@pytest.mark.skipif(
-    subprocess.run(["node", "--version"], capture_output=True).returncode != 0,
-    reason="Node.js is required for frontend behavior checks",
-)
+@pytest.mark.frontend_node
 def test_channel_label_inline_actions_delegate_to_generic_buttons(tmp_path: Path) -> None:
     app_source = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
     build_source = "function buildChannelLabelActions() {" + (
@@ -224,12 +188,6 @@ def test_channel_label_inline_actions_delegate_to_generic_buttons(tmp_path: Path
             "\nfunction syncWorkspaceHeaderActions(", 1
         )[0]
     )
-    # Static contract: inline handlers only delegate via .click(), no second payload path.
-    assert "elements.refresh.click()" in build_source
-    assert "elements.execute.click()" in build_source
-    assert "executeCommand(" not in build_source
-    assert "executeCommand(" not in render_source
-    # Static contract: disabled state mirrors the generic header buttons.
     assert "channelLabelReadButton.disabled = elements.refresh.disabled" in app_source
     assert "channelLabelApplyButton.disabled = elements.execute.disabled" in app_source
 

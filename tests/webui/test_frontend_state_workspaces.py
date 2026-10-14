@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import textwrap
 
@@ -19,7 +18,7 @@ def extract_css_rule(source: str, selector: str) -> str:
     end = source.index("}", body_start)
     return source[body_start:end + 1]
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     live_data_path = STATIC_ROOT / "live-data.js"
     english = read_static("locale_en.js")
@@ -150,7 +149,7 @@ def test_live_data_engineering_formatter_uses_readable_si_units() -> None:
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_live_data_snapshot_updated_at_lifecycle() -> None:
     app_source = read_static("app.js")
     sync_context = extract_function_declaration(app_source, "function syncLiveDataContext()")
@@ -271,7 +270,7 @@ def test_single_wait_remains_advanced_only() -> None:
     assert '"form.advanced": "Advanced"' in english
     assert '"form.advanced": "進階"' in chinese
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_basic_controls_dispatch_screenshot_background() -> None:
     basic_controls_path = STATIC_ROOT / "basic-controls.js"
     script = textwrap.dedent(
@@ -349,7 +348,7 @@ def test_identify_uses_the_shared_workspace_result_area() -> None:
     assert '"workspace.latestSuccessfulResult": "Latest successful result"' in english
     assert '"workspace.latestSuccessfulResult": "最新成功結果"' in chinese
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None:
     execution_context_path = STATIC_ROOT / "execution-context.js"
     script = textwrap.dedent(
@@ -524,7 +523,7 @@ def test_system_information_is_a_read_only_workspace_view() -> None:
     assert "elements.execute.hidden = systemInformationSelected" in app_source
     assert "elements.form.hidden = editorOwned || systemInformationSelected;" in app_source
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_system_information_refresh_runs_only_the_hidden_snapshot_command() -> None:
     app_source = read_static("app.js")
     declarations = "\n".join(
@@ -585,7 +584,7 @@ def test_system_information_refresh_runs_only_the_hidden_snapshot_command() -> N
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -> None:
     source = read_static("app.js")
     executable_source = source.replace("options = {}", "options = null", 1)
@@ -718,7 +717,7 @@ def test_dedicated_editor_actions_use_the_workspace_header() -> None:
         assert "executeCommand," in hooks, editor
     assert 'id="refresh-button"' not in html.split('<div class="workspace-content">', 1)[1]
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for frontend behavior checks")
+@pytest.mark.frontend_node
 def test_acquisition_control_workspace_latest_result() -> None:
     app = read_static("app.js")
     functions = "\n".join(extract_function_declaration(app, signature) for signature in (
