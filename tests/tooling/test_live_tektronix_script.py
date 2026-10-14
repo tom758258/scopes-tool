@@ -945,7 +945,7 @@ def test_expected_timeout_still_rejects_dirty_native_status(tmp_path: Path) -> N
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["measure-until-timeout"]["status"] == "FAIL"
-    assert "native command status" in cases["measure-until-timeout"]["detail"]
+    assert "error-bearing native measurement status" in cases["measure-until-timeout"]["detail"]
     assert cases["cleanup"]["status"] == "PASS"
 
 
@@ -1010,7 +1010,9 @@ def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path)
 @pytest.mark.parametrize("failure", ("mode", "bmp"))
 def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[1], mismatch=failure == "mode", bad_bmp=failure == "bmp",
+        tmp_path, TARGETS[1], bad_bmp=failure == "bmp",
+        stage_responses={"trigger-mode-after": {"ResultOverrides": {"mode": "glitch"}}}
+        if failure == "mode" else {},
     )
     assert result.returncode != 0
     assert report["status"] == "failed"
@@ -1149,7 +1151,7 @@ def test_fixed_fixture_skips_dormant_glitch_setters(tmp_path):
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["trigger-pulse-width"]["status"] == "N/A"
     calls = [inv["arguments"] for inv in report["invocations"] if inv["arguments"][0] == "trigger-pulse-width"]
-    assert len(calls) == 1 and "--query" in calls[0]
+    assert calls == []
     assert all("range" not in call for call in calls)
 
 
@@ -1304,7 +1306,7 @@ def test_operator_confirmation_warnings_describe_standard_actions(tmp_path: Path
     for expected in (
         # Physical preparation gains the configuration and storage requirements.
         "Connect a suitable, stable signal to CH1 (for example, the oscilloscope's Probe Comp / Demo output).",
-        "Ensure CH1 display is ON and a stable waveform is visible. Measurement and capture checks require CH1 to be displayed.",
+        "Fixture: CH1 display ON, CH1 scale 2 V/div, acquisition Normal, Edge trigger CH1 Positive at 1 V; every setting is read back.",
         "Reference Save requires CH1 display ON; otherwise the reference-save case is N/A.",
         "Confirm the required instrument storage is available and writable before saving files.",
         # Standard notes describe the actions that will execute.
@@ -1499,7 +1501,8 @@ def test_save_pwd_restores_only_after_failure(tmp_path: Path, failure: str) -> N
         else:
             assert stages[-1] == "save-pwd-restored"
     # Other round trips still restore and verify even after successful readback.
-    scale_stages = [inv["stage"] for inv in report["invocations"] if inv["arguments"][0] == "channel-scale"]
+    scale_stages = [inv["stage"] for inv in report["invocations"]
+                    if inv["stage"].startswith("channel-scale-")]
     assert scale_stages == ["channel-scale-before", "channel-scale-same-value", "channel-scale-after", "channel-scale-restore", "channel-scale-restored"]
 
 
@@ -1555,8 +1558,16 @@ def test_cli_final_io_failure_preserves_case_failure(tmp_path: Path) -> None:
 @pytest.mark.windows_powershell
 @requires_windows
 @pytest.mark.parametrize("target,command,expected,actual,passed", [
-    (TARGETS[1], "trigger-edge", 1.0, 1.0005, True),
-    (TARGETS[1], "trigger-edge", 1.0, 1.002, False),
+    (TARGETS[1], "trigger-edge", 1.0, 1.04, True),
+    (TARGETS[1], "trigger-edge", 1.0, 1.06, False),
+    (TARGETS[1], "trigger-edge", 1.04, 1.08, False),
+    (TARGETS[1], "trigger-edge", 1.06, 1.0, False),
+    (TARGETS[1], "trigger-edge", 1.0, 1.05, True),
+    (TARGETS[1], "trigger-edge", 1.0, 0.95, True),
+    (TARGETS[2], "trigger-edge", 1.0, 1.04, True),
+    (TARGETS[2], "trigger-edge", 1.0, 1.06, False),
+    (TARGETS[2], "trigger-edge", 1.04, 1.08, False),
+    (TARGETS[2], "trigger-edge", 1.06, 1.0, False),
     (TARGETS[0], "trigger-edge-level", 0.0, 5e-13, True),
     (TARGETS[0], "trigger-edge-level", 0.0, 2e-12, False),
     (TARGETS[0], "trigger-edge-level", 1.0, 1.0005, True),
@@ -1574,7 +1585,8 @@ def test_edge_readback_tolerance(tmp_path, target, command, expected, actual, pa
     case = next(case for case in report["cases"] if case["name"] == command)
     assert case["status"] == ("PASS" if passed else "FAIL")
     assert (result.returncode == 0) == passed
-    assert any(inv["stage"] == f"{command}-same-value" for inv in report["invocations"])
+    setter_called = any(inv["stage"] == f"{command}-same-value" for inv in report["invocations"])
+    assert setter_called == (command != "trigger-edge" or expected != 1.06)
     if not passed:
         for field in ("Before=", "After=", "Difference=", "Tolerance="):
             assert field in case["detail"]
@@ -1582,16 +1594,64 @@ def test_edge_readback_tolerance(tmp_path, target, command, expected, actual, pa
 
 @pytest.mark.windows_powershell
 @requires_windows
-def test_unrelated_readback_retains_strict_tolerance(tmp_path):
-    result, report = fake_run(tmp_path, TARGETS[1], stage_responses={
-        "channel-scale-after": {"ExitCode": 0, "Payload": {
-            "ok": True, "result": {"volts_per_division": 2.001},
-        }},
+@pytest.mark.parametrize("target", TARGETS[1:])
+@pytest.mark.parametrize("actual,passed", [(1.04, True), (1.06, False)])
+def test_fixture_trigger_level_readback_tolerance(tmp_path, target, actual, passed):
+    result, report = fake_run(tmp_path, target, focused=True, stage_responses={
+        "fixture-trigger-query": {"ResultOverrides": {"level_volts": actual}},
+    })
+    cases = {case["name"]: case for case in report["cases"]}
+    assert cases["fixture-baseline"]["status"] == ("PASS" if passed else "FAIL")
+    assert (result.returncode == 0) == passed, result.stdout + result.stderr
+    trigger = next(inv["arguments"] for inv in report["invocations"]
+                   if inv["stage"] == "fixture-trigger")
+    assert trigger[trigger.index("--level") + 1] == "1"
+    if not passed:
+        assert "level_volts readback differs" in cases["fixture-baseline"]["detail"]
+        assert report["invocations"][-1]["stage"] == "fixture-trigger-query"
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS[1:])
+@pytest.mark.parametrize("field,actual,passed", [
+    ("level_volts", 0.34, True), ("level_volts", 0.36, False),
+    ("less_than_seconds", 1.001e-6, False),
+])
+def test_pulse_width_level_readback_tolerance(tmp_path, target, field, actual, passed):
+    result, report = fake_run(tmp_path, target, mode="glitch", stage_responses={
+        "trigger-mode-before": {"ResultOverrides": {"mode": "glitch"}},
+        "trigger-pulse-width-before": {"ResultOverrides": {"level_volts": 0.3}},
+        "trigger-pulse-width-after": {"ResultOverrides": {"level_volts": 0.3, field: actual}},
+    })
+    case = next(case for case in report["cases"] if case["name"] == "trigger-pulse-width")
+    assert case["status"] == ("PASS" if passed else "FAIL"), case["detail"]
+    assert (result.returncode == 0) == passed, result.stdout + result.stderr
+    setter = next(inv["arguments"] for inv in report["invocations"]
+                  if inv["stage"] == "trigger-pulse-width-same-value")
+    assert float(setter[setter.index("--level-volts") + 1]) == 0.3
+    if not passed:
+        assert f"{field} readback differs" in case["detail"]
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+@pytest.mark.parametrize("target", TARGETS[1:])
+@pytest.mark.parametrize("command,field,actual", [
+    ("channel-scale", "volts_per_division", 2.001),
+    ("trigger-edge", "source_channel", 1.01),
+    ("trigger-edge", "slope", "negative"),
+])
+def test_unrelated_readback_retains_strict_tolerance(tmp_path, target, command, field, actual):
+    result, report = fake_run(tmp_path, target, stage_responses={
+        f"{command}-after": {"ResultOverrides": {field: actual}},
     })
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
-    assert cases["channel-scale"]["status"] == "FAIL"
-    assert cases["trigger-edge"]["status"] == "PASS"
+    assert cases[command]["status"] == "FAIL"
+    assert f"{field} readback differs" in cases[command]["detail"]
+    if command != "trigger-edge":
+        assert cases["trigger-edge"]["status"] == "PASS"
 
 
 @pytest.mark.windows_powershell

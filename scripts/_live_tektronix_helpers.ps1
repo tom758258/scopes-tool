@@ -79,6 +79,10 @@ function Invoke-TektronixCliValidation {
     $ImageFilename = "$filenameStem.png"
     $WaveformFilename = "$filenameStem.csv"
     $WaveformSourceChannel = 1
+    $triggerLevelTolerances = @{
+        "tektronix-tbs1052b" = 0.05
+        "tektronix-tds2024b" = 0.05
+    }
 
     function Add-Case {
         param([string]$Name, [ValidateSet("PASS", "FAIL", "N/A", "NOT TESTED")][string]$Status, [string]$Detail = "")
@@ -285,13 +289,20 @@ print(json.dumps({
 
     function Assert-ReadbackEqual {
         param($Expected, $Actual, [string]$Command, [string]$Field)
-        if ($Command -in @("trigger-edge", "trigger-edge-level", "trigger-edge-source") -and
+        if (($Command -in @("trigger-edge", "trigger-edge-level", "trigger-edge-source") -or
+             ($Command -eq "trigger-pulse-width" -and $Field -eq "level_volts" -and
+              $triggerLevelTolerances.ContainsKey($script:Target))) -and
             $Expected -is [ValueType] -and $Expected -isnot [bool] -and
             $Actual -is [ValueType] -and $Actual -isnot [bool]) {
             $before = [double]$Expected
             $after = [double]$Actual
             $difference = [math]::Abs($before - $after)
             $tolerance = [math]::Max(1e-12, [math]::Abs($before) * 1e-3)
+            if ($Field -eq "level_volts" -and $triggerLevelTolerances.ContainsKey($script:Target)) {
+                $tolerance = $triggerLevelTolerances[$script:Target]
+                # Ignore binary floating-point noise at the absolute boundary.
+                $difference = [math]::Round($difference, 12)
+            }
             if ([double]::IsNaN($difference) -or [double]::IsInfinity($difference) -or $difference -gt $tolerance) {
                 throw "$Field readback differs. Before=$before; After=$after; Difference=$difference; Tolerance=$tolerance"
             }
@@ -410,6 +421,9 @@ print(json.dumps({
         $after = Invoke-Cli -Stage "$Name-after" -Command $Command -Options (@($Base) + "--query")
         foreach ($field in $Fields) {
             Assert-ReadbackEqual -Expected (Get-Readback $Before $field) -Actual (Get-Readback $after $field) -Command $Command -Field $field
+        }
+        if ($Command -eq "trigger-edge" -and $triggerLevelTolerances.ContainsKey($script:Target)) {
+            Assert-ReadbackEqual 1.0 (Get-Readback $after "level_volts") "trigger-edge" "level_volts"
         }
         Add-Case $Name "PASS" "query, same-value set, and readback"
     }

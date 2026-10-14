@@ -344,6 +344,6 @@ def test_workflow_final_native_status_after_cleanup(tmp_path: Path, scenario: st
         assert "VisaIOError" in cases["final-standard-event"]["detail"]
     if scenario == "dirty-case":
         assert cases["measure-sweep"]["status"] == "FAIL"
-        assert "native command status" in cases["measure-sweep"]["detail"]
+        assert "error-bearing native measurement status" in cases["measure-sweep"]["detail"]
     counts = report["summary_counts"]
     assert counts["failed"] == sum(case["status"] == "FAIL" for case in cases.values())
