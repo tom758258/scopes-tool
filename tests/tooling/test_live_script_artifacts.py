@@ -7,9 +7,7 @@ import re
 import subprocess
 
 import pytest
-from scopes_tool_core.capabilities import capabilities_for_model_id
-from scopes_tool_core.channel import validate_channel_label
-from tests.tooling._live_script_test_support import REPO_ROOT
+from tests.tooling._live_script_test_support import REPO_ROOT, extract_live_cli_functions_ps
 
 
 @pytest.mark.windows_powershell
@@ -23,26 +21,7 @@ param([Parameter(Mandatory = $true)][string] $ScriptPath)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(
-    $ScriptPath, [ref] $tokens, [ref] $parseErrors
-)
-if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
-
-foreach ($functionName in @(
-    "Test-SavePathEquivalent", "Assert-ScpiSent", "Invoke-BaselineCase"
-)) {
-    $functionAst = $ast.Find({
-        param($node)
-        return (
-            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -eq $functionName
-        )
-    }, $true)
-    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
-    Invoke-Expression $functionAst.Extent.Text
-}
+''' + extract_live_cli_functions_ps(('Test-SavePathEquivalent', 'Assert-ScpiSent', 'Invoke-BaselineCase'), script_path) + r'''
 
 $fixtureCase = $ast.Find({
     param($node)
@@ -213,24 +192,7 @@ param([Parameter(Mandatory = $true)][string] $ScriptPath)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(
-    $ScriptPath, [ref] $tokens, [ref] $parseErrors
-)
-if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
-
-foreach ($functionName in @("Assert-ScpiSent", "Invoke-BaselineCase")) {
-    $functionAst = $ast.Find({
-        param($node)
-        return (
-            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -eq $functionName
-        )
-    }, $true)
-    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
-    Invoke-Expression $functionAst.Extent.Text
-}
+''' + extract_live_cli_functions_ps(('Assert-ScpiSent', 'Invoke-BaselineCase'), script_path) + r'''
 
 $matchingCommands = @($ast.FindAll({
     param($node)
@@ -861,206 +823,6 @@ Invoke-Expression $caseBlock
 
 @pytest.mark.windows_powershell
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
-def test_setup_lifecycle_channel_label_fixtures_fit_3000x_profile(
-    tmp_path: Path,
-) -> None:
-    script_path = REPO_ROOT / "scripts" / "live-cli-check.ps1"
-    harness_path = tmp_path / "setup-lifecycle-channel-label-harness.ps1"
-    harness_path.write_text(
-        r'''
-param([Parameter(Mandatory = $true)][string] $ScriptPath)
-
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(
-    $ScriptPath, [ref] $tokens, [ref] $parseErrors
-)
-if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
-
-$functionAst = $ast.Find({
-    param($node)
-    return (
-        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-        $node.Name -eq "Invoke-BaselineCase"
-    )
-}, $true)
-if ($null -eq $functionAst) { throw "Missing Invoke-BaselineCase." }
-Invoke-Expression $functionAst.Extent.Text
-
-$setupCommands = @($ast.FindAll({
-    param($node)
-    return (
-        $node -is [System.Management.Automation.Language.CommandAst] -and
-        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
-        $node.Extent.Text.Contains("-Name `"setup-lifecycle`"")
-    )
-}, $true))
-if ($setupCommands.Count -ne 1) { throw "Expected one setup-lifecycle case." }
-$setupCaseBlock = $setupCommands[0].Extent.Text
-
-$slotCommands = @($ast.FindAll({
-    param($node)
-    return (
-        $node -is [System.Management.Automation.Language.CommandAst] -and
-        $node.GetCommandName() -eq "Invoke-BaselineCase" -and
-        $node.Extent.Text.Contains("-Name `"setup-slot-lifecycle`"")
-    )
-}, $true))
-if ($slotCommands.Count -ne 1) { throw "Expected one setup-slot-lifecycle case." }
-$slotCaseBlock = $slotCommands[0].Extent.Text
-
-function Add-CaseResult {
-    param([string] $Name, [bool] $Passed, [string] $Detail = "")
-    $script:CaseResults[$Name] = [pscustomobject]@{
-        Passed = $Passed
-        Detail = $Detail
-    }
-}
-
-function Drain-AfterFailure {
-    param([string] $Stage, [string] $CaseName)
-    $script:DrainCalls += 1
-}
-
-function Assert-ScpiSentPrefix {
-    param([object] $Payload, [string] $ExpectedPrefix, [string] $Label)
-}
-
-function Assert-ScpiSent {
-    param([object] $Payload, [string[]] $ExpectedCommands, [string] $Label)
-}
-
-$script:CapturedLabels = New-Object System.Collections.Generic.List[string]
-$script:Invocations = New-Object System.Collections.Generic.List[object]
-$script:CurrentLabel = "Original"
-
-function Invoke-LiveCli {
-    param([string] $Stage, [string] $Command, [string[]] $Arguments = @())
-    $script:Invocations.Add([pscustomobject]@{
-        stage = $Stage
-        command = $Command
-        arguments = @($Arguments)
-    })
-
-    if ($Command -eq "channel-label" -and $Arguments -contains "--text") {
-        $textIndex = [Array]::IndexOf($Arguments, "--text")
-        if ($textIndex -lt 0 -or $textIndex + 1 -ge $Arguments.Count) {
-            throw "channel-label mutation is missing its text argument."
-        }
-        $script:CurrentLabel = [string]$Arguments[$textIndex + 1]
-        $script:CapturedLabels.Add($script:CurrentLabel)
-    }
-
-    switch ($Stage) {
-        "setup-label-change-query" {
-            return [pscustomobject]@{
-                result = [pscustomobject]@{ text = $script:CurrentLabel }
-            }
-        }
-        "setup-label-restore-query" {
-            return [pscustomobject]@{
-                result = [pscustomobject]@{ text = [string]$snapshot.ChannelLabel }
-            }
-        }
-        "setup-slot-label-query" {
-            return [pscustomobject]@{
-                result = [pscustomobject]@{ text = [string]$snapshot.ChannelLabel }
-            }
-        }
-        default {
-            return [pscustomobject]@{}
-        }
-    }
-}
-
-$snapshot = [pscustomobject]@{ ChannelLabel = "Original" }
-$script:CaseResults = [ordered]@{}
-$script:FunctionalFailed = $false
-$script:DrainCalls = 0
-
-Invoke-Expression $setupCaseBlock
-$setupResult = $script:CaseResults["setup-lifecycle"]
-$setupFunctionalFailed = $script:FunctionalFailed
-$setupInvocations = @($script:Invocations | ForEach-Object { $_ })
-
-$script:CaseResults = [ordered]@{}
-$script:FunctionalFailed = $false
-$script:DrainCalls = 0
-$script:Invocations.Clear()
-$script:CurrentLabel = [string]$snapshot.ChannelLabel
-
-Invoke-Expression $slotCaseBlock
-$slotResult = $script:CaseResults["setup-slot-lifecycle"]
-$slotInvocations = @($script:Invocations | ForEach-Object { $_ })
-
-[ordered]@{
-    captured_labels = @($script:CapturedLabels)
-    setup_passed = [bool]$setupResult.Passed
-    setup_detail = [string]$setupResult.Detail
-    setup_functional_failed = $setupFunctionalFailed
-    setup_invocations = $setupInvocations
-    slot_passed = [bool]$slotResult.Passed
-    slot_detail = [string]$slotResult.Detail
-    slot_functional_failed = $script:FunctionalFailed
-    slot_invocations = $slotInvocations
-} | ConvertTo-Json -Depth 8 -Compress
-''',
-        encoding="utf-8",
-    )
-
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    result = json.loads(completed.stdout)
-    assert result["setup_passed"] is True
-    assert result["setup_detail"] == ""
-    assert result["setup_functional_failed"] is False
-    assert [entry["stage"] for entry in result["setup_invocations"]] == [
-        "setup-save",
-        "setup-label-change",
-        "setup-label-change-query",
-        "setup-recall",
-        "setup-label-restore-query",
-    ]
-    assert result["slot_passed"] is True
-    assert result["slot_detail"] == ""
-    assert result["slot_functional_failed"] is False
-    assert [entry["stage"] for entry in result["slot_invocations"]] == [
-        "setup-slot-save",
-        "setup-slot-label-change",
-        "setup-slot-recall",
-        "setup-slot-label-query",
-    ]
-
-    captured_labels = result["captured_labels"]
-    assert captured_labels == ["live edit", "slot edit"]
-    capabilities = capabilities_for_model_id("keysight-dsox3024a")
-    assert [validate_channel_label(value, capabilities) for value in captured_labels] == (
-        captured_labels
-    )
-
-
-@pytest.mark.windows_powershell
-@pytest.mark.skipif(os.name != "nt", reason="requires Windows PowerShell")
 def test_baseline_waveform_amp_case_validates_artifacts_and_restores_unit(
     tmp_path: Path,
 ) -> None:
@@ -1306,27 +1068,7 @@ param([Parameter(Mandatory = $true)][string] $ScriptPath)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(
-    $ScriptPath, [ref] $tokens, [ref] $parseErrors
-)
-if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
-
-foreach ($functionName in @(
-    "ConvertTo-InvariantString", "Assert-NearlyEqual", "Assert-ScpiSent",
-    "Invoke-BaselineCase", "Restore-InstrumentState"
-)) {
-    $functionAst = $ast.Find({
-        param($node)
-        return (
-            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -eq $functionName
-        )
-    }, $true)
-    if ($null -eq $functionAst) { throw "Missing ${functionName}." }
-    Invoke-Expression $functionAst.Extent.Text
-}
+''' + extract_live_cli_functions_ps(('ConvertTo-InvariantString', 'Assert-NearlyEqual', 'Assert-ScpiSent', 'Invoke-BaselineCase', 'Restore-InstrumentState'), script_path) + r'''
 
 $script:Invocations = New-Object System.Collections.Generic.List[object]
 $script:DrainCalls = 0
@@ -1480,15 +1222,7 @@ $snapshot = [pscustomobject]@{
         WgenApplicable = $true
         MathFunctionCount = 4
         DemoSupported = $true
-        TriggerEdgeCoupling = "dc"
-    TriggerEdgeReject = "off"
-    TriggerSweep = "auto"
-    TriggerNoiseReject = $false
-    TriggerHfReject = $false
-    ExternalTriggerRange = 8.0
-    ExternalTriggerProbe = 1.0
-    ExternalTriggerUnits = "volts"
-    ExternalTriggerLevel = -0.25
+    TriggerSettingsCaptured = $false
         SaveImageFormat = "none"
         SavePwd = "\\Temp\\"
         SaveFilename = "scope"
@@ -1553,11 +1287,6 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
 
-    script_text = script_path.read_text(encoding="utf-8")
-    assert script_text.index('"image save format context"') < script_text.index(
-        'Invoke-BaselineCase -Name "setup-lifecycle"'
-    )
-
     proven_save_context = [
         "save-image-format",
         "save-image-factors",
@@ -1594,15 +1323,6 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         "math-display",
         "wgen-output",
         "demo-output",
-        "trigger-sweep",
-        "trigger-noise-reject",
-        "trigger-hf-reject",
-        "trigger-edge-coupling",
-        "trigger-edge-reject",
-        "external-trigger-range",
-        "external-trigger-probe",
-        "external-trigger-units",
-        "trigger-edge-external-level",
     ):
         assert command in commands
     annotation_restore = next(
@@ -1635,14 +1355,6 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     assert len(pwd_entries) == 1
     assert pwd_entries[0]["stage"] == "restore-save-pwd"
     assert pwd_entries[0]["arguments"] == ["--path", "\\usb"]
-    restore_start = script_text.index("function Restore-InstrumentState {")
-    restore_end = script_text.index(
-        "\nif ([string]::IsNullOrWhiteSpace($Resource))", restore_start
-    )
-    restore_body = script_text[restore_start:restore_end]
-    assert 'Command = "save-pwd"' in restore_body
-    assert '@("--path", "\\usb")' in restore_body
-    assert "SavePwd" not in restore_body
     assert any(
         entry["command"] == "trigger-edge-source"
         and entry["arguments"] == ["--source-channel", "2"]
@@ -1651,11 +1363,6 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     assert any(
         entry["command"] == "trigger-edge-slope"
         and entry["arguments"] == ["--slope", "negative"]
-        for entry in result["invocations"]
-    )
-    assert any(
-        entry["command"] == "trigger-edge-external-level"
-        and entry["arguments"] == ["--level-volts", "-0.25"]
         for entry in result["invocations"]
     )
     assert not any(
@@ -1687,18 +1394,6 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
     assert timebase_reference_restore["arguments"] == ["--reference", "center"]
     absent_commands = [entry["command"] for entry in result["absent_invocations"]]
     assert "wgen-output" not in absent_commands
-    for command in (
-        "trigger-sweep",
-        "trigger-noise-reject",
-        "trigger-hf-reject",
-        "trigger-edge-coupling",
-        "trigger-edge-reject",
-        "external-trigger-range",
-        "external-trigger-probe",
-        "external-trigger-units",
-        "trigger-edge-external-level",
-    ):
-        assert command in absent_commands
     assert not any(command.startswith("wgen-") for command in absent_commands)
     unknown_commands = [entry["command"] for entry in result["unknown_invocations"]]
     assert not any(command.startswith("wgen-") for command in unknown_commands)
@@ -1772,38 +1467,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(
-    $ScriptPath, [ref] $tokens, [ref] $parseErrors
-)
-if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
-
-foreach ($functionName in @(
-        "Get-PayloadErrorText",
-        "Get-TriggerDiagnosticText",
-        "Invoke-FixtureBaseline",
-        "Add-CaseResult",
-        "Add-Diagnostic",
-        "Invoke-Cli",
-        "Invoke-ModeCli",
-        "Invoke-LiveCli",
-        "Assert-ScpiSent",
-        "Assert-NearlyEqual",
-        "Assert-FileNonEmpty",
-        "Assert-Capture",
-        "Invoke-BaselineCase"
-    )) {
-    $functionAst = $ast.Find({
-        param($node)
-        return (
-            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -eq $functionName
-        )
-    }, $true)
-    if ($null -eq $functionAst) { throw "Missing production function ${functionName}." }
-    Invoke-Expression $functionAst.Extent.Text
-}
+""" + extract_live_cli_functions_ps(('Get-PayloadErrorText', 'Get-TriggerDiagnosticText', 'Invoke-FixtureBaseline', 'Add-CaseResult', 'Add-Diagnostic', 'Invoke-Cli', 'Invoke-ModeCli', 'Invoke-LiveCli', 'Assert-ScpiSent', 'Assert-NearlyEqual', 'Assert-FileNonEmpty', 'Assert-Capture', 'Invoke-BaselineCase'), script_path) + r"""
 
 $caseCommands = @($ast.FindAll({
     param($node)
@@ -2168,28 +1832,7 @@ param([Parameter(Mandatory = $true)][string] $ScriptPath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(
-    $ScriptPath, [ref] $tokens, [ref] $parseErrors
-)
-if ($parseErrors.Count -ne 0) { throw $parseErrors[0].Message }
-
-foreach ($functionName in @(
-    "Assert-ScpiSent", "Assert-NearlyEqual", "Invoke-BaselineCase",
-    "Add-CaseResult",
-    "Invoke-FixtureBaseline"
-)) {
-    $functionAst = $ast.Find({
-        param($node)
-        return (
-            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -eq $functionName
-        )
-    }, $true)
-    if ($null -eq $functionAst) { throw "Missing production function ${functionName}." }
-    Invoke-Expression $functionAst.Extent.Text
-}
+""" + extract_live_cli_functions_ps(('Assert-ScpiSent', 'Assert-NearlyEqual', 'Invoke-BaselineCase', 'Add-CaseResult', 'Invoke-FixtureBaseline'), script_path) + r"""
 
 $fixtureCommands = @($ast.FindAll({
     param($node)

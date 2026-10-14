@@ -55,3 +55,20 @@ Review tests by asking what regression each assertion detects and whether a
 less brittle assertion detects the same regression. Strict assertions are
 appropriate for public contracts and safety behavior. Assertions about prose,
 examples, and internal structure require a clear maintenance benefit.
+
+## Windows Live Validation Tests
+
+Core and CLI tests own model capabilities, command validation, SCPI generation,
+and JSON schemas. PowerShell tests own identity and confirmation gates, CLI
+process boundaries, snapshot and restoration, failure propagation, native
+versus normalized errors, and report privacy. Use representative runtime cases
+instead of checking source text or repeating equivalent model and transport
+combinations. Live trigger tests verify setter execution, main readbacks, and
+restoration with fake instruments; they do not establish hardware support.
+
+Mark PowerShell tests with `windows_powershell`. The smaller
+`windows_boundary_smoke` subset starts the selected Python CLI and checks
+arguments, JSON parsing, and nonzero exits. CI runs ordinary Windows Python
+tests on Python 3.10, 3.12, and 3.13, boundary smoke on 3.10 and 3.12, and the
+complete PowerShell validation suite on 3.13, including boundary smoke. The
+Linux Python matrix remains independent of these Windows tests.

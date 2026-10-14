@@ -91,7 +91,7 @@ def cases(report):
 
 @pytest.mark.windows_powershell
 @requires_powershell
-@pytest.mark.parametrize(("target", "connection"), PAIRS)
+@pytest.mark.parametrize(("target", "connection"), (PAIRS[0], PAIRS[1], PAIRS[-1]))
 def test_registered_model_transport_flow_and_restore(tmp_path: Path, target: str, connection: str) -> None:
     result, report, _ = fake_run(tmp_path, target, connection=connection)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -143,7 +143,7 @@ def test_registered_model_transport_flow_and_restore(tmp_path: Path, target: str
 
 @pytest.mark.windows_powershell
 @requires_powershell
-@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize("target", (TARGETS[0], TARGETS[-1]))
 def test_real_preflight_and_simulated_auto_never_open_hardware(tmp_path: Path, target: str) -> None:
     result, report, _ = fake_run(tmp_path, target, real_preflight=True, real_auto=True)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -183,7 +183,7 @@ def test_identity_mismatch_blocks_auto_and_prompt(tmp_path: Path, target: str) -
 
 @pytest.mark.windows_powershell
 @requires_powershell
-@pytest.mark.parametrize("scenario", ["fallback", "unmarked-fallback", "fallback-failure"])
+@pytest.mark.parametrize("scenario", ["fallback", "fallback-failure"])
 def test_fallback_cannot_pass_ch1(tmp_path: Path, scenario: str) -> None:
     result, report, _ = fake_run(tmp_path, scenario=scenario)
     assert cases(report)["auto-ch1"]["status"] != "PASS"
@@ -196,7 +196,7 @@ def test_fallback_cannot_pass_ch1(tmp_path: Path, scenario: str) -> None:
 
 @pytest.mark.windows_powershell
 @requires_powershell
-@pytest.mark.parametrize("scenario", ["auto-failure", "missing-scpi", "invalid-json", "dirty-status", "unterminated-queue"])
+@pytest.mark.parametrize("scenario", ["auto-failure", "dirty-status"])
 def test_auto_failures_attempt_restore_and_remain_failed(tmp_path: Path, scenario: str) -> None:
     result, report, _ = fake_run(tmp_path, scenario=scenario)
     assert result.returncode == 1
@@ -208,7 +208,7 @@ def test_auto_failures_attempt_restore_and_remain_failed(tmp_path: Path, scenari
 
 @pytest.mark.windows_powershell
 @requires_powershell
-@pytest.mark.parametrize("scenario", ["restore-failure", "readback-failure", "restore-status-failure"])
+@pytest.mark.parametrize("scenario", ["restore-failure", "readback-failure"])
 def test_restore_failure_is_visible_and_other_steps_continue(tmp_path: Path, scenario: str) -> None:
     result, report, _ = fake_run(tmp_path, scenario=scenario)
     assert result.returncode == 1
@@ -282,7 +282,7 @@ def test_non_edge_and_inactive_average_are_explicit_limits(tmp_path: Path) -> No
 
 @pytest.mark.windows_powershell
 @requires_powershell
-@pytest.mark.parametrize("target", TARGETS[4:])
+@pytest.mark.parametrize("target", TARGETS[4:5])
 def test_tektronix_native_error_is_failure_without_restore(tmp_path: Path, target: str) -> None:
     result, report, _ = fake_run(tmp_path, target, scenario="dirty-status")
     assert result.returncode == 1
@@ -351,22 +351,3 @@ def test_original_cli_rejects_removed_autoscale_option() -> None:
     assert result.returncode != 0
     assert "IncludeAutoscale" in re.sub(r"\s+", "", result.stderr)
     assert "Detected instrument:" not in result.stdout
-
-
-def test_original_cli_and_tektronix_have_no_auto_cases_or_warnings() -> None:
-    for name in ("live-cli-check.ps1", "_live_tektronix_helpers.ps1"):
-        text = (REPO_ROOT / "scripts" / name).read_text(encoding="utf-8")
-        assert "IncludeAutoscale" not in text
-        assert not re.search(r'(?i)(?:Command|Name)\s*(?:=\s*)?"autoscale"', text)
-        assert "Please Select" not in text
-
-
-def test_auto_script_reuses_existing_cli_and_privacy_without_bypass() -> None:
-    text = SCRIPT.read_text(encoding="utf-8")
-    assert "Get-LiveConnectionArguments" in text
-    assert "Assert-TargetModelMatch" in text
-    assert "Complete-LiveValidationRun" in text
-    assert "New-ShareableArtifactSet" not in text  # Shared finalizer owns privacy.
-    assert "Restore-InstrumentState" not in text
-    assert "ResourceManager" in text  # Comment describes the hardware-free parser.
-    assert not re.search(r"(?i)(?:\*RST|:SYSTem:PRESet|Command setup-recall|SkipConfirmation|ForceAuto)", text)

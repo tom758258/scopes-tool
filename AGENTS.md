@@ -78,6 +78,15 @@ planning, simple and surgical changes, and text-file hygiene.
 - Follow [Testing Guidelines](docs/testing-guidelines.md). Default tests must
   run without hardware; use simulators or fake instruments for command,
   validation, trigger-routing, and error-path coverage.
+- Prioritize tests that protect important system behavior, public contracts,
+  cross-layer integration, and safety boundaries. Test each contract primarily
+  at the most appropriate layer; avoid redundant coverage across Core, CLI,
+  PowerShell, and Workflow unless needed to verify integration.
+- Do not automatically add permanent regression tests for every minor bug fix.
+  Prefer improving or consolidating existing coverage, and avoid tests coupled
+  to internal function names, source text, incidental execution order, or
+  non-contractual wording. Keep test complexity and maintenance cost
+  proportional to the risk being protected.
 - Run pytest from the repository root. Run the narrowest relevant checks first,
   then broader no-hardware tests when practical.
 - Use `.tmp_tests/` for intentional test and validation artifacts.

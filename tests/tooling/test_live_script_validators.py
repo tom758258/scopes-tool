@@ -5,7 +5,9 @@ from pathlib import Path
 import subprocess
 
 import pytest
-from tests.tooling._live_script_test_support import REPO_ROOT, requires_windows
+from tests.tooling._live_script_test_support import (
+    REPO_ROOT, extract_live_cli_functions_ps, ps_quote, requires_windows,
+)
 
 
 VALIDATION_HELPERS_SCRIPT = REPO_ROOT / "scripts" / "_validation_helpers.ps1"
@@ -23,10 +25,6 @@ CANONICAL_TARGETS = (
     "keysight-dsox4024a",
     "keysight-dsox4034a",
 )
-
-
-def ps_quote(value):
-    return "'" + str(value).replace("'", "''") + "'"
 
 
 def run_live_cli_script(*args, timeout=180):
@@ -78,49 +76,6 @@ def run_live_cli_harness(body, timeout=180):
         check=False,
         timeout=timeout,
     )
-
-
-def extract_live_cli_functions_ps(names):
-    name_list = ", ".join(ps_quote(name) for name in names)
-    return """
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(
-    '@SCRIPT@',
-    [ref] $tokens,
-    [ref] $parseErrors
-)
-if ($parseErrors.Count -ne 0) {
-    throw "Failed to parse live script: $($parseErrors[0].Message)"
-}
-$functionSources = New-Object System.Collections.Generic.List[string]
-foreach ($functionName in @(@FUNCS@)) {
-    $functionAst = $ast.Find({
-        param($node)
-        return (
-            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-            $node.Name -eq $functionName
-        )
-    }, $true)
-    if ($null -eq $functionAst) {
-        throw "${functionName} was not found in the live script."
-    }
-    $functionSources.Add($functionAst.Extent.Text)
-}
-# Define through a temporary file so function bodies are file-backed, matching
-# how production loads them. Invoke-Expression compilation trips a PowerShell
-# 5.1 DLR array-binding bug for some bodies.
-$functionsFile = Join-Path $env:TEMP (
-    'live_cli_extracted_' + [guid]::NewGuid().ToString('N') + '.ps1'
-)
-[System.IO.File]::WriteAllLines(
-    $functionsFile,
-    $functionSources.ToArray(),
-    [System.Text.UTF8Encoding]::new($false)
-)
-. $functionsFile
-Remove-Item -LiteralPath $functionsFile -Force
-""".replace("@SCRIPT@", str(LIVE_CLI_SCRIPT)).replace("@FUNCS@", name_list)
 
 
 @pytest.mark.windows_powershell
@@ -457,23 +412,6 @@ def test_live_validators_enforce_canonical_target_contract(tmp_path, script_name
     assert "Unsupported backend '@unsupported'" in completed.stderr
 
 
-@pytest.mark.parametrize(("script_name", "domain"), LIVE_VALIDATOR_SCRIPTS)
-def test_live_validators_wire_shared_framework(script_name, domain):
-    text = (REPO_ROOT / "scripts" / script_name).read_text(encoding="utf-8")
-    for marker in (
-        "_validation_helpers.ps1",
-        "_artifact_privacy.ps1",
-        "Invoke-CapturedCommand ",
-        "New-ValidationRunDirectory -BaseRoot $outputBase",
-        "Assert-TargetModelMatch -Identity $identity -ResolvedTarget $script:Target",
-        f"Complete-LiveValidationRun -Kind 'scopes-tool-live-{domain}-check'",
-        "-DebugArtifacts:$DebugArtifacts",
-        "$script:HardwareTouched = $true",
-        "$script:Invocations.Add($invocationRecord) | Out-Null",
-    ):
-        assert marker in text, (script_name, marker)
-
-
 def _normalize_json_text(text):
     return (
         text.replace("\\u003c", "<")
@@ -666,7 +604,7 @@ $s2Files = @((Get-ChildItem -LiteralPath $script:RunDirectory -Recurse -File) |
 
 @pytest.mark.windows_powershell
 @requires_windows
-@pytest.mark.parametrize(("script_name", "domain"), (("live-cli-check.ps1", "cli"), *LIVE_VALIDATOR_SCRIPTS))
+@pytest.mark.parametrize(("script_name", "domain"), (("live-cli-check.ps1", "cli"),))
 @pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
 @pytest.mark.parametrize("result_status", ("PASS", "FAIL"))
 def test_live_artifact_retention_modes(tmp_path, script_name, domain, debug, result_status):
@@ -868,7 +806,7 @@ try {
 
 @pytest.mark.windows_powershell
 @requires_windows
-@pytest.mark.parametrize("failure", ("throw", "missing-report", "missing-summary", "empty-summary", "invalid-report", "private-report", "private-summary"))
+@pytest.mark.parametrize("failure", ("throw", "invalid-report", "private-report"))
 @pytest.mark.parametrize("debug", (False, True), ids=("minimal", "debug"))
 def test_live_artifact_generation_failure_retains_only_small_summary(tmp_path, failure, debug):
     body = extract_live_cli_functions_ps(("Write-Summary",)) + """
@@ -927,95 +865,6 @@ Complete-LiveValidationRun -Kind 'scopes-tool-live-cli-check' -Domain 'cli' -Res
     assert "unique raw evidence" not in summary
     assert "SYNTH12345" not in summary
     assert len(summary) < 4500
-
-
-LIVE_VALIDATOR_FINALIZATION_CASES = (
-    (
-        "live-dvm-check.ps1",
-        "scopes-tool-live-dvm-check",
-        "dvm",
-        "FAIL  DVM live validation",
-        "PASS  DVM live validation",
-    ),
-    (
-        "live-segmented-check.ps1",
-        "scopes-tool-live-segmented-check",
-        "segmented",
-        "FAIL  Segmented Memory live validation",
-        "PASS  Segmented Memory live validation",
-    ),
-    (
-        "live-serial-check.ps1",
-        "scopes-tool-live-serial-check",
-        "serial",
-        "FAIL  Serial live validation",
-        "PASS  Serial live validation",
-    ),
-    (
-        "live-workflow-check.ps1",
-        "scopes-tool-live-workflow-check",
-        "workflow",
-        "FAIL  Workflow live validation",
-        "PASS  Workflow live validation",
-    ),
-)
-
-
-def _extract_balanced_block(text: str, start_marker: str) -> str:
-    start = text.index(start_marker)
-    depth = 0
-    for i in range(start, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-    raise AssertionError("unbalanced braces")
-
-
-@pytest.mark.parametrize(
-    ("script_name", "kind", "domain", "fail_label", "pass_label"),
-    LIVE_VALIDATOR_FINALIZATION_CASES,
-)
-def test_live_validator_finalization_control_flow(
-    script_name, kind, domain, fail_label, pass_label
-):
-    text = (REPO_ROOT / "scripts" / script_name).read_text(encoding="utf-8")
-
-    # Migration template placeholders must never reach production output.
-    assert "@DOMAIN@" not in text
-    assert "@OUTPUTROOT@" not in text
-
-    fail_block = _extract_balanced_block(text, "if ($script:FunctionalFailed) {")
-    fail_finalize = (
-        "Complete-LiveValidationRun -Kind '{kind}' "
-        "-Domain '{domain}' -Result \"FAIL\""
-    ).format(kind=kind, domain=domain)
-    assert fail_block.count(fail_finalize) == 1
-    # The FAIL path always terminates: no fall-through into SKIP/PASS
-    # finalization regardless of shareable generation outcome.
-    assert fail_block.rstrip().endswith("exit 1\n}")
-
-    block_end = text.index(fail_block) + len(fail_block)
-    tail_after_fail = text[block_end:]
-
-    # Exactly one PASS finalization follows, and no stray FAIL finalize.
-    pass_finalize = (
-        "Complete-LiveValidationRun -Kind '{kind}' "
-        "-Domain '{domain}' -Result \"PASS\""
-    ).format(kind=kind, domain=domain)
-    assert tail_after_fail.count(pass_finalize) == 1
-    assert '-Result "FAIL"' not in tail_after_fail
-
-    # Success contract: PASS finalization, then console PASS, then exit 0;
-    # a shareable failure downgrades it to FAIL with exit 1.
-    pass_tail = tail_after_fail[tail_after_fail.index(pass_finalize) :]
-    assert "$script:ShareableGenerationFailed) {" in pass_tail
-    assert pass_tail.index('Write-Host "%s"' % pass_label) > pass_tail.index(
-        "if ($script:ShareableGenerationFailed)"
-    )
-    assert pass_tail.rstrip().endswith('Write-Host "%s"\nexit 0' % pass_label)
 
 
 @pytest.mark.windows_powershell

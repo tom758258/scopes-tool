@@ -46,8 +46,30 @@ function Invoke-FakeTransport {
         $property.Value.mode = $Options[[Array]::IndexOf($Options, "--mode") + 1]
         $property.Value.raw_mode = $property.Value.mode
     }
+    if ($Command -in @("trigger-pulse-width", "trigger-runt", "trigger-tv") -and $Options -notcontains "--query") {
+        $mode = @{ "trigger-pulse-width" = "glitch"; "trigger-runt" = "runt"; "trigger-tv" = "tv" }[$Command]
+        $scenario.values.'trigger-mode'.mode = $mode
+        $property.Value.mode = $mode
+        $mapping = @{
+            "--channel" = "channel"; "--source-channel" = "source_channel";
+            "--polarity" = "polarity"; "--qualifier" = "qualifier";
+            "--level-volts" = "level_volts"; "--low-level-volts" = "low_level_volts";
+            "--high-level-volts" = "high_level_volts"; "--time-seconds" = "greater_than_seconds";
+            "--standard" = "standard"; "--mode" = "tv_mode"
+        }
+        foreach ($option in $mapping.Keys) {
+            if ($Options -contains $option) {
+                $value = $Options[[Array]::IndexOf($Options, $option) + 1]
+                if ($option -match 'channel|volts|seconds') { $value = [double]$value }
+                $property.Value | Add-Member -Force -NotePropertyName $mapping[$option] -NotePropertyValue $value
+            }
+        }
+    }
+    if ($Command -eq "trigger-edge" -and $Options -notcontains "--query") {
+        $scenario.values.'trigger-mode'.mode = "edge"
+    }
     # Model the fixed fixture writes so later queries observe the new baseline.
-    if ($Stage -in @("fixture-display", "fixture-scale", "fixture-acquisition", "fixture-trigger")) {
+    if ($Stage -in @("fixture-display", "fixture-scale", "fixture-acquisition", "fixture-trigger") -or ($Command -eq "trigger-edge" -and $Stage.EndsWith("-edge-reset"))) {
         switch ($Command) {
             "channel-display" { $property.Value.display = $true }
             "channel-scale" { $property.Value.volts_per_division = 2.0 }

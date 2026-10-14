@@ -50,6 +50,7 @@ testpaths = ["tests"]
 addopts = ["-p", "no:cacheprovider"]
 markers = [
   "hardware: opt-in tests that require a real oscilloscope",
+  "windows_boundary_smoke: PowerShell starts the selected Python CLI and preserves arguments, JSON, and failures",
   "windows_powershell: PowerShell Live, Preflight, and wrapper contracts run in Windows validation CI",
 ]
 pythonpath = ["src"]

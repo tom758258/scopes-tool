@@ -164,17 +164,15 @@ jobs:
         run: >-
           .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and not windows_powershell" --basetemp .tmp_tests/ci-py${{ matrix.python-version }}
 
-  pytest-windows-validation:
-    name: Windows validation scripts Python ${{ matrix.python-version }}
-    runs-on: windows-latest
+      - name: Run PowerShell Python boundary smoke
+        if: matrix.python-version != '3.13'
+        run: >-
+          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_boundary_smoke"
+          --basetemp .tmp_tests/ci-windows-boundary-py${{ matrix.python-version }}
 
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version:
-          - "3.10"
-          - "3.12"
-          - "3.13"
+  pytest-windows-validation:
+    name: Windows validation scripts Python 3.13
+    runs-on: windows-latest
 
     steps:
       - name: Check out repository
@@ -183,13 +181,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.13"
 
       - name: Install uv
         run: python -m pip install --upgrade uv
 
       - name: Install packages
-        run: uv sync --python ${{ matrix.python-version }} --all-extras --locked --link-mode=copy
+        run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
 
       - name: Prepare pytest temp root
         run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
@@ -197,4 +195,4 @@ jobs:
       - name: Run Windows validation tests
         run: >-
           .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_powershell"
-          --basetemp .tmp_tests/ci-windows-validation-py${{ matrix.python-version }}
+          --basetemp .tmp_tests/ci-windows-validation-py3.13

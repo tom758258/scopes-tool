@@ -428,6 +428,50 @@ print(json.dumps({
         Add-Case $Name "PASS" "query, same-value set, and readback"
     }
 
+    function Invoke-SpecialTriggerCase {
+        param([string]$Name, [string[]]$Options, [hashtable]$Expected)
+        $errors = New-Object System.Collections.Generic.List[string]
+        $restored = $false
+        try {
+            $null = Invoke-Cli -Stage "$Name-set" -Command $Name -Options $Options
+            $after = Invoke-Cli -Stage "$Name-query" -Command $Name -Options @("--query")
+            foreach ($field in $Expected.Keys) {
+                Assert-ReadbackEqual $Expected[$field] (Get-Readback $after $field) $Name $field
+            }
+            $mode = Invoke-Cli -Stage "$Name-mode-query" -Command "trigger-mode" -Options @("--query")
+            Assert-ReadbackEqual $Expected.mode (Get-Readback $mode "mode") "trigger-mode" "mode"
+        } catch {
+            $errors.Add($_.Exception.Message)
+        } finally {
+            try {
+                $event = Invoke-Cli -Stage "$Name-status" -Command "system-standard-event" -Options @("--query")
+                $bits = Get-TektronixStandardEventValue -Payload $event
+                if (($bits -band 60) -ne 0) { throw "Native SESR error bits set: $bits" }
+            } catch { $errors.Add($_.Exception.Message) }
+            try {
+                $null = Invoke-Cli -Stage "$Name-edge-reset" -Command "trigger-edge" -Options @(
+                    "--source-channel", "1", "--level", "1", "--slope", "positive"
+                )
+                $edge = Invoke-Cli -Stage "$Name-edge-query" -Command "trigger-edge" -Options @("--query")
+                Assert-ReadbackEqual 1 (Get-Readback $edge "source_channel") "trigger-edge" "source_channel"
+                Assert-ReadbackEqual 1.0 (Get-Readback $edge "level_volts") "trigger-edge" "level_volts"
+                Assert-ReadbackEqual "positive" (Get-Readback $edge "slope") "trigger-edge" "slope"
+                $mode = Invoke-Cli -Stage "$Name-edge-mode-query" -Command "trigger-mode" -Options @("--query")
+                Assert-ReadbackEqual "edge" (Get-Readback $mode "mode") "trigger-mode" "mode"
+                $event = Invoke-Cli -Stage "$Name-edge-status" -Command "system-standard-event" -Options @("--query")
+                $bits = Get-TektronixStandardEventValue -Payload $event
+                if (($bits -band 60) -ne 0) { throw "Native SESR error bits set after Edge reset: $bits" }
+                $restored = $true
+            } catch { $errors.Add("Edge fixture restoration failed: $($_.Exception.Message)") }
+        }
+        if ($errors.Count -eq 0) {
+            Add-Case $Name "PASS" "set, mode/settings readback, native status, and Edge fixture restoration"
+        } else {
+            Add-Case $Name "FAIL" ($errors -join "; ")
+            if (-not $restored) { throw "Edge fixture unavailable; stopping functional validation." }
+        }
+    }
+
     function Format-Setting {
         param($Value)
         if ($Value -is [bool]) { return $Value.ToString().ToLowerInvariant() }
@@ -482,7 +526,8 @@ print(json.dumps({
             "Actively set and verify the fixed CH1 fixture; fixture failure stops functional validation.",
             "Query the current channel, timebase, acquisition, and trigger settings.",
             "Perform supported same-value setters, read each value back, then attempt to restore the original value.",
-            "Report a case as N/A when the model or the current instrument state is outside the supported subset, instead of changing state to force a result."
+            "Configure supported Pulse Width and Runt/TV triggers, verify settings and native status, then restore the Edge fixture.",
+            "Other cases are N/A when the model or current instrument state is outside their supported subset."
         )
 
         $cleanupLimitations = [System.Collections.Generic.List[string]]@(
@@ -763,46 +808,19 @@ print(json.dumps({
                 }
             } catch { Add-Case "trigger-edge" "FAIL" $_.Exception.Message }
 
-            $specialTrigger = if ($script:Target -eq "tektronix-tbs2074") { "trigger-runt" } else { "trigger-tv" }
-            $specialMode = if ($specialTrigger -eq "trigger-runt") { "runt" } else { "tv" }
-            $unsupportedSpecialTrigger = if ($specialTrigger -eq "trigger-runt") { "trigger-tv" } else { "trigger-runt" }
-            Add-UnsupportedOperationCase $unsupportedSpecialTrigger
-            try {
-                $before = Invoke-Cli -Stage "$specialTrigger-query" -Command $specialTrigger -Options @("--query")
-                Add-Case "$specialTrigger-query" "PASS"
-                if ($triggerMode -ne $specialMode -or $before.result.mode -ne $specialMode) {
-                    Add-Case $specialTrigger $triggerBlockedStatus "Current trigger type is not $specialMode; no setter executed"
-                } elseif ($specialMode -eq "runt") {
-                    $state = $before.result
-                    if ($state.channel -notin @(1, 2, 3, 4) -or $state.polarity -notin @("positive", "negative") -or
-                        $state.qualifier -notin @("none", "less-than", "greater-than") -or
-                        $null -eq $state.low_level_volts -or $null -eq $state.high_level_volts -or
-                        $state.low_level_volts -ge $state.high_level_volts -or
-                        ($state.qualifier -ne "none" -and ($null -eq $state.time_seconds -or $state.time_seconds -le 0))) {
-                        Add-Case $specialTrigger "N/A" "Current runt settings are outside the public setter subset"
-                    } else {
-                        $fields = @("channel", "polarity", "qualifier", "low_level_volts", "high_level_volts", "mode")
-                        if ($null -ne $state.time_seconds) { $fields += "time_seconds" }
-                        $options = @("--channel", "$($state.channel)", "--polarity", $state.polarity,
-                            "--qualifier", $state.qualifier, "--low-level-volts", (Format-Setting $state.low_level_volts),
-                            "--high-level-volts", (Format-Setting $state.high_level_volts))
-                        if ($state.qualifier -ne "none") { $options += @("--time-seconds", (Format-Setting $state.time_seconds)) }
-                        Invoke-SameValueCase $specialTrigger $specialTrigger $before $options $fields
-                    }
-                } else {
-                    $state = $before.result
-                    if ($null -eq $state.source_channel -or $state.standard -notin @("ntsc", "pal") -or
-                        $state.tv_mode -notin @("field1", "field2", "all-fields", "all-lines") -or
-                        $state.polarity -notin @("positive", "negative")) {
-                        Add-Case $specialTrigger "N/A" "Current TV settings are outside the public setter subset"
-                    } else {
-                        Invoke-SameValueCase $specialTrigger $specialTrigger $before @(
-                            "--source-channel", "$($state.source_channel)", "--standard", $state.standard,
-                            "--mode", $state.tv_mode, "--polarity", $state.polarity
-                        ) @("source_channel", "standard", "tv_mode", "polarity", "mode")
-                    }
-                }
-            } catch { Add-Case $specialTrigger "FAIL" $_.Exception.Message }
+            if ($script:Target -eq "tektronix-tbs2074") {
+                Add-UnsupportedOperationCase "trigger-tv"
+                Invoke-SpecialTriggerCase "trigger-runt" @(
+                    "--channel", "1", "--polarity", "positive", "--qualifier", "none",
+                    "--low-level-volts", "0.5", "--high-level-volts", "1.5"
+                ) @{ mode = "runt"; channel = 1; polarity = "positive"; qualifier = "none";
+                     low_level_volts = 0.5; high_level_volts = 1.5 }
+            } else {
+                Add-UnsupportedOperationCase "trigger-runt"
+                Invoke-SpecialTriggerCase "trigger-tv" @(
+                    "--source-channel", "1", "--standard", "ntsc", "--mode", "all-lines", "--polarity", "positive"
+                ) @{ mode = "tv"; source_channel = 1; standard = "ntsc"; tv_mode = "all-lines"; polarity = "positive" }
+            }
 
             Invoke-RoundTrip "math-display" "math-display" @("--function", "1") "enabled" "--on"
             try {
@@ -841,23 +859,11 @@ print(json.dumps({
                     Add-Case "reference-query" "PASS"
                 } catch { Add-Case "reference-query" "FAIL" $_.Exception.Message }
             } else { Add-UnsupportedOperationCase "reference-query" }
-            if ($triggerMode -eq "glitch") {
-                try {
-                    $before = Invoke-Cli -Stage "trigger-pulse-width-before" -Command "trigger-pulse-width" -Options @("--query")
-                    $state = $before.result
-                    $field = if ($state.qualifier -eq "less-than") { "less_than_seconds" } else { "greater_than_seconds" }
-                    if ($state.qualifier -notin @("less-than", "greater-than") -or $null -eq $state.channel -or
-                        $state.polarity -notin @("positive", "negative") -or $null -eq $state.$field -or $state.$field -le 0) {
-                        Add-Case "trigger-pulse-width" "N/A" "Current pulse settings are outside the public subset; no setter executed"
-                    } else {
-                        Invoke-SameValueCase "trigger-pulse-width" "trigger-pulse-width" $before @(
-                            "--channel", "$($state.channel)", "--polarity", $state.polarity,
-                            "--qualifier", $state.qualifier, "--time-seconds", (Format-Setting $state.$field),
-                            "--level-volts", (Format-Setting $state.level_volts)
-                        ) @("channel", "polarity", "qualifier", $field, "level_volts", "mode")
-                    }
-                } catch { Add-Case "trigger-pulse-width" "FAIL" $_.Exception.Message }
-            } else { Add-Case "trigger-pulse-width" "N/A" "Current trigger type is not glitch; no setter executed" }
+            Invoke-SpecialTriggerCase "trigger-pulse-width" @(
+                "--channel", "1", "--polarity", "positive", "--qualifier", "greater-than",
+                "--time-seconds", "0.000001", "--level-volts", "1"
+            ) @{ mode = "glitch"; channel = 1; polarity = "positive"; qualifier = "greater-than";
+                 greater_than_seconds = 1e-6; level_volts = 1.0 }
             $captureAttempted = $false
             try {
                 $display = Invoke-Cli -Stage "primitive-source-display" -Command "channel-display" -Options @("--channel", "1", "--query")

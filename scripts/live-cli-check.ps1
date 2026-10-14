@@ -1271,11 +1271,29 @@ function Invoke-BaselineCase {
         [string] $Name,
 
         [Parameter(Mandatory = $true)]
-        [scriptblock] $Action
+        [scriptblock] $Action,
+
+        [switch] $RestoreEdge
     )
 
     try {
-        & $Action
+        $primaryError = $null
+        try {
+            & $Action
+        } catch {
+            $primaryError = $_.Exception.Message
+            throw
+        } finally {
+            if ($RestoreEdge) {
+                try {
+                    Restore-EdgeTriggerBaseline -LevelVolts 1.0 -Stage "${Name}-edge-reset"
+                } catch {
+                    $restoreError = "Edge fixture restoration failed: $($_.Exception.Message)"
+                    if ($null -ne $primaryError) { throw "$primaryError; $restoreError" }
+                    throw $restoreError
+                }
+            }
+        }
         Add-CaseResult -Name $Name -Passed $true
     } catch {
         $script:FunctionalFailed = $true
@@ -1324,6 +1342,11 @@ function Restore-EdgeTriggerBaseline {
         -Command "trigger-edge-source" -Arguments @("--query")
     $slope = Invoke-LiveCli -Stage "${Stage}-slope-query" `
         -Command "trigger-edge-slope" -Arguments @("--query")
+    $mode = Invoke-LiveCli -Stage "${Stage}-mode-query" -Command "trigger-mode" -Arguments @("--query")
+    $level = Invoke-LiveCli -Stage "${Stage}-level-query" -Command "trigger-edge-level" `
+        -Arguments @("--source-channel", "1", "--query")
+    if ([string]$mode.result.mode -ne "edge") { throw "Edge trigger reset mode is invalid." }
+    Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $level.result.level_volts -Label "Edge trigger reset level") -Expected $LevelVolts -Label "Edge trigger reset level"
     if ([string]$source.result.source -ne "analog-channel" -or
         [int]$source.result.source_channel -ne 1 -or
         [string]$slope.result.slope -ne "positive") {
@@ -1893,8 +1916,8 @@ function Restore-InstrumentState {
             Arguments = @("--enabled", "false")
         }
     }
-    $is4000XSeriesProperty = $Snapshot.PSObject.Properties["Is4000XSeries"]
-    if ($null -ne $is4000XSeriesProperty -and [bool]$is4000XSeriesProperty.Value) {
+    $triggerSettingsCaptured = $Snapshot.PSObject.Properties["TriggerSettingsCaptured"]
+    if ($null -ne $triggerSettingsCaptured -and [bool]$triggerSettingsCaptured.Value) {
         $restoreSteps += @(
             [pscustomobject]@{
                 Name = "trigger sweep"
@@ -2026,6 +2049,26 @@ function Restore-InstrumentState {
 
     if ($restoreErrors.Count -eq 0) {
         try {
+            if ($null -ne $triggerSettingsCaptured -and [bool]$triggerSettingsCaptured.Value) {
+                $coupling = Invoke-LiveCli -Stage "restore-trigger-edge-coupling-query" -Command "trigger-edge-coupling" -Arguments @("--query")
+                $reject = Invoke-LiveCli -Stage "restore-trigger-edge-reject-query" -Command "trigger-edge-reject" -Arguments @("--query")
+                $sweep = Invoke-LiveCli -Stage "restore-trigger-sweep-query" -Command "trigger-sweep" -Arguments @("--query")
+                $noise = Invoke-LiveCli -Stage "restore-trigger-noise-query" -Command "trigger-noise-reject" -Arguments @("--query")
+                $hf = Invoke-LiveCli -Stage "restore-trigger-hf-query" -Command "trigger-hf-reject" -Arguments @("--query")
+                if ($coupling.result.coupling -ne $Snapshot.TriggerEdgeCoupling -or
+                    $reject.result.reject -ne $Snapshot.TriggerEdgeReject -or
+                    $sweep.result.mode -ne $Snapshot.TriggerSweep -or
+                    $noise.result.enabled -cne $Snapshot.TriggerNoiseReject -or
+                    $hf.result.enabled -cne $Snapshot.TriggerHfReject) {
+                    throw "Restored common trigger settings do not match the snapshot."
+                }
+                $external = Invoke-LiveCli -Stage "restore-external-trigger-query" -Command "external-trigger-settings" -Arguments @("--query")
+                $level = Invoke-LiveCli -Stage "restore-external-trigger-level-query" -Command "trigger-edge-external-level" -Arguments @("--query")
+                Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $external.result.range_value -Label "Restored external range") -Expected $Snapshot.ExternalTriggerRange -Label "Restored external range"
+                Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $external.result.probe_attenuation -Label "Restored external probe") -Expected $Snapshot.ExternalTriggerProbe -Label "Restored external probe"
+                Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $level.result.level_volts -Label "Restored external level") -Expected $Snapshot.ExternalTriggerLevel -Label "Restored external level"
+                if ($external.result.units -ne $Snapshot.ExternalTriggerUnits) { throw "Restored external units differ." }
+            }
             $summary = Invoke-LiveCli -Stage "restore-channel-summary-query" `
                 -Command "channel-summary"
             $channel = @($summary.result.channels)[0]
@@ -2407,6 +2450,7 @@ try {
     $is2000XSeries = [string]$identity.idn.series -eq "2000X"
     $is3000XSeries = [string]$identity.idn.series -eq "3000X"
     $is4000XSeries = [string]$identity.idn.series -eq "4000X"
+    $triggerSettingsApplicable = [string]$identity.capabilities.series -in @("2000X", "3000X", "4000X")
     $triggerEdgeCoupling = $null
     $triggerEdgeReject = $null
     $triggerSweep = $null
@@ -2433,7 +2477,7 @@ try {
     $saveWaveformLengthMax = Invoke-LiveCli `
         -Stage "snapshot-save-waveform-length-max" `
         -Command "save-waveform-length-max" -Arguments @("--query")
-    if ($is4000XSeries) {
+    if ($triggerSettingsApplicable) {
         $triggerEdgeCoupling = Invoke-LiveCli -Stage "snapshot-trigger-edge-coupling" `
             -Command "trigger-edge-coupling" -Arguments @("--query")
         $triggerEdgeReject = Invoke-LiveCli -Stage "snapshot-trigger-edge-reject" `
@@ -2520,6 +2564,7 @@ try {
         TriggerHoldoffSeconds = Assert-FiniteNumber `
             -Value $triggerHoldoff.result.seconds -Label "Trigger holdoff"
         Is4000XSeries = $is4000XSeries
+        TriggerSettingsCaptured = $triggerSettingsApplicable
         MathEnhancementsInstalled = $false
         AdvancedMathInstalled = $false
         InstalledOptions = @()
@@ -4348,7 +4393,7 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
         Invoke-BaselineCase -Name "trigger-edge-settings" -Action {
             $couplingSet = Invoke-LiveCli -Stage "trigger-edge-coupling-set" `
                 -Command "trigger-edge-coupling" `
@@ -4371,7 +4416,7 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
         Invoke-BaselineCase -Name "trigger-common" -Action {
             $sweepSet = Invoke-LiveCli -Stage "trigger-sweep-set" -Command "trigger-sweep" `
                 -Arguments @("--mode", [string]$snapshot.TriggerSweep)
@@ -4403,7 +4448,7 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
         Invoke-BaselineCase -Name "trigger-external" -Action {
             $rangeSet = Invoke-LiveCli -Stage "external-trigger-range-set" `
                 -Command "external-trigger-range" -Arguments @(
@@ -4458,8 +4503,8 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "trigger-pulse-width" -Action {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
+        Invoke-BaselineCase -Name "trigger-pulse-width" -RestoreEdge -Action {
             $configured = Invoke-LiveCli -Stage "trigger-pulse-width-set" `
                 -Command "trigger-pulse-width" -Arguments @(
                     "--channel", "1", "--polarity", "positive", "--qualifier", "greater-than",
@@ -4473,16 +4518,20 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 -Command "trigger-pulse-width" -Arguments @("--query")
             if ([string]$readback.result.mode -ne "glitch" -or
                 [int]$readback.result.channel -ne 1 -or
+                [string]$readback.result.polarity -ne "positive" -or
                 [string]$readback.result.qualifier -ne "greater-than") {
                 throw "Pulse-width trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
-                -Stage "trigger-pulse-width-edge-reset"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.greater_than_seconds -Label "pulse-width greater_than_seconds") -Expected 1e-06 -Label "pulse-width greater_than_seconds"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.level_volts -Label "pulse-width level_volts") -Expected 0 -Label "pulse-width level_volts"
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "trigger-runt" -Action {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured -and
+        $is2000XSeries -and -not $snapshot.MathEnhancementsInstalled) {
+        Add-NotApplicableCase -Name "trigger-runt" -Detail "This trigger requires the PLUS option on 2000X; PLUS is not installed."
+    } elseif (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
+        Invoke-BaselineCase -Name "trigger-runt" -RestoreEdge -Action {
             $configured = Invoke-LiveCli -Stage "trigger-runt-set" -Command "trigger-runt" `
                 -Arguments @(
                     "--channel", "1", "--polarity", "positive", "--qualifier", "none",
@@ -4496,16 +4545,20 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 -Command "trigger-runt" -Arguments @("--query")
             if ([string]$readback.result.mode -ne "runt" -or
                 [int]$readback.result.channel -ne 1 -or
+                [string]$readback.result.qualifier -ne "none" -or
                 [string]$readback.result.polarity -ne "positive") {
                 throw "Runt trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
-                -Stage "trigger-runt-edge-reset"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.low_level_volts -Label "runt low_level_volts") -Expected -0.5 -Label "runt low_level_volts"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.high_level_volts -Label "runt high_level_volts") -Expected 0.5 -Label "runt high_level_volts"
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "trigger-transition" -Action {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured -and
+        $is2000XSeries -and -not $snapshot.MathEnhancementsInstalled) {
+        Add-NotApplicableCase -Name "trigger-transition" -Detail "This trigger requires the PLUS option on 2000X; PLUS is not installed."
+    } elseif (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
+        Invoke-BaselineCase -Name "trigger-transition" -RestoreEdge -Action {
             $configured = Invoke-LiveCli -Stage "trigger-transition-set" `
                 -Command "trigger-transition" -Arguments @(
                     "--channel", "1", "--slope", "positive", "--qualifier", "greater-than",
@@ -4520,16 +4573,21 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 -Command "trigger-transition" -Arguments @("--query")
             if ([string]$readback.result.mode -ne "transition" -or
                 [int]$readback.result.channel -ne 1 -or
+                [string]$readback.result.qualifier -ne "greater-than" -or
                 [string]$readback.result.slope -ne "positive") {
                 throw "Transition trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
-                -Stage "trigger-transition-edge-reset"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.time_seconds -Label "transition time_seconds") -Expected 1e-06 -Label "transition time_seconds"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.low_level_volts -Label "transition low_level_volts") -Expected -0.5 -Label "transition low_level_volts"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.high_level_volts -Label "transition high_level_volts") -Expected 0.5 -Label "transition high_level_volts"
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "trigger-delay" -Action {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured -and
+        $is2000XSeries -and -not $snapshot.MathEnhancementsInstalled) {
+        Add-NotApplicableCase -Name "trigger-delay" -Detail "This trigger requires the PLUS option on 2000X; PLUS is not installed."
+    } elseif (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
+        Invoke-BaselineCase -Name "trigger-delay" -RestoreEdge -Action {
             $configured = Invoke-LiveCli -Stage "trigger-delay-set" -Command "trigger-delay" `
                 -Arguments @(
                     "--arm-channel", "1", "--arm-slope", "positive",
@@ -4545,16 +4603,20 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
             if ([string]$readback.result.mode -ne "delay" -or
                 [int]$readback.result.arm_channel -ne 1 -or
                 [int]$readback.result.trigger_channel -ne 2 -or
+                [string]$readback.result.arm_slope -ne "positive" -or
+                [string]$readback.result.trigger_slope -ne "positive" -or
                 [int]$readback.result.count -ne 2) {
                 throw "Delay trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
-                -Stage "trigger-delay-edge-reset"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.time_seconds -Label "delay time_seconds") -Expected 1e-06 -Label "delay time_seconds"
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "trigger-setup-hold" -Action {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured -and
+        $is2000XSeries -and -not $snapshot.MathEnhancementsInstalled) {
+        Add-NotApplicableCase -Name "trigger-setup-hold" -Detail "This trigger requires the PLUS option on 2000X; PLUS is not installed."
+    } elseif (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
+        Invoke-BaselineCase -Name "trigger-setup-hold" -RestoreEdge -Action {
             $configured = Invoke-LiveCli -Stage "trigger-setup-hold-set" -Command "trigger-setup-hold" `
                 -Arguments @(
                     "--clock-channel", "1", "--data-channel", "2", "--slope", "positive",
@@ -4568,16 +4630,20 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 -Command "trigger-setup-hold" -Arguments @("--query")
             if ([string]$readback.result.mode -ne "setup-hold" -or
                 [int]$readback.result.clock_channel -ne 1 -or
+                [string]$readback.result.slope -ne "positive" -or
                 [int]$readback.result.data_channel -ne 2) {
                 throw "Setup/hold trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
-                -Stage "trigger-setup-hold-edge-reset"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.setup_time_seconds -Label "setup-hold setup_time_seconds") -Expected 1e-09 -Label "setup-hold setup_time_seconds"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.hold_time_seconds -Label "setup-hold hold_time_seconds") -Expected 1e-09 -Label "setup-hold hold_time_seconds"
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "trigger-edge-burst" -Action {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured -and
+        $is2000XSeries -and -not $snapshot.MathEnhancementsInstalled) {
+        Add-NotApplicableCase -Name "trigger-edge-burst" -Detail "This trigger requires the PLUS option on 2000X; PLUS is not installed."
+    } elseif (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
+        Invoke-BaselineCase -Name "trigger-edge-burst" -RestoreEdge -Action {
             $configured = Invoke-LiveCli -Stage "trigger-edge-burst-set" `
                 -Command "trigger-edge-burst" -Arguments @(
                     "--source-channel", "1", "--slope", "positive", "--count", "2",
@@ -4591,16 +4657,20 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 -Command "trigger-edge-burst" -Arguments @("--query")
             if ([string]$readback.result.mode -ne "edge-burst" -or
                 [int]$readback.result.source_channel -ne 1 -or
+                [string]$readback.result.slope -ne "positive" -or
                 [int]$readback.result.count -ne 2) {
                 throw "Nth Edge Burst trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
-                -Stage "trigger-edge-burst-edge-reset"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.idle_time -Label "edge-burst idle_time") -Expected 1e-06 -Label "edge-burst idle_time"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.level_volts -Label "edge-burst level_volts") -Expected 0 -Label "edge-burst level_volts"
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "trigger-tv" -Action {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured -and
+        $is2000XSeries -and -not $snapshot.MathEnhancementsInstalled) {
+        Add-NotApplicableCase -Name "trigger-tv" -Detail "This trigger requires the PLUS option on 2000X; PLUS is not installed."
+    } elseif (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
+        Invoke-BaselineCase -Name "trigger-tv" -RestoreEdge -Action {
             $configured = Invoke-LiveCli -Stage "trigger-tv-set" -Command "trigger-tv" `
                 -Arguments @(
                     "--source-channel", "1", "--standard", "ntsc",
@@ -4615,16 +4685,15 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
             if ([string]$readback.result.mode -ne "tv" -or
                 [int]$readback.result.source_channel -ne 1 -or
                 [string]$readback.result.standard -ne "ntsc" -or
+                [string]$readback.result.polarity -ne "positive" -or
                 [string]$readback.result.tv_mode -ne "all-lines") {
                 throw "TV trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
-                -Stage "trigger-tv-edge-reset"
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "trigger-pattern" -Action {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
+        Invoke-BaselineCase -Name "trigger-pattern" -RestoreEdge -Action {
             $configured = Invoke-LiveCli -Stage "trigger-pattern-set" `
                 -Command "trigger-pattern" -Arguments @("--pattern", "XXX1")
             Assert-ScpiSent -Payload $configured -Label "Pattern trigger mode" `
@@ -4637,13 +4706,14 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 [string]$readback.result.pattern -ne "XXX1") {
                 throw "Pattern trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
-                -Stage "trigger-pattern-edge-reset"
         }
     }
 
-    if (-not $script:FunctionalFailed -and $snapshot.Is4000XSeries) {
-        Invoke-BaselineCase -Name "trigger-or" -Action {
+    if (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured -and
+        $is2000XSeries -and -not $snapshot.MathEnhancementsInstalled) {
+        Add-NotApplicableCase -Name "trigger-or" -Detail "This trigger requires the PLUS option on 2000X; PLUS is not installed."
+    } elseif (-not $script:FunctionalFailed -and $snapshot.TriggerSettingsCaptured) {
+        Invoke-BaselineCase -Name "trigger-or" -RestoreEdge -Action {
             $configured = Invoke-LiveCli -Stage "trigger-or-set" `
                 -Command "trigger-or" -Arguments @("--pattern", "XXXR")
             Assert-ScpiSent -Payload $configured -Label "OR trigger mode" `
@@ -4656,8 +4726,6 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 [string]$readback.result.pattern -ne "XXXR") {
                 throw "OR trigger readback is invalid."
             }
-            Restore-EdgeTriggerBaseline -LevelVolts 1.0 `
-                -Stage "trigger-or-edge-reset"
         }
     }
 
