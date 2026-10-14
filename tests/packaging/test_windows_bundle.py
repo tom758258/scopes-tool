@@ -73,6 +73,11 @@ def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monk
     hooks.collect_data_files.assert_called_once_with("scopes_tool_webui", includes=["static/*"])
     for item in analyses[1:]:
         assert ("index.html", "scopes_tool_webui/static") in item.datas
+    icon_data = (str(ROOT / "desktop" / "assets" / "scopes-icon.ico"), "desktop/assets")
+    assert icon_data in analyses[1].datas
+    assert icon_data not in analyses[0].datas
+    assert icon_data not in analyses[2].datas
+    assert api.EXE.call_args_list[1].kwargs["icon"] == icon_data[0]
     api.COLLECT.assert_called_once()
     collect = api.COLLECT.call_args
     assert collect.kwargs["name"] == "scopes-tool"
