@@ -1002,7 +1002,7 @@ print(json.dumps({
                     foreach ($field in @("x1_seconds", "x2_seconds")) {
                         if (-not (Test-ReadbackEqual $x (Get-Readback $after $field))) { throw "Cursor X position readback differs." }
                     }
-                    if ([string](Get-Readback $after "mode") -ine "VBArs") { throw "Cursor function readback is not VBArs." }
+                    if ([string](Get-Readback $after "mode") -ine "TIME") { throw "Cursor function readback is not TIME." }
                     $display = Invoke-Cli -Stage "cursor-set-source-display" -Command "channel-display" -Options @("--channel", "1", "--query")
                     if ((Get-Readback $display "display") -ne $true) { throw "Cursor source channel is not displayed." }
                     Add-Case "cursor-set" "PASS" "CH1 X cursors at current timebase position using the VBArs function; Core verifies selected-waveform source"
@@ -1016,9 +1016,9 @@ print(json.dumps({
                         $after = Invoke-Cli -Stage "$caseName-after" -Command "cursor" -Options @("--query")
                         $expectedMode = switch ($function) {
                             "screen" { "SCREEN" }
-                            "waveform" { "WAVEform" }
-                            "vbars" { "VBArs" }
-                            "hbars" { "HBArs" }
+                            "waveform" { "TIME" }
+                            "vbars" { "TIME" }
+                            "hbars" { "SCREEN" }
                         }
                         if ([string](Get-Readback $after "mode") -ine $expectedMode) {
                             throw "Cursor function readback is $((Get-Readback $after 'mode')) instead of $expectedMode."
@@ -1066,7 +1066,7 @@ print(json.dumps({
                         foreach ($field in @("y1_volts", "y2_volts")) {
                             if (-not (Test-ReadbackEqual $y (Get-Readback $after $field))) { throw "Cursor Y position readback differs." }
                         }
-                        if ([string](Get-Readback $after "mode") -ine "HBArs") { throw "Cursor function readback is not HBArs." }
+                        if ([string](Get-Readback $after "mode") -ine "SCREEN") { throw "Cursor function readback is not SCREEN." }
                         $display = Invoke-Cli -Stage "cursor-set-y-source-display" -Command "channel-display" -Options @("--channel", "$voltageChannel", "--query")
                         if ((Get-Readback $display "display") -ne $true) { throw "Cursor source channel is not displayed." }
                         Add-Case "cursor-set-y" "PASS" "Physical-volts Y cursor round-trip on CH$voltageChannel"
@@ -1077,13 +1077,25 @@ print(json.dumps({
                         try {
                             $position = Invoke-Cli -Stage "cursor-screen-position" -Command "timebase-position" -Options @("--query")
                             $x = Get-Readback $position "position_seconds"
-                            $null = Invoke-Cli -Stage "cursor-set-screen" -Command "cursor" -Options @(
+                            $configured = Invoke-Cli -Stage "cursor-set-screen" -Command "cursor" -Options @(
                                 "--function", "screen", "--source-channel", "$voltageChannel",
                                 "--x1", (Format-Setting $x), "--x2", (Format-Setting $x),
                                 "--y1", (Format-Setting $y), "--y2", (Format-Setting $y))
                             $after = Invoke-Cli -Stage "cursor-set-screen-after" -Command "cursor" -Options @("--query")
-                            foreach ($field in @("x1_seconds", "x2_seconds")) {
-                                if (-not (Test-ReadbackEqual $x (Get-Readback $after $field))) { throw "Cursor SCREEN X readback differs." }
+                            foreach ($index in @(1, 2)) {
+                                $written = @($configured.scpi.sent | Where-Object {
+                                    $_ -clike "CURSor:VBArs:POSITION${index} *"
+                                })
+                                if ($written.Count -ne 1 -or
+                                    -not (Test-ReadbackEqual $x ([double](($written[0] -split ' ', 2)[1])))) {
+                                    throw "Cursor SCREEN X$index position write differs."
+                                }
+                            }
+                            $x1Readback = $after.result.PSObject.Properties["x1_seconds"]
+                            $x2Readback = $after.result.PSObject.Properties["x2_seconds"]
+                            if ($null -eq $x1Readback -or $null -eq $x2Readback -or
+                                $null -ne $x1Readback.Value -or $null -ne $x2Readback.Value) {
+                                throw "Cursor SCREEN X query must be unavailable."
                             }
                             foreach ($field in @("y1_volts", "y2_volts")) {
                                 if (-not (Test-ReadbackEqual $y (Get-Readback $after $field))) { throw "Cursor SCREEN Y readback differs." }

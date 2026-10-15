@@ -121,7 +121,7 @@ def _payload(raw: str, expected_header: str) -> str:
     header, separator, payload = value.partition(" ")
     expected = expected_header.lstrip(":").rstrip("?").split(":")
     actual = header.lstrip(":").split(":")
-    if len(actual) > 2 and actual[2].upper() == "PULSEWIDTH":
+    if len(actual) > 2 and actual[2].upper() == "PULSEWIDTH" and expected[2:3] == ["PULSe"]:
         actual[2:3] = ["PULSE", "WIDTH"]
         if expected[2:] == ["PULSe", "SOUrce"]:
             expected.insert(3, "WIDth")
@@ -171,6 +171,7 @@ _TBS2000_CURSOR_FUNCTION_READBACK = {
     "WAVEFORM": "waveform",
     "VBARS": "vbars",
     "HBARS": "hbars",
+    "TIME": "time",
 }
 
 
@@ -1100,11 +1101,10 @@ class TektronixOscilloscope(Oscilloscope):
         if active == "OFF":
             return CursorState(mode, x1, x2, y1, y2, dx, dy, None)
         if self._is_tbs2000:
-            # The first-generation TBS2000 documents OFF, SCREEN, WAVEform,
-            # VBArs and HBArs; TIME and AMPLitude are not valid responses.
+            # TIME and SCREEN can each represent more than one set function.
             if active not in _TBS2000_CURSOR_FUNCTION_READBACK:
                 raise OscilloscopeError(f"Unsupported Tek cursor function: {mode!r}")
-            x_functions = {"SCREEN", "WAVEFORM", "VBARS"}
+            x_functions = {"TIME", "WAVEFORM", "VBARS"}
             y_functions = {"SCREEN", "WAVEFORM", "HBARS"}
         else:
             x_functions = {"VBA", "VBARS"}
@@ -1441,8 +1441,9 @@ class TektronixOscilloscope(Oscilloscope):
         when = ({"LESSthan": "LESSthan", "GREaterthan": "MOREthan"} if self._is_tbs2000 else
                 {"LESSthan": "INside", "GREaterthan": "OUTside"})[qualifier]
         self.configure_trigger_mode("glitch")
-        root = f"{self._trigger_root}:PULSe:WIDth"
-        self.scpi.write(f"{self._trigger_root}:PULSe:SOUrce CH{channel}")
+        root = f"{self._trigger_root}:PULSEWidth" if self._is_tbs2000 else f"{self._trigger_root}:PULSe:WIDth"
+        source_root = root if self._is_tbs2000 else f"{self._trigger_root}:PULSe"
+        self.scpi.write(f"{source_root}:SOUrce CH{channel}")
         self.scpi.write(f"{root}:POLarity {normalize_glitch_polarity(polarity)}")
         self._write_number(f"{root}:WIDth", time_seconds)
         self.scpi.write(f"{root}:WHEn {when}")
@@ -1450,12 +1451,14 @@ class TektronixOscilloscope(Oscilloscope):
             self._write_number(f"{self._trigger_root}:LEVel" + (f":CH{channel}" if self._is_tbs2000 else ""), level_volts)
 
     def query_glitch_trigger(self) -> GlitchTriggerState:
-        root = f"{self._trigger_root}:PULSe:WIDth"
+        root = f"{self._trigger_root}:PULSEWidth" if self._is_tbs2000 else f"{self._trigger_root}:PULSe:WIDth"
         mode = self.query_trigger_mode()
-        raw = {"source": self.scpi.query(f"{self._trigger_root}:PULSe:SOUrce?")}
+        source_root = root if self._is_tbs2000 else f"{self._trigger_root}:PULSe"
+        source_command = f"{source_root}:SOUrce?"
+        raw = {"source": self.scpi.query(source_command)}
         raw.update({key: self.scpi.query(f"{root}:{command}?") for key, command in
             (("polarity", "POLarity"), ("qualifier", "WHEn"), ("width", "WIDth"))})
-        source = _payload(raw["source"], f"{self._trigger_root}:PULSe:SOUrce?")
+        source = _payload(raw["source"], source_command)
         match = re.fullmatch(r"CH([1-4])", source.upper())
         if match is None:
             raise OscilloscopeError(f"Unsupported Tek pulse source: {source!r}")

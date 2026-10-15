@@ -72,12 +72,14 @@ class TektronixSimulatorBackend(SimulatorBackend):
             **self.tek_settings,
         }
         root = "TRIGGER:A" if self._capabilities.series == "TBS2000" else "TRIGGER:MAIN"
+        pulse_root = f"{root}:PULSEWIDTH" if self._capabilities.series == "TBS2000" else f"{root}:PULSE:WIDTH"
+        pulse_source = pulse_root if self._capabilities.series == "TBS2000" else f"{root}:PULSE"
         self.tek_settings.update({
             "MEASUREMENT:IMMED:TYPE": "FREQuency",
             "MEASUREMENT:IMMED:SOURCE1" if self._capabilities.series == "TBS2000" else "MEASUREMENT:IMMED:SOURCE": "CH1",
-            f"{root}:PULSE:SOURCE": "CH1", f"{root}:PULSE:WIDTH:POLARITY": "POSITIVE",
-            f"{root}:PULSE:WIDTH:WIDTH": "1e-6",
-            f"{root}:PULSE:WIDTH:WHEN": "LESSTHAN" if self._capabilities.series == "TBS2000" else "INSIDE",
+            f"{pulse_source}:SOURCE": "CH1",
+            f"{pulse_root}:POLARITY": "POSITIVE", f"{pulse_root}:WIDTH": "1e-6",
+            f"{pulse_root}:WHEN": "LESSTHAN" if self._capabilities.series == "TBS2000" else "INSIDE",
         })
         slots = 5 if self._capabilities.series == "TDS2000B" else 6
         self.tek_measurements = {i: {"TYPE": "NONE", "SOURCE": "CH1", "SOURCE1": "CH1", "STATE": "OFF"} for i in range(1, slots + 1)}
@@ -138,8 +140,10 @@ class TektronixSimulatorBackend(SimulatorBackend):
         header, token = header.upper(), value.upper()
         is_tbs2000 = self._capabilities.series == "TBS2000"
         root = "TRIGGER:A" if is_tbs2000 else "TRIGGER:MAIN"
+        pulse_root = f"{root}:PULSEWIDTH" if is_tbs2000 else f"{root}:PULSE:WIDTH"
+        pulse_source = pulse_root if is_tbs2000 else f"{root}:PULSE"
         source = "MEASUREMENT:IMMED:SOURCE1" if is_tbs2000 else "MEASUREMENT:IMMED:SOURCE"
-        if header == source or header == f"{root}:PULSE:SOURCE":
+        if header == source or header == f"{pulse_source}:SOURCE":
             if re.fullmatch(r"CH\d+", token):
                 self._channel_number(token[2:])
                 self.tek_settings[header] = value
@@ -152,13 +156,13 @@ class TektronixSimulatorBackend(SimulatorBackend):
                 self.tek_settings[header] = value
                 return True
         choices = {
-            f"{root}:PULSE:WIDTH:POLARITY": {"POSITIVE", "NEGATIVE"},
-            f"{root}:PULSE:WIDTH:WHEN": {"LESSTHAN", "MORETHAN"} if is_tbs2000 else {"INSIDE", "OUTSIDE"},
+            f"{pulse_root}:POLARITY": {"POSITIVE", "NEGATIVE"},
+            f"{pulse_root}:WHEN": {"LESSTHAN", "MORETHAN"} if is_tbs2000 else {"INSIDE", "OUTSIDE"},
         }
         if header in choices and token in choices[header]:
             self.tek_settings[header] = value
             return True
-        if header == f"{root}:PULSE:WIDTH:WIDTH":
+        if header == f"{pulse_root}:WIDTH":
             _parse_scpi_number(value)
             self.tek_settings[header] = value
             return True
@@ -313,6 +317,10 @@ class TektronixSimulatorBackend(SimulatorBackend):
             return self.tek_settings.get(header, f"CH{self.waveform_source}")
         if header == "HORIZONTAL:RECORDLENGTH":
             return str(self.record_length_points)
+        if header == "CURSOR:FUNCTION" and is_tbs2000:
+            return {"WAVEFORM": "TIME", "VBARS": "TIME", "HBARS": "SCREEN"}.get(
+                self.tek_settings[header].upper(), self.tek_settings[header]
+            )
         if is_tbs2000 and header == "HORIZONTAL:SAMPLERATE":
             return str(self.sample_rate_hz)
         if is_tbs2000 and header == "ACQUIRE:MAXSAMPLERATE":
@@ -626,7 +634,9 @@ class TektronixSimulatorBackend(SimulatorBackend):
                 return "9.9e37"
             return str(self._measurement_numeric_value(item, channel, None, {}))
         root = "TRIGGER:A" if is_tbs2000 else "TRIGGER:MAIN"
-        if upper[:-1] in {f"{root}:PULSE:SOURCE", f"{root}:PULSE:WIDTH:POLARITY", f"{root}:PULSE:WIDTH:WHEN", f"{root}:PULSE:WIDTH:WIDTH"}:
+        pulse_root = f"{root}:PULSEWIDTH" if is_tbs2000 else f"{root}:PULSE:WIDTH"
+        pulse_source = pulse_root if is_tbs2000 else f"{root}:PULSE"
+        if upper[:-1] in {f"{pulse_source}:SOURCE", f"{pulse_root}:POLARITY", f"{pulse_root}:WHEN", f"{pulse_root}:WIDTH"}:
             return self.tek_settings[upper[:-1]]
         preamble = "WFMOUTPRE" if is_tbs2000 else "WFMPRE"
         if upper.startswith(preamble + ":"):

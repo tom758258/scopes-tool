@@ -930,11 +930,39 @@ def test_pulse_width_subset_roundtrip_and_range_rejection(model_id, qualifier, w
         assert getattr(state, "less_than_seconds" if qualifier == "less-than" else "greater_than_seconds") == pytest.approx(2e-6)
         assert state.range_min_seconds is None and state.range_max_seconds is None
         assert any(command.endswith(f":WHEn {when}") for command in scope.backend.history)
+        if model_id == "tektronix-tbs2074":
+            assert "TRIGger:A:PULSe:CLAss WIDth" in scope.backend.history
+            assert "TRIGger:A:PULSEWidth:SOUrce CH1" in scope.backend.history
+            assert "TRIGger:A:PULSEWidth:POLarity NEGative" in scope.backend.history
+            assert "TRIGger:A:PULSEWidth:WIDth 2e-06" in scope.backend.history
+            assert "TRIGger:A:PULSEWidth:SOUrce?" in scope.backend.history
+            assert "TRIGger:A:PULSEWidth:WIDth?" in scope.backend.history
+        else:
+            assert "TRIGger:MAIn:PULSe:SOUrce CH1" in scope.backend.history
+            assert "TRIGger:MAIn:PULSe:WIDth:WHEn OUTside" in scope.backend.history
         before = list(scope.backend.history)
         with pytest.raises(ParameterValidationError, match="unsupported"):
             scope.configure_glitch_trigger(channel=1, polarity="positive", qualifier="range",
                 min_time_seconds=1e-6, max_time_seconds=3e-6)
         assert scope.backend.history == before
+
+
+def test_tbs2074_pulse_width_query_accepts_optional_headers():
+    scope, _ = make_scope(responses={
+        "TRIGger:A:TYPe?": "PULSE",
+        "TRIGger:A:PULSe:CLAss?": "WIDTH",
+        "TRIGger:A:PULSEWidth:SOUrce?": ":TRIGGER:A:PULSEWIDTH:SOURCE CH1",
+        "TRIGger:A:PULSEWidth:POLarity?": ":TRIGGER:A:PULSEWIDTH:POLARITY POSITIVE",
+        "TRIGger:A:PULSEWidth:WIDth?": ":TRIGGER:A:PULSEWIDTH:WIDTH 1.0000E-6",
+        "TRIGger:A:PULSEWidth:WHEn?": ":TRIGGER:A:PULSEWIDTH:WHEN MORETHAN",
+        "TRIGger:A:LEVel:CH1?": "0.0E+0",
+    })
+
+    state = scope.query_glitch_trigger()
+
+    assert (state.channel, state.polarity, state.qualifier) == (1, "positive", "greater-than")
+    assert state.greater_than_seconds == pytest.approx(1e-6)
+    assert state.level_volts == pytest.approx(0.0)
 
 
 @pytest.mark.parametrize("model_id,root,native_unit,expected_unit", [

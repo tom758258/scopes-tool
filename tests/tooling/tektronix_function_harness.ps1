@@ -211,9 +211,30 @@ function Invoke-FakeTransport {
             } else {
                 $state.mode = if ($hasX -and $hasY) { "SCREEN" } elseif ($hasX) { "TIME" } elseif ($hasY) { "HBArs" } else { "OFF" }
             }
+            if ($scenario.live_capabilities.series -eq "TBS2000" -and $requested -ceq "screen" -and $hasX) {
+                $payload.scpi.sent = @(
+                    "CURSor:VBArs:POSITION1 $($Options[[Array]::IndexOf($Options, '--x1') + 1])",
+                    "CURSor:VBArs:POSITION2 $($Options[[Array]::IndexOf($Options, '--x2') + 1])"
+                )
+            }
             $script:CursorState = [pscustomobject]$state
         } elseif ($null -ne $script:CursorState) {
-            $value = $script:CursorState
+            $value = $script:CursorState | ConvertTo-Json | ConvertFrom-Json
+            if ($scenario.live_capabilities.series -eq "TBS2000") {
+                $value.mode = switch ($value.mode) {
+                    "WAVEform" { "TIME" }
+                    "VBArs" { "TIME" }
+                    "HBArs" { "SCREEN" }
+                    default { $value.mode }
+                }
+                if ($value.mode -eq "TIME") {
+                    $value.y1_volts = $null
+                    $value.y2_volts = $null
+                } elseif ($value.mode -eq "SCREEN") {
+                    $value.x1_seconds = $null
+                    $value.x2_seconds = $null
+                }
+            }
             $payload.result = $value
         }
     }

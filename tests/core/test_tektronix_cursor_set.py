@@ -111,6 +111,10 @@ def test_tbs2074_cursor_function_switches_without_positions(function, expected):
     scope.configure_cursor(function=function)
 
     assert backend.history == expected
+    assert backend.query("CURSor:FUNCtion?") == {
+        "off": "OFF", "screen": "SCREEN", "waveform": "TIME",
+        "vbars": "TIME", "hbars": "SCREEN",
+    }[function]
     assert backend.acquisition_reset_count == 0
 
 
@@ -164,31 +168,33 @@ def test_legacy_tek_models_reject_explicit_cursor_function(model_id):
 
 
 @pytest.mark.parametrize(
-    ("function", "x1", "x2", "y1", "y2"),
+    ("function", "readback", "x1", "x2", "y1", "y2"),
     [
-        ("SCREEN", 0.0, 0.001, 0.0, 1.0),
-        ("WAVEform", 0.0, 0.001, 0.0, 1.0),
-        ("VBArs", 0.0, 0.001, None, None),
-        ("HBArs", None, None, 0.0, 1.0),
+        ("SCREEN", "SCREEN", None, None, 0.0, 1.0),
+        ("WAVEform", "TIME", 0.0, 0.001, None, None),
+        ("VBArs", "TIME", 0.0, 0.001, None, None),
+        ("HBArs", "SCREEN", None, None, 0.0, 1.0),
     ],
 )
 def test_tbs2074_cursor_query_recognizes_first_generation_functions(
-    function, x1, x2, y1, y2
+    function, readback, x1, x2, y1, y2
 ):
     scope, backend = simulated_scope()
     backend.tek_settings["CURSOR:FUNCTION"] = function
 
     state = scope.query_cursor()
 
-    assert state.mode == function
+    assert state.mode == readback
     assert state.x1_seconds == x1
     assert state.x2_seconds == x2
     assert state.y1_volts == y1
     assert state.y2_volts == y2
+    assert state.x_delta_seconds == (pytest.approx(x2 - x1) if x1 is not None else None)
+    assert state.y_delta_volts == (pytest.approx(y2 - y1) if y1 is not None else None)
 
 
-@pytest.mark.parametrize("function", ["TIME", "AMPLitude"])
-def test_tbs2074_cursor_query_rejects_b_series_functions(function):
+@pytest.mark.parametrize("function", ["AMPLitude", "UNKNOWN"])
+def test_tbs2074_cursor_query_rejects_unsupported_functions(function):
     scope, backend = simulated_scope()
     backend.tek_settings["CURSOR:FUNCTION"] = function
 

@@ -823,10 +823,14 @@ def _cmd_trigger_glitch(args: argparse.Namespace) -> int:
             print("Capabilities: unavailable for this model")
             return 1
 
+        tek_tbs2074 = scope.capabilities.physical_model_id == "tektronix-tbs2074"
         if args.glitch_query:
+            history_start = len(scope.backend.history)
             commands = glitch_trigger_query_commands()
             print("Planned query: pulse-width trigger state")
             state = scope.query_glitch_trigger()
+            if tek_tbs2074:
+                commands = scope.backend.history[history_start:]
             runtime._json_update_result(operation="query", commands=commands, **state.to_json())
             for command in commands:
                 print(f"Command: {command}")
@@ -857,6 +861,7 @@ def _cmd_trigger_glitch(args: argparse.Namespace) -> int:
                 f"Planned change: pulse-width trigger CH{args.channel}, polarity {args.polarity}, "
                 f"qualifier {args.qualifier}"
             )
+            history_start = len(scope.backend.history)
             scope.configure_glitch_trigger(
                 channel=args.channel,
                 polarity=args.polarity,
@@ -866,6 +871,8 @@ def _cmd_trigger_glitch(args: argparse.Namespace) -> int:
                 max_time_seconds=args.max_time_seconds,
                 level_volts=args.level_volts,
             )
+            if tek_tbs2074:
+                commands = scope.backend.history[history_start:]
             result: dict[str, object] = {
                 "operation": "set",
                 "commands": commands,

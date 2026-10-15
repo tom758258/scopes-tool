@@ -329,7 +329,7 @@ measurement slots, trigger mode, or cursor units merely to discover support.
 | `channel-summary` | display, scale, offset, coupling, probe ratio, bandwidth limit, invert, label, probe skew, and V/A units on CH1-CH4. Range, impedance, and vernier unavailable. | display, scale, offset, coupling, probe ratio, bandwidth limit, invert, units. Label, probe skew, range, impedance and vernier unavailable. | Same as TDS2024B, CH1/CH2 only. |
 | `live-data-snapshot` / `query_instrument_summary` | Channel display/scale/offset/units on CH1-CH4, timebase scale/position under the same Delay Mode ON prerequisite above, trigger type/sweep, edge source/slope, channel-qualified level and established source units. | Channel display/scale/offset/units, timebase scale/position, trigger type/sweep/source/slope. Current analog edge-source MAIN:LEVEL is valid snapshot data even though standalone named-channel level is unsupported. | Same as TDS2024B, bounded to two channels. |
 | `system-information-snapshot` / `query_acquisition_readouts` | Identity, sample rate, acquisition points and record length available: SUPPORTED. | Identity, acquisition points and record length available; sample rate unavailable: PARTIAL AGGREGATE. | Same as TDS2024B: PARTIAL AGGREGATE. |
-| `cursor-query` | Native X positions/delta only when time-based; Y positions/delta only when physical volts are established. Percent/Hz/dB/divisions/amps are not seconds/volts. Inactive/unestablished axes and dydx unavailable. | Active VBARS seconds positions/delta or active HBARS volts positions/delta. Other axis/dydx and FFT/amp/unknown-unit fields unavailable. | Same as TDS2024B. |
+| `cursor-query` | Native X positions/delta only for time readback with a time-based source; Y positions/delta only for SCREEN readback when physical volts are established. Ambiguous axes remain null. Percent/Hz/dB/divisions/amps are not seconds/volts. Inactive/unestablished axes and dydx unavailable. | Active VBARS seconds positions/delta or active HBARS volts positions/delta. Other axis/dydx and FFT/amp/unknown-unit fields unavailable. | Same as TDS2024B. |
 
 `live-data-snapshot` is PARTIAL AGGREGATE on all three. Each registered profile
 declares fixed realtime acquisition architecture; absence of segmented-memory
@@ -346,10 +346,11 @@ previous mapping, where X only uses VBArs, Y only uses HBArs, and X plus Y uses
 SCREEN. `OFF` and `WAVEform` only switch the function and require no source
 channel and no positions; `WAVEform` has no position setter in this surface.
 `VBArs` accepts only X positions and `HBArs` only Y positions; every other
-combination is rejected before any instrument write. `CURSor:FUNCtion?` must
-answer with one of the five values; the TBS2000B-only `TIME` and `AMPLitude`
-answers are rejected rather than normalized. `SCREEN` and `WAVEform` are distinct
-modes and neither is substituted for the other.
+combination is rejected before any instrument write. `CURSor:FUNCtion?` can
+return `TIME` after `WAVEform` or `VBArs`, and `SCREEN` after `SCREEN` or
+`HBArs`. Query reports the native value and leaves axes that cannot be
+established from it null; configure results retain the requested function.
+`AMPLitude` remains unsupported.
 
 TBS2074 setters use the selected/displayed waveform semantics; source selection
 can enable display and reset acquisition and is intentionally not restored

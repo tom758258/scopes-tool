@@ -98,6 +98,22 @@ def test_trigger_pulse_width_greater_than_with_level_dry_run_json(capsys):
     ]
 
 
+@pytest.mark.parametrize("query", [False, True])
+def test_tbs2074_pulse_width_result_commands_match_sent_scpi(capsys, query):
+    arguments = ["--query"] if query else [
+        "--channel", "1", "--polarity", "positive", "--qualifier", "greater-than",
+        "--time-seconds", "1e-6", "--level-volts", "0",
+    ]
+    assert cli.main(["trigger-pulse-width", "--simulate", "--json", "--model",
+                     "tektronix-tbs2074", *arguments]) == 0
+
+    payload = _json_stdout(capsys)
+    commands = payload["result"]["commands"]
+    assert commands == payload["scpi"]["sent"][1:1 + len(commands)]
+    source_command = "TRIGger:A:PULSEWidth:SOUrce?" if query else "TRIGger:A:PULSEWidth:SOUrce CH1"
+    assert source_command in commands
+
+
 def test_trigger_pulse_width_range_dry_run_json_maps_max_min(capsys):
     assert (
         cli.main(
