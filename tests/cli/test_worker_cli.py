@@ -3362,3 +3362,17 @@ def test_simulation_worker_runtimes_in_same_process_do_not_share_state():
     _, result = _execute_worker_job(first, "acquisition", {"query": True})
     assert result["result"]["type"] == "average"
     assert result["result"]["count"] == 16
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("support_policy_mode", "validation_allow_pending_live_support",
+     "validation-allow-pending-live-support"),
+)
+def test_worker_cannot_request_contributor_backend_validation(field):
+    with pytest.raises(OscilloscopeError, match="not available to Worker"):
+        worker.parse_domain_command(
+            "run",
+            {field: True if field != "support_policy_mode" else "validation"},
+            _live_runtime(),
+        )

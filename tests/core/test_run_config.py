@@ -194,3 +194,24 @@ def test_live_unknown_driver_fails_before_command_execution(monkeypatch):
         open_scope_for_run(config)
 
     assert backend.history == ["*IDN?"]
+
+
+@pytest.mark.parametrize("visa_library", ("@py", "@bt"))
+def test_live_core_product_backend_rejects_without_opening_visa(monkeypatch, visa_library):
+    def unexpected_open(*_args, **_kwargs):
+        pytest.fail("unopened Product backend must be rejected before VISA open")
+
+    monkeypatch.setattr(
+        "scopes_tool_core.run_config.Oscilloscope.open",
+        unexpected_open,
+    )
+    config = ResolvedRunConfig(
+        mode="live",
+        planning_physical_model_id=None,
+        expected_physical_model_id=None,
+        capabilities=None,
+        resource="USB0::FAKE::INSTR",
+        visa_library=visa_library,
+    )
+    with pytest.raises(OscilloscopeError, match="Pending|not open"):
+        open_scope_for_run(config)

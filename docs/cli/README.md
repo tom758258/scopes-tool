@@ -259,13 +259,27 @@ default System VISA runtime discovered on the computer. The generic
 other non-empty selectors as `custom_visa`.
 
 Recognition only identifies the selected backend. It does not install the
-backend or establish Scopes Tool support for it. An explicit `@bt` reaches
-`pyvisa.ResourceManager("@bt")`, but it can load only when the environment
-provides the corresponding backend. Scopes Tool does not bundle `pyvisa_bt`,
-provide a Bluetooth runtime or service, or claim live Bluetooth instrument
-support. On the instrument computer, the preferred live path remains the
-installed Keysight IO Libraries vendor VISA backend; `pyvisa-py` is an
-environment-provided alternative.
+backend or establish Scopes Tool Product Live support. For normal CLI Live
+product operations, `@py` is Pending and `@bt` is not open; both reject
+**before** opening a VISA session. The `list-resources` and `identify`
+diagnostics may still attempt a selected installed backend, including `@bt`,
+but a successful `*IDN?` is not Product Live authorization. Scopes Tool does
+not bundle `pyvisa_bt` or claim Bluetooth Product support. System VISA and
+custom VISA execution retain their prior behavior; there is no Scopes
+Release Policy in this backend-only change.
+
+For contributor hardware validation of an explicitly registered Pending
+model/transport pair, the maintained `scripts/live-*.ps1` wrappers select
+`@py` and pass the hidden `--validation-allow-pending-live-support` CLI
+switch. The switch is not a general `--force`: it is restricted to `@py`,
+checks the operator-provided USB or TCPIP/LAN resource and the connected
+`*IDN?` model, and preserves existing model, capability, and cleanup guards.
+Worker and WebUI requests cannot select Validation Mode. No passing validation
+command automatically promotes Product support; the allowed Pending inventory
+is documented in [Supported Models](../core/supported-models.md).
+Direct Python calls to `Oscilloscope.open()` are not Product policy-gated.
+On the instrument computer, the preferred existing Product Live path remains
+the installed System VISA runtime.
 
 ## Agent-safe Automation
 

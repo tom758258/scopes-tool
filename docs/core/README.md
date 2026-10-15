@@ -60,7 +60,17 @@ the selector passed to the runtime:
 - any other explicit selector → `custom_visa`
 
 This classification does not guarantee that the selected backend is installed
-or available in the runtime environment.
+or available in the runtime environment. The Core-owned backend-only policy
+rejects normal Product Live `@py` (Pending) and `@bt` (not open) executions
+before opening VISA. Contributor Validation Mode is an explicit, CLI-only
+bootstrap option restricted to the registered `@py` model/transport Pending
+scopes; after opening VISA, actual `*IDN?` identity must match before
+command-specific SCPI. The WebUI and Worker cannot select Validation Mode.
+The policy intentionally does not implement a Release Matrix and leaves
+System VISA, custom VISA, dry-run, and simulation behavior unchanged.
+Direct Python use of `Oscilloscope.open()` is a session interface, not a
+Product support entry point, and retains its previous behavior. For the exact
+pending inventory, see [Supported Models](supported-models.md).
 
 ## Feature Areas
 

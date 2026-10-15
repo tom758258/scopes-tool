@@ -9,6 +9,10 @@ import os
 import sys
 from typing import Callable, Iterator
 
+from scopes_tool_core.support_policy import (
+    SUPPORT_POLICY_MODE_VALIDATION,
+    ensure_backend_live_support,
+)
 from scopes_tool_core.capabilities import (
     ScopeCapabilities,
     capabilities_for_model_id,
@@ -129,6 +133,17 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope | Abstr
                 scope, getattr(args, "_simulator_state", None), reporter
             )
         return scope
+    policy_mode = (
+        SUPPORT_POLICY_MODE_VALIDATION
+        if getattr(args, "validation_allow_pending_live_support", False)
+        else "product"
+    )
+    ensure_backend_live_support(
+        visa_library=args.visa_library,
+        resource=resource,
+        policy_mode=policy_mode,
+        command=args.command,
+    )
     opened_scope = Oscilloscope.open(
         resource,
         visa_library=args.visa_library,
@@ -140,6 +155,21 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope | Abstr
             scope = _validate_worker_live_identity(args, scope)
         elif isinstance(scope, Oscilloscope):
             scope = _select_one_shot_live_driver(args, scope)
+        if policy_mode == SUPPORT_POLICY_MODE_VALIDATION and args.command != "identify":
+            # Product System/custom VISA sessions keep their original API surface;
+            # only contributor @py validation requires a detected physical IDN.
+            detected_idn = getattr(scope, "idn", None)
+            if detected_idn is None:
+                raise OscilloscopeError(
+                    "@py contributor validation requires the detected *IDN? identity"
+                )
+            ensure_backend_live_support(
+                visa_library=args.visa_library,
+                resource=resource,
+                policy_mode=policy_mode,
+                command=args.command,
+                detected_model_id=detected_idn.model_id,
+            )
         if _JSON_RECORD is not None:
             _JSON_RECORD["backend"] = getattr(scope.backend, "backend", None)
         return scope
