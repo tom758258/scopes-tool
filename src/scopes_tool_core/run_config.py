@@ -11,6 +11,7 @@ from .drivers import scope_for_physical_model
 from .errors import OscilloscopeError
 from .identity import physical_model_for_id
 from .scope import Oscilloscope
+from .support_policy import ensure_backend_live_support
 from .simulator_backend import SimulatorBackend, SimulatorInstrumentState
 from .simulator_config import simulator_backend_kwargs, validate_simulator_args
 from .tektronix_simulator import TektronixSimulatorBackend
@@ -165,6 +166,10 @@ def open_scope_for_run(
         scope = scope_for_physical_model(physical_model, backend)
         scope.capabilities = capabilities_for_model_id(physical_model.model_id)
         return scope
+    ensure_backend_live_support(
+        visa_library=config.visa_library,
+        resource=config.resource,
+    )
     opened_scope = Oscilloscope.open(
         config.resource,
         visa_library=config.visa_library,

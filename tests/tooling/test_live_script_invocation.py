@@ -793,6 +793,7 @@ sys.exit(9)
                 "TEST::INSTR",
                 "--visa-library",
                 "@py",
+                "--validation-allow-pending-live-support",
             ],
             id="pyvisa-py",
         ),

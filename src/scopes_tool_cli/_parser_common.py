@@ -52,6 +52,11 @@ def _add_scope_connection_args(parser: argparse.ArgumentParser) -> None:
         help="optional PyVISA library argument, such as @py",
     )
     parser.add_argument(
+        "--validation-allow-pending-live-support",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--log-scpi",
         action="store_true",
         help="write SCPI command and response logs to stderr",

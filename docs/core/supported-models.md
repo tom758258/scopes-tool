@@ -62,9 +62,37 @@ or missing or unregistered driver IDs fail closed.
 Backend identity is not a model capability or a support declaration. Core
 classifies an unset or blank selector as `system_visa`, `@py` as `pyvisa_py`,
 `@bt` as `pyvisa_bt`, and any other non-empty selector as `custom_visa`.
-Scopes Tool does not currently define an exact backend support policy, and no
-existing model capability becomes Bluetooth-supported because `@bt` is
-recognized. There is no current Scopes live Bluetooth support scope.
+Backend identity does not grant Product Live support. Core applies a narrowly
+scoped backend-only policy at bundled CLI and Core run entry points: ordinary
+Product Live operations using `@py` are Pending and rejected, and those using
+`@bt` are not open. Neither selector is bundled or guaranteed to be installed.
+System VISA and custom VISA retain their existing execution behavior; **this
+backend policy does not implement a model/command Release Policy**.
+
+Only the following model/transport scopes are registered for controlled
+contributor validation using `@py` (`pyvisa_py`). Each entry is **Pending**, not
+Product-open, and does not attest to hardware validation:
+
+| Physical model ID | USB / `@py` | TCPIP/LAN / `@py` |
+| --- | --- | --- |
+| `keysight-dsox2004a` | Pending | Not registered |
+| `keysight-dsox3024a` | Pending | Not registered |
+| `keysight-dsox4024a` | Pending | Pending |
+| `keysight-dsox4034a` | Pending | Pending |
+| `tektronix-tbs2074` | Not registered | Pending |
+| `tektronix-tbs1052b` | Pending | Not registered |
+| `tektronix-tds2024b` | Not registered | Not registered |
+
+The contributor-only hidden CLI Validation Mode can execute an explicitly
+registered Pending `@py` pair after confirming the actual `*IDN?` identity.
+Unregistered model/transport pairs, `@bt`, and unsupported transports remain
+rejected. Validation Mode does not enable Product support, override model or
+capability checks, or bypass normal session cleanup. `list-resources` and
+`identify` are connection diagnostics, not Product-open declarations.
+
+`Oscilloscope.open()` remains a low-level session entry usable directly by
+Python callers and does not enforce this Product policy. Dry-run, simulation,
+and existing System VISA use remain unchanged.
 
 ## Runtime Profiles
 

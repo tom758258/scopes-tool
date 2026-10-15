@@ -62,7 +62,7 @@ function Get-LiveConnectionArguments {
     if ($Backend -cne "@py") {
         throw "Unsupported backend '${Backend}'. Use '@py' or omit Backend for System VISA."
     }
-    return $arguments + @("--visa-library", "@py")
+    return $arguments + @("--visa-library", "@py", "--validation-allow-pending-live-support")
 }
 
 function Resolve-ValidationTargets {

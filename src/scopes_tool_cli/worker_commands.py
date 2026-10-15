@@ -329,6 +329,16 @@ def parse_domain_command(
     arguments: dict[str, Any],
     runtime: WorkerRuntime,
 ) -> argparse.Namespace:
+    forbidden = {
+        "support_policy_mode",
+        "validation_allow_pending_live_support",
+        "validation-allow-pending-live-support",
+    } & set(arguments)
+    if forbidden:
+        raise OscilloscopeError(
+            "Contributor Validation Mode is not available to Worker requests: "
+            + ", ".join(sorted(forbidden))
+        )
     arguments = _normalize_optional_persistence_worker_arguments(command, arguments)
     arguments = _normalize_capture_batch_worker_arguments(command, arguments)
     arguments = _normalize_capture_until_worker_arguments(command, arguments)
