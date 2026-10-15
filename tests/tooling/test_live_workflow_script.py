@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.tooling.test_live_tektronix_script import (
+from tests.tooling._tektronix_live_test_support import (
     TARGETS, fake_workflow_run, requires_windows,
 )
 

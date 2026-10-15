@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - ci/scopes-validation-phase01-preflight
 
 permissions:
   contents: read
@@ -17,7 +18,10 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      validation: ${{ steps.filter.outputs.validation }}
+      validation_shared: ${{ steps.filter.outputs.validation_shared }}
+      validation_keysight: ${{ steps.filter.outputs.validation_keysight }}
+      validation_tektronix: ${{ steps.filter.outputs.validation_tektronix }}
+      validation_cross_vendor: ${{ steps.filter.outputs.validation_cross_vendor }}
       packaging: ${{ steps.filter.outputs.packaging }}
 
     steps:
@@ -29,16 +33,54 @@ jobs:
         uses: dorny/paths-filter@v4
         with:
           base: ${{ github.event.repository.default_branch }}
+          predicate-quantifier: some-with-excludes
           filters: |
-            validation:
-              - 'tests/tooling/**'
-              - 'scripts/_artifact_privacy.ps1'
-              - 'scripts/_live_tektronix_helpers.ps1'
-              - 'scripts/_validation_helpers.ps1'
-              - 'scripts/live-*.ps1'
+            validation_shared:
+              - 'tests/tooling/test_live_script_invocation.py'
+              - 'tests/tooling/test_live_script_validators.py'
+              - 'tests/tooling/test_windows_python_boundary.py'
+              - 'scripts/live-dvm-check.ps1'
+              - 'scripts/live-segmented-check.ps1'
+              - 'scripts/live-serial-check.ps1'
               - 'scripts/preflight-cli.ps1'
+              - 'scripts/_live_tektronix_helpers.ps1'
+            validation_keysight:
+              - 'scripts/live-dvm-check.ps1'
+              - 'scripts/live-segmented-check.ps1'
+              - 'scripts/live-serial-check.ps1'
+              - 'scripts/preflight-cli.ps1'
+              - 'tests/tooling/test_live_script_controls.py'
+              - 'tests/tooling/test_live_script_artifacts.py'
+              - 'tests/tooling/test_live_script_dvm_segmented.py'
+              - 'tests/tooling/test_live_script_serial.py'
+              - 'tests/tooling/test_live_measurement_validation.py'
+              - 'tests/tooling/test_preflight_cli_script.py'
+            validation_tektronix:
+              - 'scripts/_live_tektronix_helpers.ps1'
+              - 'tests/tooling/_tektronix_live_test_support.py'
+              - 'tests/tooling/tektronix_function_harness.ps1'
+              - 'tests/tooling/tektronix_workflow_harness.ps1'
+              - 'tests/tooling/test_live_tektronix_script.py'
+              - 'tests/tooling/test_live_workflow_script.py'
+              - 'src/scopes_tool_core/tektronix.py'
+              - 'src/scopes_tool_core/tektronix_simulator.py'
+            validation_cross_vendor:
+              - 'tests/conftest.py'
+              - 'tests/tooling/_validation_grouping.py'
+              - 'tests/tooling/_live_script_test_support.py'
+              - 'tests/tooling/autoscale_function_harness.ps1'
+              - 'tests/tooling/test_live_autoscale_script.py'
+              - 'tests/tooling/test_live_trigger_validation.py'
+              - 'scripts/ci_validation_partition.py'
+              - 'scripts/_validation_helpers.ps1'
+              - 'scripts/_artifact_privacy.ps1'
+              - 'scripts/live-cli-check.ps1'
+              - 'scripts/live-autoscale-check.ps1'
+              - 'scripts/live-workflow-check.ps1'
               - 'src/scopes_tool_cli/**'
               - 'src/scopes_tool_core/**'
+              - '!src/scopes_tool_core/tektronix.py'
+              - '!src/scopes_tool_core/tektronix_simulator.py'
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/tests.yml'
@@ -54,7 +96,6 @@ jobs:
               - 'uv.lock'
               - '.github/workflows/tests.yml'
               - '.github/workflows/build-windows.yml'
-
   quality-webui:
     name: Code quality & WebUI
     runs-on: ubuntu-latest
@@ -81,6 +122,9 @@ jobs:
 
       - name: Install packages
         run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
+
+      - name: Check Windows validation partition (collect only)
+        run: ./.venv/bin/python scripts/ci_validation_partition.py
 
       - name: Check tracked text hygiene
         run: python scripts/check_text_hygiene.py
@@ -250,35 +294,116 @@ jobs:
           .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_boundary_smoke"
           --basetemp .tmp_tests/ci-windows-boundary-py${{ matrix.python-version }}
 
-  pytest-windows-validation:
-    name: Windows validation scripts Python 3.13
+  windows-validation-shared:
+    name: Windows validation shared Python 3.13
     needs: detect-windows-validation-changes
-    if: needs.detect-windows-validation-changes.outputs.validation == 'true'
+    if: >-
+      needs.detect-windows-validation-changes.outputs.validation_shared == 'true' ||
+      needs.detect-windows-validation-changes.outputs.validation_cross_vendor == 'true'
     runs-on: windows-latest
-
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-
       - name: Install uv
         run: python -m pip install --upgrade uv
-
       - name: Install packages
         run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
-
       - name: Prepare pytest temp root
         run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
-
-      - name: Run Windows validation tests
+      - name: Run shared Windows validation tests (duration profile)
         run: >-
-          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_powershell"
-          --basetemp .tmp_tests/ci-windows-validation-py3.13
+          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_powershell and validation_shared"
+          --durations=30 --basetemp .tmp_tests/ci-windows-validation-shared-py3.13
 
+  windows-validation-keysight:
+    name: Windows validation keysight Python 3.13
+    needs: detect-windows-validation-changes
+    if: >-
+      needs.detect-windows-validation-changes.outputs.validation_keysight == 'true' ||
+      needs.detect-windows-validation-changes.outputs.validation_cross_vendor == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        run: python -m pip install --upgrade uv
+      - name: Install packages
+        run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
+      - name: Prepare pytest temp root
+        run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
+      - name: Run keysight Windows validation tests (duration profile)
+        run: >-
+          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_powershell and validation_keysight"
+          --durations=30 --basetemp .tmp_tests/ci-windows-validation-keysight-py3.13
+
+  windows-validation-tektronix:
+    name: Windows validation tektronix Python 3.13
+    needs: detect-windows-validation-changes
+    if: >-
+      needs.detect-windows-validation-changes.outputs.validation_tektronix == 'true' ||
+      needs.detect-windows-validation-changes.outputs.validation_cross_vendor == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        run: python -m pip install --upgrade uv
+      - name: Install packages
+        run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
+      - name: Prepare pytest temp root
+        run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
+      - name: Run tektronix Windows validation tests (duration profile)
+        run: >-
+          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_powershell and validation_tektronix"
+          --durations=30 --basetemp .tmp_tests/ci-windows-validation-tektronix-py3.13
+
+  windows-validation-gate:
+    name: Windows validation scripts Python 3.13
+    needs:
+      - detect-windows-validation-changes
+      - windows-validation-shared
+      - windows-validation-keysight
+      - windows-validation-tektronix
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all selected Windows validation groups succeeded
+        env:
+          DETECT_RESULT: ${{ needs.detect-windows-validation-changes.result }}
+          SHARED_SELECTED: ${{ needs.detect-windows-validation-changes.outputs.validation_shared == 'true' || needs.detect-windows-validation-changes.outputs.validation_cross_vendor == 'true' }}
+          KEYSIGHT_SELECTED: ${{ needs.detect-windows-validation-changes.outputs.validation_keysight == 'true' || needs.detect-windows-validation-changes.outputs.validation_cross_vendor == 'true' }}
+          TEKTRONIX_SELECTED: ${{ needs.detect-windows-validation-changes.outputs.validation_tektronix == 'true' || needs.detect-windows-validation-changes.outputs.validation_cross_vendor == 'true' }}
+          SHARED_RESULT: ${{ needs.windows-validation-shared.result }}
+          KEYSIGHT_RESULT: ${{ needs.windows-validation-keysight.result }}
+          TEKTRONIX_RESULT: ${{ needs.windows-validation-tektronix.result }}
+        run: |
+          python - <<'PY'
+          import os
+          if os.environ['DETECT_RESULT'] != 'success':
+              raise SystemExit('Windows change detection did not succeed')
+          for group in ('SHARED', 'KEYSIGHT', 'TEKTRONIX'):
+              selected = os.environ[f'{group}_SELECTED'].lower() == 'true'
+              actual = os.environ[f'{group}_RESULT']
+              expected = 'success' if selected else 'skipped'
+              if actual != expected:
+                  raise SystemExit(f'{group}: expected {expected}, got {actual}')
+              print(f'{group}: {actual} (selected={selected})')
+          PY
   windows-packaging-smoke:
     name: Windows real packaging smoke
     needs: detect-windows-validation-changes

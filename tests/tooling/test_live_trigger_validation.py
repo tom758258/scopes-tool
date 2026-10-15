@@ -7,7 +7,7 @@ from io import StringIO
 
 import pytest
 
-from tests.tooling.test_live_tektronix_script import TARGETS, VISA_FAILURE, fake_run
+from tests.tooling._tektronix_live_test_support import TARGETS, VISA_FAILURE, fake_run
 from tests.tooling._live_script_test_support import (
     extract_live_cli_functions_ps, ps_quote, requires_windows, run_powershell,
 )
