@@ -292,6 +292,12 @@ dist\desktop\win-unpacked\
   ... Electron runtime files
 ```
 
+The GitHub Actions **Build Windows** workflow can also build a Bundle or Desktop
+onedir ZIP on demand and upload it as a 30-day Actions artifact. The automatic
+CI tests perform a hardware-free real Windows Desktop packaging smoke when
+packaging inputs change. These checks do not verify a running graphical Desktop
+session or live instrument behavior.
+
 Formal release packaging and release acceptance scripts are not currently
 provided for Scopes Tool. Release instructions will be added after the
 release workflow has been validated.

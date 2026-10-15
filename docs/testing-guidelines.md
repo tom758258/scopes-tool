@@ -76,6 +76,11 @@ examples, and internal structure require a clear maintenance benefit.
 - Every Linux and Windows Python matrix job retains package build, import,
   and installed CLI help smoke checks. Mock packaging tests do not establish
   that a real PyInstaller bundle builds or runs.
+- **Windows packaging smoke** runs after packaging-related changes on Windows x64,
+  builds the actual Desktop onedir output, and executes a packaged CLI simulator
+  smoke test. It does not establish real-instrument support or GUI interaction.
+- **Build Windows** is a separate, manual-only workflow for Bundle/Desktop ZIP
+  artifacts. It runs the same hardware-free packaged CLI smoke before uploading.
 
 The operation matrix validates adapter admission for every registered model.
 Dry-run and simulator execution uses one representative per driver/capability

@@ -11,33 +11,49 @@ permissions:
 
 jobs:
   detect-windows-validation-changes:
-    name: Detect Windows validation changes
+    name: Detect Windows validation and packaging changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
     outputs:
       validation: ${{ steps.filter.outputs.validation }}
+      packaging: ${{ steps.filter.outputs.packaging }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Detect Windows validation inputs
+      - name: Detect Windows validation and packaging inputs
         id: filter
         uses: dorny/paths-filter@v4
         with:
-          base: ${{ github.ref }}
+          base: ${{ github.event.repository.default_branch }}
           filters: |
             validation:
               - 'tests/tooling/**'
-              - 'scripts/*.ps1'
-              - 'scripts/*.py'
+              - 'scripts/_artifact_privacy.ps1'
+              - 'scripts/_live_tektronix_helpers.ps1'
+              - 'scripts/_validation_helpers.ps1'
+              - 'scripts/live-*.ps1'
+              - 'scripts/preflight-cli.ps1'
               - 'src/scopes_tool_cli/**'
               - 'src/scopes_tool_core/**'
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/tests.yml'
+            packaging:
+              - 'src/**'
+              - 'desktop/**'
+              - 'scripts/build*.ps1'
+              - 'scripts/scopes-tool-windows.spec'
+              - 'scripts/windows_*_entry.py'
+              - 'scripts/ci_packaging_smoke.py'
+              - 'tests/packaging/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/tests.yml'
+              - '.github/workflows/build-windows.yml'
 
   quality-webui:
     name: Code quality & WebUI
@@ -262,3 +278,27 @@ jobs:
         run: >-
           .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_powershell"
           --basetemp .tmp_tests/ci-windows-validation-py3.13
+
+  windows-packaging-smoke:
+    name: Windows real packaging smoke
+    needs: detect-windows-validation-changes
+    if: needs.detect-windows-validation-changes.outputs.packaging == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          architecture: x64
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install uv
+        run: python -m pip install --upgrade uv
+      - name: Install locked dependencies
+        run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
+      - name: Build Desktop onedir (includes shared Python bundle)
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_desktop.ps1
+      - name: Smoke packaged executable outputs (no hardware)
+        run: .\.venv\Scripts\python.exe scripts/ci_packaging_smoke.py --mode desktop
