@@ -6,8 +6,10 @@ import argparse
 import asyncio
 import errno
 import json
+from pathlib import Path
 from queue import Empty, Queue
 import socket
+import sys
 import threading
 import time
 import tkinter as tk
@@ -27,6 +29,22 @@ DEFAULT_PORT = 8025
 AUTO_PORT_ATTEMPTS = 100
 JOB_SHUTDOWN_TIMEOUT_S = 10.0
 SERVER_JOIN_TIMEOUT_S = 3.0
+
+
+def _launcher_icon_path() -> Path:
+    if getattr(sys, "frozen", False):
+        base = Path(sys._MEIPASS)
+    else:
+        base = Path(__file__).resolve().parents[2]
+    return base / "desktop" / "assets" / "scopes-icon.ico"
+
+
+def _set_window_icon(root: tk.Tk) -> None:
+    if sys.platform != "win32":
+        return
+    icon_path = _launcher_icon_path()
+    if icon_path.is_file():
+        root.iconbitmap(default=str(icon_path))
 
 
 def build_local_url(port: int) -> str:
@@ -119,6 +137,7 @@ class LauncherApp:
         self._status_value = tk.StringVar(value="Ready")
 
         self._root.title("Scopes Tool WebUI Launcher")
+        _set_window_icon(self._root)
         self._root.protocol("WM_DELETE_WINDOW", self.quit)
 
         frame = tk.Frame(self._root, padx=16, pady=14)

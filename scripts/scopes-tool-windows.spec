@@ -25,7 +25,7 @@ cli_analysis = Analysis(
 launcher_analysis = Analysis(
     [str(REPO_ROOT / "scripts" / "windows_launcher_entry.py")],
     pathex=[str(SRC_ROOT)],
-    datas=[*METADATA, *WEBUI_STATIC],
+    datas=[*METADATA, *WEBUI_STATIC, (str(SCOPES_ICON), "desktop/assets")],
 )
 host_analysis = Analysis(
     [str(REPO_ROOT / "scripts" / "windows_host_entry.py")],
