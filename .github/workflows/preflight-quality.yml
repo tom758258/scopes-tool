@@ -77,4 +77,3 @@ jobs:
 
       - name: Run Desktop Node runtime tests
         run: node --test tests/webui/desktop-main.test.cjs
-
