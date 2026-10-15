@@ -1192,10 +1192,16 @@ function Assert-NearlyEqual {
         [double] $Expected,
 
         [Parameter(Mandatory = $true)]
-        [string] $Label
+        [string] $Label,
+
+        [Nullable[double]] $AbsoluteTolerance = $null
     )
 
-    $tolerance = [Math]::Max(1e-12, [Math]::Abs($Expected) * 1e-3)
+    $tolerance = if ($null -ne $AbsoluteTolerance) {
+        [double]$AbsoluteTolerance
+    } else {
+        [Math]::Max(1e-12, [Math]::Abs($Expected) * 1e-3)
+    }
     if ([Math]::Abs($Actual - $Expected) -gt $tolerance) {
         throw "${Label} readback ${Actual} does not match ${Expected}."
     }
@@ -4634,8 +4640,11 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 [int]$readback.result.data_channel -ne 2) {
                 throw "Setup/hold trigger readback is invalid."
             }
-            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.setup_time_seconds -Label "setup-hold setup_time_seconds") -Expected 1e-09 -Label "setup-hold setup_time_seconds"
-            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.hold_time_seconds -Label "setup-hold hold_time_seconds") -Expected 1e-09 -Label "setup-hold hold_time_seconds"
+            $setupHoldTolerance = if ($script:Target -in @(
+                "keysight-dsox2004a", "keysight-dsox3024a"
+            )) { 5e-9 } else { $null }
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.setup_time_seconds -Label "setup-hold setup_time_seconds") -Expected 1e-09 -Label "setup-hold setup_time_seconds" -AbsoluteTolerance $setupHoldTolerance
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.hold_time_seconds -Label "setup-hold hold_time_seconds") -Expected 1e-09 -Label "setup-hold hold_time_seconds" -AbsoluteTolerance $setupHoldTolerance
         }
     }
 

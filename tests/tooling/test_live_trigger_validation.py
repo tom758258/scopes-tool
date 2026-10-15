@@ -123,7 +123,7 @@ def keysight_fixture(model):
 
 def run_keysight_triggers(tmp_path, model, *, plus=True, failures=None, patches=None, edge_faults=()):
     fixture = keysight_fixture(model)
-    fixture.update(plus=plus, failures=failures or [], patches=patches or {}, edge_faults=list(edge_faults))
+    fixture.update(model=model, plus=plus, failures=failures or [], patches=patches or {}, edge_faults=list(edge_faults))
     path = tmp_path / "fixture.json"
     path.write_text(json.dumps(fixture), encoding="utf-8")
     body = extract_live_cli_functions_ps((
@@ -132,6 +132,7 @@ def run_keysight_triggers(tmp_path, model, *, plus=True, failures=None, patches=
         "Assert-FiniteNumber", "ConvertTo-InvariantString",
     )) + f"$fixture = [IO.File]::ReadAllText({ps_quote(path)}) | ConvertFrom-Json\n" + r'''
 $script:FunctionalFailed = $false
+$script:Target = $fixture.model
 $script:SaveFixtureEstablished = $false
 $script:Calls = New-Object System.Collections.Generic.List[object]
 $script:Cases = [ordered]@{}
@@ -276,6 +277,36 @@ def test_keysight_missing_plus_is_explicit_na(tmp_path):
     for name, case in report["cases"].items():
         assert case["status"] == ("N/A" if name in PLUS_TRIGGERS else "PASS"), case
     assert not PLUS_TRIGGERS.intersection(c["command"] for c in report["calls"])
+    assert report["cases"]["trigger-setup-hold"]["status"] == "N/A"
+    assert not any(c["stage"] == "trigger-setup-hold-set" for c in report["calls"])
+
+
+@pytest.mark.parametrize("model,patches,case,status", [
+    ("keysight-dsox3024a", {"trigger-setup-hold-query": {
+        "setup_time_seconds": 2e-9, "hold_time_seconds": 2e-9}}, "trigger-setup-hold", "PASS"),
+    ("keysight-dsox2004a", {"trigger-setup-hold-query": {
+        "setup_time_seconds": 2e-9, "hold_time_seconds": 2e-9}}, "trigger-setup-hold", "PASS"),
+    ("keysight-dsox3024a", {"trigger-setup-hold-query": {
+        "hold_time_seconds": 6e-9}}, "trigger-setup-hold", "PASS"),
+    ("keysight-dsox4024a", {"trigger-setup-hold-query": {
+        "setup_time_seconds": 2e-9}}, "trigger-setup-hold", "FAIL"),
+    ("keysight-dsox2004a", {"trigger-setup-hold-query": {
+        "hold_time_seconds": 7e-9}}, "trigger-setup-hold", "FAIL"),
+    ("keysight-dsox3024a", {"trigger-setup-hold-query": {
+        "setup_time_seconds": 7e-9}}, "trigger-setup-hold", "FAIL"),
+    ("keysight-dsox3024a", {"trigger-pulse-width-query": {
+        "greater_than_seconds": 2e-6}}, "trigger-pulse-width", "FAIL"),
+])
+def test_keysight_setup_hold_tolerance_scope(tmp_path, model, patches, case, status):
+    report = run_keysight_triggers(tmp_path, model, patches=patches)
+    assert report["cases"][case]["status"] == status, report["cases"][case]
+    assert report["cases"]["restore"]["status"] == "PASS"
+    if case == "trigger-setup-hold":
+        setter = next(c for c in report["calls"] if c["stage"] == "trigger-setup-hold-set")
+        assert setter["arguments"] == [
+            "--clock-channel", "1", "--data-channel", "2", "--slope", "positive",
+            "--setup-time", "0.000000001", "--hold-time", "0.000000001",
+        ]
 
 
 @pytest.mark.parametrize("failures,patches,details", [
