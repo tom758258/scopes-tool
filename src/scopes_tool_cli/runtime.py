@@ -155,13 +155,21 @@ def _open_scope(args: argparse.Namespace, resource: str) -> Oscilloscope | Abstr
             scope = _validate_worker_live_identity(args, scope)
         elif isinstance(scope, Oscilloscope):
             scope = _select_one_shot_live_driver(args, scope)
-        ensure_backend_live_support(
-            visa_library=args.visa_library,
-            resource=resource,
-            policy_mode=policy_mode,
-            command=args.command,
-            detected_model_id=scope.idn.model_id if scope.idn is not None else None,
-        )
+        if policy_mode == SUPPORT_POLICY_MODE_VALIDATION and args.command != "identify":
+            # Product System/custom VISA sessions keep their original API surface;
+            # only contributor @py validation requires a detected physical IDN.
+            detected_idn = getattr(scope, "idn", None)
+            if detected_idn is None:
+                raise OscilloscopeError(
+                    "@py contributor validation requires the detected *IDN? identity"
+                )
+            ensure_backend_live_support(
+                visa_library=args.visa_library,
+                resource=resource,
+                policy_mode=policy_mode,
+                command=args.command,
+                detected_model_id=detected_idn.model_id,
+            )
         if _JSON_RECORD is not None:
             _JSON_RECORD["backend"] = getattr(scope.backend, "backend", None)
         return scope
