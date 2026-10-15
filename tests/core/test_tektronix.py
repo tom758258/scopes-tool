@@ -1225,7 +1225,7 @@ def test_autoset_operation_timeout_and_restore(model_id, _, __, original_timeout
 
     monkeypatch.setattr(backend, "write", write)
     monkeypatch.setattr(backend, "query", query)
-    expected_timeout = original_timeout if model_id == "tektronix-tbs2074" else 10000
+    expected_timeout = 10000
     if failure == "write":
         with pytest.raises(OscilloscopeError):
             scope.autoscale(None)
@@ -1309,7 +1309,7 @@ def test_cli_autoset_shares_core_operation_timeout(model_id, _, __, failure, mon
     payload = json.loads(capsys.readouterr().out)
     assert code == (1 if failure else 0)
     assert payload["ok"] == (failure is None)
-    timeout = 2000 if model_id == "tektronix-tbs2074" else 10000
+    timeout = 10000
     assert events == [("AUTOSet EXECute", timeout), ("*ESR?", timeout)]
     assert backend.timeout == 2000
     assert backend.history.count("AUTOSet EXECute") == 1
