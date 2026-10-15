@@ -83,6 +83,10 @@ function Invoke-TektronixCliValidation {
         "tektronix-tbs1052b" = 0.05
         "tektronix-tds2024b" = 0.05
     }
+    $pulseWidthTimeTolerances = @{
+        "tektronix-tbs1052b" = 1e-8
+        "tektronix-tds2024b" = 1e-8
+    }
 
     function Add-Case {
         param([string]$Name, [ValidateSet("PASS", "FAIL", "N/A", "NOT TESTED")][string]$Status, [string]$Detail = "")
@@ -289,7 +293,15 @@ print(json.dumps({
 
     function Assert-ReadbackEqual {
         param($Expected, $Actual, [string]$Command, [string]$Field)
-        if (($Command -in @("trigger-edge", "trigger-edge-level", "trigger-edge-source") -or
+        $isPulseWidthTime = $Command -eq "trigger-pulse-width" -and
+            $Field -in @("greater_than_seconds", "less_than_seconds") -and
+            $pulseWidthTimeTolerances.ContainsKey($script:Target)
+        if ($isPulseWidthTime -and (
+            $Expected -isnot [ValueType] -or $Expected -is [bool] -or
+            $Actual -isnot [ValueType] -or $Actual -is [bool])) {
+            throw "$Field readback must be numeric."
+        }
+        if (($isPulseWidthTime -or $Command -in @("trigger-edge", "trigger-edge-level", "trigger-edge-source") -or
              ($Command -eq "trigger-pulse-width" -and $Field -eq "level_volts" -and
               $triggerLevelTolerances.ContainsKey($script:Target))) -and
             $Expected -is [ValueType] -and $Expected -isnot [bool] -and
@@ -302,6 +314,8 @@ print(json.dumps({
                 $tolerance = $triggerLevelTolerances[$script:Target]
                 # Ignore binary floating-point noise at the absolute boundary.
                 $difference = [math]::Round($difference, 12)
+            } elseif ($isPulseWidthTime) {
+                $tolerance = $pulseWidthTimeTolerances[$script:Target]
             }
             if ([double]::IsNaN($difference) -or [double]::IsInfinity($difference) -or $difference -gt $tolerance) {
                 throw "$Field readback differs. Before=$before; After=$after; Difference=$difference; Tolerance=$tolerance"

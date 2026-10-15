@@ -981,9 +981,11 @@ class TektronixOscilloscope(Oscilloscope):
         return EdgeTriggerLevelState(channel, _number(raw, command), raw)
 
     def configure_trigger_edge(self, source_channel: int, level_volts: float, slope: str) -> None:
+        if isinstance(source_channel, bool) or not isinstance(source_channel, int):
+            raise ParameterValidationError("edge source channel must be an integer")
         channel = self._channel(source_channel)
         token = _choice(slope, {"positive": "RISe", "negative": "FALL"}, "edge slope")
-        if not math.isfinite(level_volts):
+        if isinstance(level_volts, bool) or not isinstance(level_volts, (int, float)) or not math.isfinite(level_volts):
             raise ParameterValidationError("edge level must be finite")
         self.configure_trigger_mode("edge")
         self.configure_trigger_edge_source(source="analog-channel", source_channel=channel)

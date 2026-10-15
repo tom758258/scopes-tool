@@ -1354,10 +1354,11 @@ def test_fixture_trigger_level_readback_tolerance(tmp_path, target, actual, pass
 
 @pytest.mark.windows_powershell
 @requires_windows
-@pytest.mark.parametrize("target", TARGETS[1:2])
+@pytest.mark.parametrize("target", TARGETS[1:])
 @pytest.mark.parametrize("field,actual,passed", [
     ("level_volts", 1.04, True), ("level_volts", 1.06, False),
-    ("greater_than_seconds", 1.001e-6, False),
+    ("greater_than_seconds", 1.0065e-6, True),
+    ("greater_than_seconds", 1.011e-6, False),
 ])
 def test_pulse_width_level_readback_tolerance(tmp_path, target, field, actual, passed):
     result, report = fake_run(tmp_path, target, mode="glitch", stage_responses={

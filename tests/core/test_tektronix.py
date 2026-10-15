@@ -446,6 +446,16 @@ def test_tds2000b_tbs1000b_standalone_level_rejected_but_combined_edge_supported
     with pytest.raises(ParameterValidationError):
         scope.configure_trigger_edge_level(source_channel=1, level_volts=0.5)
     assert backend.history == ["*IDN?"]
+    for channel in (True, False, 1.0, 1.5, "1", None, 0, scope.capabilities.analog_channels + 1):
+        history = backend.history.copy()
+        with pytest.raises(ParameterValidationError):
+            scope.configure_trigger_edge(channel, 0.5, "negative")
+        assert backend.history == history
+    for level in (True, False, "1", None, float("nan"), float("inf")):
+        history = backend.history.copy()
+        with pytest.raises(ParameterValidationError):
+            scope.configure_trigger_edge(1, level, "negative")
+        assert backend.history == history
     scope.configure_trigger_edge(1, 0.5, "negative")
     assert backend.history[1:] == [
         "TRIGger:MAIn:TYPe EDGE",
