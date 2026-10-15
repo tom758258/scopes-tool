@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - ci/scopes-validation-phase01-preflight
 
 permissions:
   contents: read

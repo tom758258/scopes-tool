@@ -1,0 +1,80 @@
+name: Preflight quality checks (temporary)
+
+on:
+  push:
+    branches:
+      - ci/scopes-validation-phase01-preflight
+
+permissions:
+  contents: read
+
+jobs:
+  quality-webui:
+    name: Code quality & WebUI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out PR head or push commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install uv
+        run: python -m pip install --upgrade uv
+
+      - name: Install packages
+        run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
+
+      - name: Check Windows validation partition (collect only)
+        run: ./.venv/bin/python scripts/ci_validation_partition.py
+
+      - name: Check tracked text hygiene
+        run: python scripts/check_text_hygiene.py
+
+      - name: Check committed range whitespace
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+        run: python scripts/check_changed_whitespace.py
+
+      - name: Run Ruff
+        run: ./.venv/bin/python -m ruff check src tests
+
+      - name: Check WebUI JavaScript syntax
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git ls-files 'src/scopes_tool_webui/static/*.js')
+          if (( ${#files[@]} == 0 )); then
+            echo "::error::No tracked WebUI JavaScript files found."
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            node --check "$file"
+          done
+
+      - name: Prepare pytest temp root
+        run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
+
+      - name: Run WebUI Node runtime tests
+        run: >-
+          ./.venv/bin/python -m pytest -q -rs
+          --basetemp .tmp_tests/ci-quality-webui
+          -m frontend_node tests/webui
+
+      - name: Run Desktop Node runtime tests
+        run: node --test tests/webui/desktop-main.test.cjs
+

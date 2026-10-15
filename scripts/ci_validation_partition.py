@@ -7,19 +7,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 
 import pytest
 
-from tests.tooling._validation_grouping import GROUPS
-
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))  # direct execution starts with scripts/ on sys.path
 EXPECTED_WINDOWS_CASES = 341  # Baseline: successful PR #41 run 38782577301.
 
 
 class ValidationInventory:
     @pytest.hookimpl
     def pytest_collection_finish(self, session):
+        from tests.tooling._validation_grouping import GROUPS
+
         inventory = {group: [] for group in GROUPS}
         all_windows = []
         for item in session.items:
