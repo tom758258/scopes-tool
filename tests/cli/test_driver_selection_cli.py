@@ -347,6 +347,7 @@ def test_tek_invalid_average_count_does_not_change_mode(monkeypatch, capsys):
     ("reference-save", ["--slot", "1", "--source-channel", "1"], ["SAVe:WAVEform CH1,REF1", "*OPC?"]),
     ("save-pwd", ["--path", "C:/data"], ['FILESystem:CWD "C:/data"']),
     ("trigger-edge", ["--source-channel", "1", "--level", "0.5", "--slope", "positive"], [
+        "TRIGger:A:TYPe EDGE",
         "TRIGger:A:EDGE:SOUrce CH1", "TRIGger:A:LEVel:CH1 0.5", "TRIGger:A:EDGE:SLOpe RISe",
     ]),
 ])

@@ -448,6 +448,7 @@ def test_tds2000b_tbs1000b_standalone_level_rejected_but_combined_edge_supported
     assert backend.history == ["*IDN?"]
     scope.configure_trigger_edge(1, 0.5, "negative")
     assert backend.history[1:] == [
+        "TRIGger:MAIn:TYPe EDGE",
         "TRIGger:MAIn:EDGE:SOUrce CH1", "TRIGger:MAIn:LEVel 0.5",
         "TRIGger:MAIn:EDGE:SLOpe FALL",
     ]

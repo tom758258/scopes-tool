@@ -985,6 +985,7 @@ class TektronixOscilloscope(Oscilloscope):
         token = _choice(slope, {"positive": "RISe", "negative": "FALL"}, "edge slope")
         if not math.isfinite(level_volts):
             raise ParameterValidationError("edge level must be finite")
+        self.configure_trigger_mode("edge")
         self.configure_trigger_edge_source(source="analog-channel", source_channel=channel)
         command = f"{self._trigger_root}:LEVel:CH{channel}" if self._is_tbs2000 else f"{self._trigger_root}:LEVel"
         self._write_number(command, level_volts)

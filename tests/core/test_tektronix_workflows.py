@@ -401,7 +401,7 @@ def test_fixed_fixture_driver_readbacks(model):
         scope.set_channel_display(1, False)
         scope.set_channel_scale(1, 0.5)
         scope.configure_trigger_edge(1, 2.44444, "negative")
-        assert scope.query_trigger_mode().mode == initial_mode
+        assert scope.query_trigger_mode().mode == "edge"
         scope.set_channel_display(1, True)
         scope.set_channel_scale(1, 2)
         scope.set_acquisition_type("normal")

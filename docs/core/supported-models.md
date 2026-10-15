@@ -240,7 +240,7 @@ installation does not enable native result dumps or a global measurement source.
 | `trigger-edge-source` | SUPPORTED | SUPPORTED | SUPPORTED | Analog channels and line on all three; B1 models also admit external. TBS2074 AUX is not assumed equivalent to public external. |
 | `trigger-edge-slope` | SUPPORTED | SUPPORTED | SUPPORTED | positive/negative only; no either/alternate. |
 | `trigger-edge-coupling` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074: dc/lf-reject. B1 models: ac/dc/lf-reject. HF/noise rejection does not create extra public coupling values. |
-| `trigger-edge` | SUPPORTED | SUPPORTED | SUPPORTED | Combined analog source/level/slope only, positive/negative. B1 combined configuration may select the source before MAIN:LEVEL. Line/external are excluded from this combined contract. |
+| `trigger-edge` | SUPPORTED | SUPPORTED | SUPPORTED | Combined configuration selects EDGE before setting analog source/level/slope, positive/negative only. B1 combined configuration may select the source before MAIN:LEVEL. Line/external are excluded from this combined contract. |
 | `trigger-edge-level` | SUPPORTED | UNSUPPORTED | UNSUPPORTED | TBS2074 has channel-qualified level access. B1 MAIN:LEVEL is selected-source state and cannot satisfy the standalone named-channel operation without source mutation. |
 | `trigger-holdoff` | SUPPORTED | SUPPORTED | SUPPORTED | TBS2074 supports 20 ns-8 s; B1 models support 500 ns-10 s. |
 | `trigger-pulse-width` | SUPPORTED | SUPPORTED | SUPPORTED | Analog positive/negative, less-than/greater-than only. Only the active threshold is supplied; inactive/range thresholds are null and min+max/range requests are rejected before writes. |
