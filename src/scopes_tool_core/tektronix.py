@@ -507,7 +507,7 @@ class TektronixOscilloscope(Oscilloscope):
         }:
             return TekPostStatus(0, "not read after explicit status operation")
         if operation == "autoscale" and self.capabilities is not None and self.capabilities.physical_model_id in {
-            "tektronix-tds2024b", "tektronix-tbs1052b",
+            "tektronix-tds2024b", "tektronix-tbs1052b", "tektronix-tbs2074",
         }:
             original_timeout = self.scpi.timeout
             try:
@@ -698,7 +698,7 @@ class TektronixOscilloscope(Oscilloscope):
         if channels is not None or acquire_mode is not None or channels_mode is not None:
             raise ParameterValidationError("Tek autoscale supports no optional controls")
         if self.capabilities is not None and self.capabilities.physical_model_id in {
-            "tektronix-tds2024b", "tektronix-tbs1052b",
+            "tektronix-tds2024b", "tektronix-tbs1052b", "tektronix-tbs2074",
         }:
             original_timeout = self.scpi.timeout
             try:
