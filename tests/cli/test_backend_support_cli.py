@@ -19,7 +19,16 @@ def test_product_live_rejects_backend_without_opening_visa(monkeypatch, capsys, 
     assert "Pending" in capsys.readouterr().err or selector == "@bt"
 
 
-def test_registered_pyvisa_py_validation_uses_detected_idn(monkeypatch, capsys):
+@pytest.mark.parametrize(
+    ("command", "resource", "expected_scpi"),
+    [
+        ("run", "TCPIP0::FAKE::INSTR", ["*IDN?", ":RUN", ":SYSTem:ERRor?"]),
+        ("check-error", "TCPIP::FAKE::INSTR", ["*IDN?", ":SYSTem:ERRor?"]),
+    ],
+)
+def test_registered_pyvisa_py_validation_uses_detected_idn(
+    monkeypatch, capsys, command, resource, expected_scpi
+):
     backend = FakeBackend(responses={
         "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,SN1,1.0",
         ":SYSTem:ERRor?": '+0,"No error"',
@@ -32,11 +41,11 @@ def test_registered_pyvisa_py_validation_uses_detected_idn(monkeypatch, capsys):
 
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(open_fake))
     assert cli.main([
-        "run", "--resource", "TCPIP0::FAKE::INSTR",
+        command, "--resource", resource,
         "--visa-library", "@py", "--validation-allow-pending-live-support",
     ]) == 0
-    assert selectors == [("TCPIP0::FAKE::INSTR", "@py")]
-    assert backend.history == ["*IDN?", ":RUN", ":SYSTem:ERRor?"]
+    assert selectors == [(resource, "@py")]
+    assert backend.history == expected_scpi
     capsys.readouterr()
 
 

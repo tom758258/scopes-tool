@@ -32,9 +32,9 @@ def infer_transport_scope(resource: str | None) -> str:
     """Classify a caller-provided VISA resource without opening it."""
 
     prefix = (resource or "").strip().split("::", 1)[0].upper()
-    if prefix.startswith("USB") and prefix[3:].isdigit():
+    if prefix == "USB" or (prefix.startswith("USB") and prefix[3:].isdigit()):
         return "usb"
-    if prefix.startswith("TCPIP") and prefix[5:].isdigit():
+    if prefix == "TCPIP" or (prefix.startswith("TCPIP") and prefix[5:].isdigit()):
         return "tcpip"
     return "unknown"
 
