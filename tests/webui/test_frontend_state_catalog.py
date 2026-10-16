@@ -372,6 +372,7 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
             "function handleScanBusyChange(busy)",
             "async function refreshLiveDataSnapshot()",
             "function liveDataContextKey()",
+            "function syncLiveDataContext()",
             "function systemInformationContextKey()",
             "function sameExecutionContext(left, right)",
             "function updateIdentity(job, commandContext)",
