@@ -1025,28 +1025,6 @@ def test_cli_final_io_failure_preserves_case_failure(tmp_path: Path) -> None:
 
 @pytest.mark.windows_powershell
 @requires_windows
-@pytest.mark.parametrize("target,command,expected,actual,passed", [(TARGETS[1], "trigger-edge", 1.0, 1.05, True), (TARGETS[1], "trigger-edge", 1.0, 0.95, True), (TARGETS[2], "trigger-edge", 1.0, 1.06, False), (TARGETS[0], "trigger-edge-level", 0.0, 5e-13, True), (TARGETS[0], "trigger-edge-level", 1.0, 1.002, False)])
-def test_edge_readback_tolerance(tmp_path, target, command, expected, actual, passed):
-    def response(value):
-        return {"ExitCode": 0, "Payload": {"ok": True, "result": {
-            "source_channel": 1, "level_volts": value, "slope": "positive",
-        }}}
-    result, report = fake_run(tmp_path, target, focused_case=("trigger-edge-level" if command == "trigger-edge-level" else "trigger-edge"), stage_responses={
-        f"{command}-before": response(expected), f"{command}-after": response(actual),
-        f"{command}-restored": response(expected),
-    })
-    case = next(case for case in report["cases"] if case["name"] == command)
-    assert case["status"] == ("PASS" if passed else "FAIL")
-    assert (result.returncode == 0) == passed
-    setter_called = any(inv["stage"] == f"{command}-same-value" for inv in report["invocations"])
-    assert setter_called == (command != "trigger-edge" or expected != 1.06)
-    if not passed:
-        for field in ("Before=", "After=", "Difference=", "Tolerance="):
-            assert field in case["detail"]
-
-
-@pytest.mark.windows_powershell
-@requires_windows
 @pytest.mark.parametrize("target", TARGETS[1:2])
 @pytest.mark.parametrize("actual,passed", [(1.04, True), (1.06, False)])
 def test_fixture_trigger_level_readback_tolerance(tmp_path, target, actual, passed):
@@ -1062,50 +1040,6 @@ def test_fixture_trigger_level_readback_tolerance(tmp_path, target, actual, pass
     if not passed:
         assert "level_volts readback differs" in cases["fixture-baseline"]["detail"]
         assert report["invocations"][-1]["stage"] == "fixture-trigger-query"
-
-
-@pytest.mark.windows_powershell
-@requires_windows
-# TDS2024B represents the legacy pulse-width readback tolerance contract.
-# TBS1052B still has independent identity, mode and two-channel capability tests.
-@pytest.mark.parametrize("target", TARGETS[1:2])
-@pytest.mark.parametrize("field,actual,passed", [
-    ("level_volts", 1.04, True), ("level_volts", 1.06, False),
-    ("greater_than_seconds", 1.0065e-6, True),
-    ("greater_than_seconds", 1.011e-6, False),
-])
-def test_pulse_width_level_readback_tolerance(tmp_path, target, field, actual, passed):
-    result, report = fake_run(tmp_path, target, mode="glitch", focused_case="trigger-pulse-width", stage_responses={
-        "trigger-pulse-width-query": {"ResultOverrides": {field: actual}},
-    })
-    case = next(case for case in report["cases"] if case["name"] == "trigger-pulse-width")
-    assert case["status"] == ("PASS" if passed else "FAIL"), case["detail"]
-    assert (result.returncode == 0) == passed, result.stdout + result.stderr
-    setter = next(inv["arguments"] for inv in report["invocations"]
-                  if inv["stage"] == "trigger-pulse-width-set")
-    assert float(setter[setter.index("--level-volts") + 1]) == 1.0
-    if not passed:
-        assert f"{field} readback differs" in case["detail"]
-
-
-@pytest.mark.windows_powershell
-@requires_windows
-@pytest.mark.parametrize("target", TARGETS[1:2])
-@pytest.mark.parametrize("command,field,actual", [
-    ("channel-scale", "volts_per_division", 2.001),
-    ("trigger-edge", "source_channel", 1.01),
-    ("trigger-edge", "slope", "negative"),
-])
-def test_unrelated_readback_retains_strict_tolerance(tmp_path, target, command, field, actual):
-    result, report = fake_run(tmp_path, target, focused_case="strict-readback", stage_responses={
-        f"{command}-after": {"ResultOverrides": {field: actual}},
-    })
-    assert result.returncode != 0
-    cases = {case["name"]: case for case in report["cases"]}
-    assert cases[command]["status"] == "FAIL"
-    assert f"{field} readback differs" in cases[command]["detail"]
-    if command != "trigger-edge":
-        assert cases["trigger-edge"]["status"] == "PASS"
 
 
 @pytest.mark.windows_powershell
@@ -1392,3 +1326,77 @@ def test_reference_lifecycle_source_precondition_blocks_writes(tmp_path, display
     assert (result.returncode != 0) is (status == "FAIL")
     stages = [inv["stage"] for inv in report["invocations"]]
     assert not {"reference-save", "reference-display", "reference-query-after-save", "reference-display-cleanup"}.intersection(stages)
+
+
+@pytest.mark.windows_powershell
+@requires_windows
+def test_tektronix_readback_contract_matrix(tmp_path: Path) -> None:
+    """Keysight-style fast contract coverage without repeated full CLI runs."""
+    from tests.tooling._tektronix_live_test_support import ROOT, run_script
+
+    scenarios = []
+    def add(kind, target, command, field, expected, actual, passed):
+        scenarios.append({
+            "id": str(len(scenarios)), "kind": kind, "target": target,
+            "command": command, "field": field, "expected": expected,
+            "actual": actual, "passed": passed,
+        })
+
+    for target, command, expected, actual, passed in [
+        (TARGETS[1], "trigger-edge", 1.0, 1.05, True),
+        (TARGETS[1], "trigger-edge", 1.0, 0.95, True),
+        (TARGETS[2], "trigger-edge", 1.0, 1.06, False),
+        (TARGETS[0], "trigger-edge-level", 0.0, 5e-13, True),
+        (TARGETS[0], "trigger-edge-level", 1.0, 1.002, False),
+    ]:
+        add("edge", target, command, "level_volts", expected, actual, passed)
+    for field, actual, passed in [
+        ("level_volts", 1.04, True),
+        ("level_volts", 1.06, False),
+        ("greater_than_seconds", 1.0065e-6, True),
+        ("greater_than_seconds", 1.011e-6, False),
+    ]:
+        add("pulse", TARGETS[1], "trigger-pulse-width", field, 1.0, actual, passed)
+    for command, field, actual in [
+        ("channel-scale", "volts_per_division", 2.001),
+        ("trigger-edge", "source_channel", 1.01),
+        ("trigger-edge", "slope", "negative"),
+    ]:
+        add("strict", TARGETS[1], command, field, 1.0, actual, False)
+
+    path = tmp_path / "matrix.json"
+    path.write_text(json.dumps(scenarios), encoding="utf-8")
+    result = run_script(
+        "-RepoRoot", str(ROOT),
+        "-ScenarioPath", str(path),
+        "-ScratchRoot", str(tmp_path),
+        script=ROOT / "tests/tooling/tektronix_contract_harness.ps1",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    reports = json.loads(result.stdout)
+    assert len(reports) == len(scenarios)
+    assert [report["id"] for report in reports] == [case["id"] for case in scenarios]
+    for scenario, report in zip(scenarios, reports):
+        expected_status = "PASS" if scenario["passed"] else "FAIL"
+        assert report["status"] == expected_status, (scenario, report)
+        stages = report["stages"]
+        assert stages, scenario
+        if scenario["kind"] == "pulse":
+            assert "trigger-pulse-width-set" in stages
+            setter = next(call["options"] for call in report["calls"]
+                          if call["stage"] == "trigger-pulse-width-set")
+            assert float(setter[setter.index("--level-volts") + 1]) == 1.0
+            assert "trigger-pulse-width-edge-reset" in stages
+            assert "trigger-pulse-width-edge-query" in stages
+        else:
+            if scenario["command"] == "trigger-edge":
+                assert "trigger-edge-same-value" in stages
+            else:
+                assert scenario["command"] + "-same-value" in stages
+                if not scenario["passed"]:
+                    assert scenario["command"] + "-restored" in stages
+        if not scenario["passed"]:
+            assert "readback differs" in report["detail"], (scenario, report)
+            if scenario["kind"] == "edge":
+                assert all(token in report["detail"] for token in
+                           ("Before=", "After=", "Difference=", "Tolerance=")), report

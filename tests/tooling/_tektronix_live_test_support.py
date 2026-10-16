@@ -80,7 +80,7 @@ def fake_run(
     core_supported_operations: tuple[str, ...] | None = None,
     confirmation: str = "enter", runt_channel: int = 1,
     holdoff_seconds: float = 0.000001, debug: bool = True,
-    focused: bool = False, focused_case: str | None = None, stage_responses: dict | None = None,
+    focused: bool = False, stage_responses: dict | None = None,
     save_pwd_path: str = "C:/scope", channel_label: str = "CH1",
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     model, channels, series = {
@@ -261,7 +261,7 @@ def fake_run(
         "'result': values.get(command, {})}))\n",
         encoding="utf-8",
     )
-    output_root = ROOT / ".tmp_tests" / "live_tektronix_check" / tmp_path.name
+    output_root = ROOT / ".tmp_tests" / "live_tektronix_check" / tmp_path.parent.name / tmp_path.name
     env = os.environ.copy()
     env["PYTHONPATH"] = str(tmp_path)
     arguments = [
@@ -290,7 +290,7 @@ def fake_run(
             "screenshot_bytes": list(screenshot_bytes),
             "screenshot_format": "PNG" if target == TARGETS[0] else "BMP" if target == TARGETS[1] else "JPEG",
             "arguments": arguments,
-            "focused": focused, "focused_case": focused_case, "stage_responses": stage_responses or {},
+            "focused": focused, "stage_responses": stage_responses or {},
         }), encoding="utf-8")
     result = run_script(
         "-ScriptPath", str(SCRIPT), "-FixturePath", str(fixture),

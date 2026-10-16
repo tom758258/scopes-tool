@@ -13,7 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))  # direct execution starts with scripts/ on sys.path
-EXPECTED_WINDOWS_CASES = 334  # Stage 2: seven redundant parameter variants consolidated.
+EXPECTED_WINDOWS_CASES = 323  # Seven earlier variants and eleven readback contracts consolidated.
 
 
 class ValidationInventory:
