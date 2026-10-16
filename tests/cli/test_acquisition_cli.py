@@ -26,6 +26,7 @@ class _AcquisitionDummyScope:
         self.capabilities = None
         self.calls = []
         self.model = model
+        self.idn = parse_idn(f"KEYSIGHT TECHNOLOGIES,{model},MY123,07.20")
         self.backend = type("Backend", (), {"backend": "fake", "timeout": 2000})()
 
     def __enter__(self):

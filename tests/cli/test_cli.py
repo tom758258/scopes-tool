@@ -36,6 +36,9 @@ class _DriverContractDummy:
     from scopes_tool_core.scope import Oscilloscope
 
     capabilities = None
+    # Duck-typed unit-test scopes stand in for an already identified device.
+    # Product policy authorization itself is covered in test_backend_support_cli.py.
+    idn = parse_idn("KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,07.20")
     preflight_status = Oscilloscope.preflight_status
     workflow_status = Oscilloscope.workflow_status
     doctor_trigger_snapshot = Oscilloscope.doctor_trigger_snapshot
@@ -69,6 +72,8 @@ class _ChannelParameterDummyScope(_DriverContractDummy):
         self.model = model
         self.capabilities = None
         self.calls = []
+        # The generic test double stands in for an already-identified live scope.
+        self.idn = parse_idn(f"KEYSIGHT TECHNOLOGIES,{model},MY123,07.20")
 
     def __enter__(self):
         return self
@@ -184,6 +189,7 @@ class _MeasurementDummyScope(_DriverContractDummy):
         self.valid = valid
         self.reason = reason
         self.model = model
+        self.idn = parse_idn(f"KEYSIGHT TECHNOLOGIES,{model},MY123,07.20")
 
     def __enter__(self):
         return self

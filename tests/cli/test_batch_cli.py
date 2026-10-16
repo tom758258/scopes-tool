@@ -38,6 +38,7 @@ class _BatchDummyScope:
         self.capabilities = None
         self.calls = []
         self.model = model
+        self.idn = parse_idn(f"KEYSIGHT TECHNOLOGIES,{model},MY123,07.20")
         self.system_errors = list(system_errors or [])
 
     def __enter__(self):

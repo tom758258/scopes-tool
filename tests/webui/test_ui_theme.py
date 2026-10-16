@@ -125,12 +125,15 @@ def test_supported_devices_api_is_display_only() -> None:
     response = client.get("/api/supported-devices")
     assert response.status_code == 200
     assert response.json() == [
-        {"vendor": "Keysight", "model": model, "connections": connections}
-        for model, connections in [
-            ("TBS2074", ["USB", "TCPIP"]), ("TDS2024B", ["USB"]),
-            ("TBS1052B", ["USB"]),
-            ("DSOX2004A", ["USB"]), ("DSOX3024A", ["USB"]),
-            ("DSOX4024A", ["USB", "TCPIP"]), ("DSOX4034A", ["USB", "TCPIP"]),
+        {"vendor": vendor, "model": model, "connections": connections}
+        for vendor, model, connections in [
+            ("Tektronix", "TBS2074", ["USB", "TCPIP"]),
+            ("Tektronix", "TDS2024B", ["USB"]),
+            ("Tektronix", "TBS1052B", ["USB"]),
+            ("Keysight", "DSOX2004A", ["USB"]),
+            ("Keysight", "DSOX3024A", ["USB"]),
+            ("Keysight", "DSOX4024A", ["USB", "TCPIP"]),
+            ("Keysight", "DSOX4034A", ["USB", "TCPIP"]),
         ]
     ]
     pending = client.get("/api/supported-devices", params={"backend": "@py"})

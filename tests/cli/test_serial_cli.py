@@ -127,7 +127,7 @@ def test_serial_status_fails_closed_when_display_query_fails(monkeypatch, capsys
                 "--bus",
                 "1",
                 "--resource",
-                "FAKE::SCOPE",
+                "USB0::FAKE::INSTR",
                 "--json",
             ]
         )
@@ -606,7 +606,7 @@ def test_serial_spi_live_rejects_before_serial_scpi(monkeypatch, capsys):
                 "--clock-timeout",
                 "1e-6",
                 "--resource",
-                "FAKE::SCOPE",
+                "USB0::FAKE::INSTR",
                 "--model",
                 "keysight-dsox2004a",
                 "--json",
@@ -654,7 +654,7 @@ def test_serial_settings_conflict_hint_preserves_system_error_json(
                 "--rx-source",
                 "channel3",
                 "--resource",
-                "FAKE::SCOPE",
+                "USB0::FAKE::INSTR",
                 "--json",
             ]
         )
@@ -703,7 +703,7 @@ def test_serial_live_uses_detected_4000x_capabilities_not_planning_model(
                 "--mode",
                 "usb-pd",
                 "--resource",
-                "FAKE::SCOPE",
+                "USB0::FAKE::INSTR",
                 "--model",
                 "keysight-dsox2004a",
                 "--json",
@@ -737,7 +737,7 @@ def test_serial_live_uses_detected_2000x_capabilities_before_target_scpi(
                 "--bus",
                 "2",
                 "--resource",
-                "FAKE::SCOPE",
+                "USB0::FAKE::INSTR",
                 "--json",
             ]
         )

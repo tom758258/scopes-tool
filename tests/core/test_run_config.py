@@ -248,4 +248,3 @@ def test_product_py_tcpip_uses_actual_idn_before_business_commands(monkeypatch, 
             open_scope_for_run(config)
         assert backend.closed is True
     assert backend.history == ["*IDN?"]
-

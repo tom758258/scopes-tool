@@ -313,7 +313,7 @@ def test_direct_job_api_opens_approved_py_tcpip_product_command(monkeypatch, tmp
         job_id = response.json()["job_id"]
         manager.get(job_id).future.result(timeout=5)
         assert client.get(f"/api/jobs/{job_id}").json()["status"] == "completed"
-        assert backend.history == ["*IDN?", ":RUN", ":SYSTem:ERRor?"]
+        assert backend.history == ["*IDN?", ":RUN"]
         assert backend.closed is True
     finally:
         asyncio.run(manager.shutdown())

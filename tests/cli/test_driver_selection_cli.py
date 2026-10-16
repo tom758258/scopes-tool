@@ -100,6 +100,15 @@ def test_one_shot_live_command_uses_detected_driver_subclass(monkeypatch, capsys
         monkeypatch,
         driver_id="synthetic-driver",
     )
+    # This test registers a synthetic model; explicitly include it in the
+    # temporary policy so driver selection remains the contract under test.
+    import scopes_tool_core.support_policy as support_policy
+
+    connections = dict(support_policy.PRODUCT_LIVE_CONNECTIONS)
+    connections["system_visa"] = connections["system_visa"] | {
+        (physical_model.model_id, "usb"),
+    }
+    monkeypatch.setattr(support_policy, "PRODUCT_LIVE_CONNECTIONS", connections)
     driver_registry = dict(drivers_module.DRIVER_REGISTRY)
     driver_registry[physical_model.driver_id] = SyntheticScope
     monkeypatch.setattr(drivers_module, "DRIVER_REGISTRY", driver_registry)
@@ -549,7 +558,7 @@ def test_cli_tds_bmp_allows_usbtmc_after_detected_driver(monkeypatch, tmp_path, 
 
 
 @pytest.mark.parametrize("resource", ["TCPIP0::192.0.2.1::INSTR", "ASRL1::INSTR", "USB0::FAKE::RAW"])
-def test_cli_tds_bmp_rejects_other_transports_after_detected_driver(monkeypatch, tmp_path, capsys, resource):
+def test_cli_tds_bmp_rejects_unapproved_or_non_usbtmc_resources(monkeypatch, tmp_path, capsys, resource):
     from scopes_tool_core.visa_backend import VisaBackend
     class VisaStub(FakeBackend, VisaBackend):
         pass
@@ -567,8 +576,15 @@ def test_cli_tds_bmp_rejects_other_transports_after_detected_driver(monkeypatch,
         "screenshot", "--format", "bmp", "--output", str(tmp_path / "screen.bmp"),
         "--resource", resource, "--model", "keysight-dsox4024a",
     ]) == 1
-    assert backend.history == ["*IDN?"]
-    assert "requires a USBTMC resource" in capsys.readouterr().err
+    if resource.startswith("ASRL"):
+        assert backend.history == []  # unsupported transport rejected before VISA
+    else:
+        assert backend.history == ["*IDN?"]
+    error = capsys.readouterr().err
+    if resource.startswith("USB"):
+        assert "requires a USBTMC resource" in error
+    else:
+        assert "no product live support" in error.lower()
 
 
 @pytest.mark.parametrize("mode", ["--simulate", "--dry-run"])
