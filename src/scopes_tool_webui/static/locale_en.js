@@ -1,8 +1,7 @@
 export const en = {
   "device.visaBackend": "VISA backend",
-  "device.visaBackendHelp": "Live only. @py allows scanning and identification only; install the selected backend separately.",
-  "support.pyvisaPyDiagnosticsOnly": "@py is diagnostic only; Product Live operations are unavailable.",
-  "supported_devices.pending": "Pending validation candidates only; Product Live operations are unavailable.",
+  "device.visaBackendHelp": "Live only. @py Product control is limited to supported TCPIP models; @py USB is not open.",
+    "supported_devices.pending": "Only the listed @py connections are Product-open; other @py connections remain unavailable.",
   "accessibility.switch_language_to_zh_tw": "Switch language to Traditional Chinese",
   "accessibility.switch_language_to_en": "Switch language to English",
   "page.appearance": "Appearance",

@@ -215,16 +215,10 @@ export class CommandCatalog {
   }
 
   supported(command) {
-    if (this.activeMode === "live" && this.activeVisaLibrary === "@py"
-        && command?.presentation?.pyvisa_py_diagnostic !== true) return false;
     return !this.activeModelId || commandSupported(command, this.activeModelId);
   }
 
   supportReason(command) {
-    if (this.activeMode === "live" && this.activeVisaLibrary === "@py"
-        && command?.presentation?.pyvisa_py_diagnostic !== true) {
-      return translate("support.pyvisaPyDiagnosticsOnly");
-    }
     return this.activeModelId
       ? commandSupportReason(command, this.activeModelId, this.activeModelLabel)
       : "";

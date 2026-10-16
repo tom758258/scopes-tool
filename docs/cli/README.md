@@ -262,28 +262,30 @@ other non-empty selectors as `custom_visa`.
 
 Ordinary installations and Windows packages include `pyvisa-py` and its LAN
 discovery dependencies (see [installation prerequisites](../../README.md#install)).
-Backend recognition and availability do not establish Product Live support.
-For normal CLI Live
-product operations, `@py` is Pending and `@bt` is not open; both reject
-**before** opening a VISA session. The `list-resources` and `identify`
-diagnostics may still attempt a selected installed backend, including `@bt`,
-but a successful `*IDN?` is not Product Live authorization. Scopes Tool does
-not bundle `pyvisa_bt` or claim Bluetooth Product support. System VISA and
-custom VISA support admission retain their existing behavior; there is no
-per-model Scopes Release Policy.
+Product Live requires an explicitly approved detected model, transport, and
+backend combination. System VISA supports the listed USB/TCPIP connections;
+`@py` is Product-open only for DSOX4024A, DSOX4034A, and TBS2074 over
+TCPIP/LAN. Other `@py` connections, `@bt`, and custom VISA selectors
+(including explicit `@ivi`) are not Product-open. The default or
+`system_visa` selector uses the verified IVI runtime.
 
-For contributor hardware validation of an explicitly registered Pending
-model/transport pair, the maintained `scripts/live-*.ps1` wrappers select
+The `list-resources` and `identify` diagnostics can use an installed
+selected backend without implying Product authorization. All Product operations
+check the requested transport before opening VISA and use actual `*IDN?`
+identity before business SCPI. Model capabilities and available instrument
+options remain separately enforced. See
+[Supported Models](../core/supported-models.md) for the exact supported paths.
+
+For contributor hardware validation of a registered `@py` USB candidate
+or approved `@py` TCPIP pair, the maintained `scripts/live-*.ps1` wrappers select
 `@py` and pass the hidden `--validation-allow-pending-live-support` CLI
 switch. The switch is not a general `--force`: it is restricted to `@py`,
 checks the operator-provided USB or TCPIP/LAN resource and the connected
 `*IDN?` model, and preserves existing model, capability, and cleanup guards.
-Worker and WebUI requests cannot select Validation Mode. No passing validation
-command automatically promotes Product support; the allowed Pending inventory
-is documented in [Supported Models](../core/supported-models.md).
+Worker and WebUI requests cannot select Validation Mode. Validation does not
+promote Product support. The registered USB candidates and Product connection
+matrix are documented in [Supported Models](../core/supported-models.md).
 Direct Python calls to `Oscilloscope.open()` are not Product policy-gated.
-On the instrument computer, the preferred existing Product Live path remains
-the installed System VISA runtime.
 
 ## Agent-safe Automation
 

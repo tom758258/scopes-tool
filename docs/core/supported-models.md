@@ -59,43 +59,48 @@ or missing or unregistered driver IDs fail closed.
 
 ## VISA Backend Boundary
 
-Backend identity is not a model capability or a support declaration. Core
-classifies an unset or blank selector as `system_visa`, `@py` as `pyvisa_py`,
-`@bt` as `pyvisa_bt`, and any other non-empty selector as `custom_visa`.
-Backend identity does not grant Product Live support. Core applies a narrowly
-scoped backend-only policy at bundled CLI and Core run entry points: ordinary
-Product Live operations using `@py` are Pending and rejected, and those using
-`@bt` are not open. The `@py` backend and its LAN discovery dependencies are
-bundled in ordinary installations and Windows packages; `pyvisa_bt` is not.
-System VISA explicitly selects and verifies an installed IVI VISA runtime and
-fails closed instead of falling back to @py. Custom VISA selector behavior is
-unchanged. **This backend policy does not implement a model/command Release
-Policy**.
+Product Live support is exact by detected physical model, VISA transport, and
+backend. The connected instrument's `*IDN?` identity is authoritative; neither
+a planning profile nor the backend selector grants model or feature support.
+The following connections are Product-open for supported Core operations:
 
-Only the following model/transport scopes are registered for controlled
-contributor validation using `@py` (`pyvisa_py`). Each entry is **Pending**, not
-Product-open, and does not attest to hardware validation:
+| Canonical physical model ID | System VISA USB | System VISA TCPIP | `@py` TCPIP |
+| --- | --- | --- | --- |
+| `keysight-dsox2004a` | Open | Not open | Not open |
+| `keysight-dsox3024a` | Open | Not open | Not open |
+| `keysight-dsox4024a` | Open | Open | Open |
+| `keysight-dsox4034a` | Open | Open | Open |
+| `tektronix-tbs2074` | Open | Open | Open |
+| `tektronix-tds2024b` | Open | Not open | Not open |
+| `tektronix-tbs1052b` | Open | Not open | Not open |
 
-| Physical model ID | USB / `@py` | TCPIP/LAN / `@py` |
-| --- | --- | --- |
-| `keysight-dsox2004a` | Pending | Not registered |
-| `keysight-dsox3024a` | Pending | Not registered |
-| `keysight-dsox4024a` | Pending | Pending |
-| `keysight-dsox4034a` | Pending | Pending |
-| `tektronix-tbs2074` | Not registered | Pending |
-| `tektronix-tbs1052b` | Pending | Not registered |
-| `tektronix-tds2024b` | Not registered | Not registered |
+USB through `@py` is not Product-open for any model. Only the approved
+model/transport/backend pairs above are Product-open; GPIB, ASRL, Bluetooth
+(`@bt`), and explicit custom VISA backends are not Product-open. The default
+or `system_visa` selector explicitly loads and verifies an installed IVI VISA
+runtime and does not fall back to `@py`. An explicit `@ivi` selector is
+classified as custom; use the default System VISA selector instead.
 
-The contributor-only hidden CLI Validation Mode can execute an explicitly
-registered Pending `@py` pair after confirming the actual `*IDN?` identity.
-Unregistered model/transport pairs, `@bt`, and unsupported transports remain
-rejected. Validation Mode does not enable Product support, override model or
-capability checks, or bypass normal session cleanup. `list-resources` and
-`identify` are connection diagnostics, not Product-open declarations.
+Capabilities, parameter limits, installed options, and native instrument status
+continue to determine which operations are available inside an approved
+connection. An open connection does not automatically enable an option-dependent
+or otherwise unsupported command. Simulation and dry-run do not open real
+VISA sessions.
 
-`Oscilloscope.open()` remains a low-level session entry usable directly by
-Python callers and does not enforce this Product policy. Dry-run and simulation do not open real VISA sessions. System VISA requires
-an IVI runtime, including for discovery.
+### Contributor Validation and Diagnostics
+
+The following `@py` USB candidates are registered for controlled CLI-only
+Validation Mode; they are not Product-open: `keysight-dsox2004a`,
+`keysight-dsox3024a`, `keysight-dsox4024a`,
+`keysight-dsox4034a`, and `tektronix-tbs1052b`.
+Validation Mode also permits the three already-open `@py` TCPIP pairs, but
+never overrides the detected model, capabilities, or safety requirements.
+WebUI and Worker cannot enable this mode. `identify` and `list-resources`
+are connection diagnostics, not Product authorization.
+
+Direct Python calls to `Oscilloscope.open()` remain a low-level session
+interface rather than a Product-policy entry point. Product CLI and Core-run
+paths enforce the matrix before instrument-changing operations.
 
 ## Runtime Profiles
 

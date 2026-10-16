@@ -1,4 +1,4 @@
-"""Core-owned backend-only live support policy (not a release matrix)."""
+"""Core-owned Product Live connection scopes and contributor validation policy."""
 
 from __future__ import annotations
 
@@ -6,25 +6,51 @@ from .errors import OscilloscopeError
 from .visa_backend import (
     BACKEND_PYVISA_BT,
     BACKEND_PYVISA_PY,
+    BACKEND_SYSTEM_VISA,
     normalize_backend,
 )
 
 SUPPORT_POLICY_MODE_PRODUCT = "product"
 SUPPORT_POLICY_MODE_VALIDATION = "validation"
 
-# Pending contributor validation candidates; NOT Product-open or live evidence.
+# Product scope is exact by detected physical model, transport, and VISA backend.
+# Capability and hardware-option validation remain independently authoritative.
+PRODUCT_LIVE_CONNECTIONS = {
+    BACKEND_SYSTEM_VISA: frozenset({
+        ("keysight-dsox2004a", "usb"),
+        ("keysight-dsox3024a", "usb"),
+        ("keysight-dsox4024a", "usb"),
+        ("keysight-dsox4024a", "tcpip"),
+        ("keysight-dsox4034a", "usb"),
+        ("keysight-dsox4034a", "tcpip"),
+        ("tektronix-tbs2074", "usb"),
+        ("tektronix-tbs2074", "tcpip"),
+        ("tektronix-tbs1052b", "usb"),
+        ("tektronix-tds2024b", "usb"),
+    }),
+    BACKEND_PYVISA_PY: frozenset({
+        ("keysight-dsox4024a", "tcpip"),
+        ("keysight-dsox4034a", "tcpip"),
+        ("tektronix-tbs2074", "tcpip"),
+    }),
+}
+
+# Pending contributor validation candidates; not Product-open connections.
 PYVISA_PY_PENDING_SCOPES = frozenset({
     ("keysight-dsox2004a", "usb"),
     ("keysight-dsox3024a", "usb"),
     ("keysight-dsox4024a", "usb"),
     ("keysight-dsox4034a", "usb"),
     ("tektronix-tbs1052b", "usb"),
-    ("keysight-dsox4024a", "tcpip"),
-    ("keysight-dsox4034a", "tcpip"),
-    ("tektronix-tbs2074", "tcpip"),
 })
 
-# Connection diagnostics are not a declaration of Product Live support.
+# Accepted contributor validation scopes include Pending and already Product-open
+# @py connections; validation never grants Product access or bypasses capabilities.
+_PYVISA_PY_VALIDATION_SCOPES = (
+    PYVISA_PY_PENDING_SCOPES | PRODUCT_LIVE_CONNECTIONS[BACKEND_PYVISA_PY]
+)
+
+# Connection diagnostics are not declarations of Product Live support.
 BACKEND_POLICY_DIAGNOSTICS = frozenset({"identify", "list-resources"})
 
 
@@ -39,6 +65,12 @@ def infer_transport_scope(resource: str | None) -> str:
     return "unknown"
 
 
+def product_live_transport_scopes(visa_library: str | None) -> frozenset[tuple[str, str]]:
+    """Return Product-open connections for display and Core admission."""
+
+    return PRODUCT_LIVE_CONNECTIONS.get(normalize_backend(visa_library), frozenset())
+
+
 def ensure_backend_live_support(
     *,
     visa_library: str | None,
@@ -47,11 +79,11 @@ def ensure_backend_live_support(
     command: str | None = None,
     detected_model_id: str | None = None,
 ) -> None:
-    """Apply backend restrictions before opening VISA and after live IDN.
+    """Gate live sessions before VISA open and again after detected *IDN?.
 
-    Pending @py Validation Mode calls this first to check transport, and then
-    again with the *detected* physical model ID before command-specific SCPI.
-    Never substitute a planning model or an expected-model hint for live IDN.
+    Without a detected model, only backend/transport can be checked. A Product
+    operation must be checked again using the actual IDN before business SCPI.
+    Diagnostics remain available without asserting Product support.
     """
 
     if policy_mode not in {SUPPORT_POLICY_MODE_PRODUCT, SUPPORT_POLICY_MODE_VALIDATION}:
@@ -62,28 +94,33 @@ def ensure_backend_live_support(
         raise OscilloscopeError("Contributor Validation Mode is restricted to @py")
     if command in BACKEND_POLICY_DIAGNOSTICS:
         return
-
     if backend == BACKEND_PYVISA_BT:
-        raise OscilloscopeError(
-            "@bt live backend is not open for Product or contributor validation"
-        )
-    if backend != BACKEND_PYVISA_PY:
-        # Preserve existing System VISA and custom VISA behavior.
-        return
-    if policy_mode == SUPPORT_POLICY_MODE_PRODUCT:
-        raise OscilloscopeError(
-            "@py Product Live support is Pending; use registered contributor validation"
-        )
+        raise OscilloscopeError("@bt live backend is not open for Product or contributor validation")
 
     transport = infer_transport_scope(resource)
-    if transport not in {"usb", "tcpip"}:
+    if policy_mode == SUPPORT_POLICY_MODE_VALIDATION:
+        if transport not in {"usb", "tcpip"}:
+            raise OscilloscopeError(
+                f"@py contributor validation has no registered transport scope: {transport}"
+            )
+        if detected_model_id is not None and (
+            detected_model_id, transport
+        ) not in _PYVISA_PY_VALIDATION_SCOPES:
+            raise OscilloscopeError(
+                "@py contributor validation has no registered scope for "
+                f"model={detected_model_id}, transport={transport}"
+            )
+        return
+
+    connections = product_live_transport_scopes(visa_library)
+    if not connections:
+        raise OscilloscopeError(f"VISA backend {backend} is not open for Product Live")
+    if transport not in {connection_transport for _, connection_transport in connections}:
         raise OscilloscopeError(
-            f"@py contributor validation has no registered transport scope: {transport}"
+            f"VISA backend {backend} has no Product Live support for transport={transport}"
         )
-    if detected_model_id is not None and (
-        detected_model_id, transport
-    ) not in PYVISA_PY_PENDING_SCOPES:
+    if detected_model_id is not None and (detected_model_id, transport) not in connections:
         raise OscilloscopeError(
-            "@py contributor validation has no registered Pending scope for "
-            f"model={detected_model_id}, transport={transport}"
+            "No Product Live support for "
+            f"model={detected_model_id}, transport={transport}, backend={backend}"
         )

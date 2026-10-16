@@ -67,18 +67,23 @@ does not change this selection. Other explicit selectors pass through unchanged.
 Ordinary installations and Windows packages include `pyvisa-py` and its LAN
 discovery dependencies (see [installation prerequisites](../../README.md#install)).
 Other selected backends may require separate installation. Backend availability
-does not grant Product Live support. The Core-owned backend-only policy
-rejects normal Product Live `@py` (Pending) and `@bt` (not open) executions
-before opening VISA. Contributor Validation Mode is an explicit, CLI-only
-bootstrap option restricted to the registered `@py` model/transport Pending
-scopes; after opening VISA, actual `*IDN?` identity must match before
-command-specific SCPI. The WebUI and Worker cannot select Validation Mode.
-The policy intentionally does not implement a Release Matrix and leaves
-System VISA and custom VISA support admission unchanged. Dry-run and
-simulation do not use a live VISA backend.
-Direct Python use of `Oscilloscope.open()` is a session interface, not a
-Product support entry point, and uses the same explicit System VISA selection. For the exact
-pending inventory, see [Supported Models](supported-models.md).
+does not grant Product Live support. Core checks the requested transport and
+backend before opening VISA and the exact physical model resolved from `*IDN?`
+before a Product command. System VISA Product support is limited to approved
+model/USB or model/TCPIP pairs; `@py` Product support is limited to DSOX4024A,
+DSOX4034A, and TBS2074 over TCPIP. The `@py` USB pairs are not Product-open.
+`@bt` and explicitly selected custom VISA backends (including an explicit
+`@ivi` selector) are not Product-open; use the default System VISA selector
+to request the verified IVI backend.
+
+Contributor Validation Mode is an explicit CLI-only option for registered
+`@py` USB candidates and supported `@py` TCPIP scopes. It still requires
+actual `*IDN?` identity and does not grant Product access. WebUI and Worker
+cannot select Validation Mode. Identification and resource discovery remain
+diagnostics; dry-run and simulation do not open a live VISA session.
+Direct Python use of `Oscilloscope.open()` is a low-level session interface,
+not a Product support entry point. See [Supported Models](supported-models.md)
+for the exact connections and model-specific feature limits.
 
 ## Feature Areas
 

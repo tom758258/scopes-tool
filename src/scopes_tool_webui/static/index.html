@@ -76,7 +76,7 @@
                   <button id="supported-py-tab" type="button" role="tab" aria-selected="false" aria-controls="supported-devices-content" tabindex="-1" data-backend="@py">@py</button>
                 </div>
                 <div id="supported-devices-content" role="tabpanel" aria-labelledby="supported-system-tab">
-                  <p id="supported-devices-pending" class="compact-note pending-note" data-i18n="supported_devices.pending" hidden>Pending validation candidates only; Product Live operations are unavailable.</p>
+                  <p id="supported-devices-pending" class="compact-note pending-note" data-i18n="supported_devices.pending" hidden>Only the listed @py connections are Product-open; other @py connections remain unavailable.</p>
                   <div id="supported-devices-body" class="supported-devices-groups"></div>
                 </div>
               </div>
@@ -100,7 +100,7 @@
                     <option value="@py">pyvisa-py (@py)</option>
                   </select>
                 </label>
-                <p class="compact-note" data-i18n="device.visaBackendHelp">Live only. @py allows scanning and identification only; install the selected backend separately.</p>
+                <p class="compact-note" data-i18n="device.visaBackendHelp">Live only. @py Product control is available only for listed TCPIP models; USB @py is not open.</p>
                 <label id="planning-model-field" class="field">
                   <span data-i18n="device.model">Planning model</span>
                   <select id="model-select"></select>

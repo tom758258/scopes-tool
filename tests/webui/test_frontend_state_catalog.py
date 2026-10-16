@@ -359,7 +359,7 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
 
 
 @pytest.mark.frontend_node
-def test_py_diagnostics_keep_product_controls_and_automatic_snapshots_disabled():
+def test_product_py_reuses_detected_capabilities_and_live_snapshots():
     import json
 
     app_source = read_static("app.js")
@@ -372,6 +372,7 @@ def test_py_diagnostics_keep_product_controls_and_automatic_snapshots_disabled()
             "function handleScanBusyChange(busy)",
             "async function refreshLiveDataSnapshot()",
             "function liveDataContextKey()",
+            "function syncLiveDataContext()",
             "function systemInformationContextKey()",
             "function sameExecutionContext(left, right)",
             "function updateIdentity(job, commandContext)",
@@ -379,7 +380,7 @@ def test_py_diagnostics_keep_product_controls_and_automatic_snapshots_disabled()
     )
     projected = json.dumps([
         {"id": entry["id"], "category": entry["category"], "modes": entry["modes"],
-         "presentation": {"pyvisa_py_diagnostic": entry["presentation"]["pyvisa_py_diagnostic"]}}
+         "presentation": {}}
         for entry in command_catalog(include_hidden=True)
         if entry["id"] in {"identify", "list-resources", "run", "single", "capture", "measure",
                            "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"}
@@ -422,13 +423,13 @@ def test_py_diagnostics_keep_product_controls_and_automatic_snapshots_disabled()
         assert.notEqual(liveDataContextKey(), systemLiveKey);
         assert.notEqual(systemInformationContextKey(), systemInfoKey);
         for (const command of commands) {
-          assert.equal(catalog.supported(command), command.presentation.pyvisa_py_diagnostic);
+          assert.equal(catalog.supported(command), true);
+          assert.equal(catalog.supportReason(command), "");
         }
         assert.equal(commandAvailable("identify"), true);
         assert.equal(commandAvailable("list-resources"), true);
         for (const command of ["run", "single", "capture", "measure", "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"]) {
-          assert.equal(commandAvailable(command), false, command);
-          assert.equal(catalog.supportReason(commands.find((item) => item.id === command)), "support.pyvisaPyDiagnosticsOnly");
+          assert.equal(commandAvailable(command), true, command);
         }
         // Late queued/running/terminal identity results from the same resource on System VISA are ignored.
         for (const status of ["queued", "running", "completed", "failed"]) {
@@ -441,7 +442,7 @@ def test_py_diagnostics_keep_product_controls_and_automatic_snapshots_disabled()
         await finishResourceLiveSupportEvaluation("identify-py");
         handleScanBusyChange(false);
         await new Promise(setImmediate);
-        assert.equal(snapshotJobs, 0);
+        assert.equal(snapshotJobs, 2);
         context = {...context, mode: "simulate", visa_library: null};
         catalog.updateMode("simulate");
         assert.equal(commandAvailable("run"), true);
