@@ -53,6 +53,9 @@ markers = [
   "hardware: opt-in tests that require a real oscilloscope",
   "windows_boundary_smoke: PowerShell starts the selected Python CLI and preserves arguments, JSON, and failures",
   "windows_powershell: PowerShell Live, Preflight, and wrapper contracts run in Windows validation CI",
+  "validation_shared: shared Windows PowerShell process, privacy, and safety contracts",
+  "validation_keysight: Keysight-specific Windows PowerShell validation contracts",
+  "validation_tektronix: Tektronix-specific Windows PowerShell validation contracts",
 ]
 pythonpath = ["src"]
 

@@ -104,3 +104,15 @@ tests on Python 3.10, 3.12, and 3.13, boundary smoke on 3.10 and 3.12, and the
 complete PowerShell validation suite on 3.13, including boundary smoke. General
 Python jobs exclude these PowerShell tests; the Windows validation jobs own
 their execution.
+
+The 3.13 Windows PowerShell validation suite is partitioned into mutually
+exclusive shared, Keysight, and Tektronix groups without removing any tests.
+Collection automatically assigns exactly one of `validation_shared`,
+`validation_keysight`, or `validation_tektronix` to each
+`windows_powershell` node. Unknown modules or unclassified cases fail
+collection. The Linux quality job verifies the 341-case baseline inventory
+without running the Windows tests, while the Windows groups run in parallel
+when their own inputs or common vendor-neutral inputs change. The Windows
+3.10/3.12 `windows_boundary_smoke` tests remain unchanged. Only hardware-free
+validation runs in CI; actual instrument access remains explicit and opt-in.
+The original Windows test cases are retained in this initial grouping phase.
