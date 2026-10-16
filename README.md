@@ -10,13 +10,21 @@ Live hardware identity comes from the instrument's actual `*IDN?` response.
 Unknown, unregistered, or mismatched live vendors, models, profiles, or drivers
 fail closed; selecting a planning model does not override the detected identity.
 
-**Live hardware prerequisite:** Live operation requires a separately installed
-VISA implementation or runtime that PyVISA can load. Scopes Tool installs
-PyVISA as its Python API layer, but does not bundle Keysight IO Libraries,
-NI-VISA, or another system or vendor VISA runtime. Simulation and
-Core-planned dry-run operations do not require a physical instrument or
-instrument session. VISA resource discovery still requires a usable PyVISA
-backend.
+**Live hardware prerequisite:** System VISA remains the default and explicitly
+requires a separately installed IVI runtime, such as Keysight IO Libraries or
+NI-VISA. Scopes Tool does not bundle these external runtimes or fall back to
+`@py`. Ordinary installations, development environments, and Windows Bundle /
+Desktop packages include PyVISA, `pyvisa-py` (`@py`), `psutil`, and `zeroconf`;
+no separate installation of these Python packages is needed.
+
+`psutil` enables TCPIP/VXI-11 discovery across network interfaces, and
+`zeroconf` enables HiSLIP mDNS discovery. Discovery is not guaranteed for every
+instrument or network. Bundling `@py` does not open Product Live operation:
+`@py` remains **Pending**, with WebUI access limited to Scan / Identify
+diagnostics. USB through `@py` has separate PyUSB, libusb, and driver
+requirements; USB dependencies and support are not added by this installation.
+Users must perform real-instrument validation explicitly on their own hardware.
+Simulation and Core-planned dry-run operations require no instrument session.
 
 ## Features
 

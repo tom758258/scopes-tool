@@ -38,6 +38,7 @@ def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monk
             scripts=scripts, pure=[], binaries=[("runtime.dll",)], datas=kwargs["datas"],
         )
         assert kwargs["pathex"] == [str(ROOT / "src")]
+        assert kwargs["hiddenimports"] == ["pyvisa_py"]
         analyses.append(item)
         return item
 
@@ -87,3 +88,25 @@ def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monk
     for item in analyses:
         assert item.binaries in collect.args[3:]
         assert item.datas in collect.args[3:]
+
+
+def test_pyvisa_py_backend_loads_without_resource_or_network_io(monkeypatch):
+    import socket
+
+    import pyvisa
+
+    def unexpected_io(*args, **kwargs):
+        pytest.fail("backend import test must not access hardware or the network")
+
+    monkeypatch.setattr(pyvisa, "ResourceManager", unexpected_io)
+    for method in ("connect", "connect_ex", "bind", "sendto"):
+        monkeypatch.setattr(socket.socket, method, unexpected_io)
+    wrapper = pyvisa.highlevel.get_wrapper_class("py")
+    from pyvisa_py import PyVisaLibrary, tcpip
+    import psutil
+    import zeroconf
+
+    assert wrapper is PyVisaLibrary
+    assert wrapper.TCPIPInstrSession is tcpip.TCPIPInstrSession
+    assert tcpip.psutil is psutil
+    assert tcpip.zeroconf is zeroconf

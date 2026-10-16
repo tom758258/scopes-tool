@@ -75,9 +75,10 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 
 The settings gear also selects **System VISA** (default) or **pyvisa-py
 (@py)** for Live diagnostics. System VISA explicitly requires an installed IVI
-runtime and never falls back to @py. Install the selected backend separately;
-the WebUI does not install or switch backends automatically. Simulate and
-Dry-run ignore this setting.
+runtime and never falls back to @py. The `@py` backend and its LAN discovery
+dependencies are included in ordinary installations and Windows packages; see
+[installation prerequisites](../../README.md#install). The WebUI does not switch
+backends automatically. Simulate and Dry-run ignore this setting.
 
 With @py, only Scan Device and identification are available. Successful
 identification does not enable Workbench commands or Basic Controls and does

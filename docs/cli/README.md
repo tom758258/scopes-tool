@@ -260,8 +260,10 @@ library is an IVI backend. A missing or failed IVI runtime fails closed;
 `@py` is recognized as the `pyvisa_py` identity, `@bt` as `pyvisa_bt`, and
 other non-empty selectors as `custom_visa`.
 
-Recognition only identifies the selected backend. It does not install the
-backend or establish Scopes Tool Product Live support. For normal CLI Live
+Ordinary installations and Windows packages include `pyvisa-py` and its LAN
+discovery dependencies (see [installation prerequisites](../../README.md#install)).
+Backend recognition and availability do not establish Product Live support.
+For normal CLI Live
 product operations, `@py` is Pending and `@bt` is not open; both reject
 **before** opening a VISA session. The `list-resources` and `identify`
 diagnostics may still attempt a selected installed backend, including `@bt`,

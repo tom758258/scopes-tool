@@ -15,21 +15,26 @@ METADATA = [
     *copy_metadata("fastapi", recursive=True),
     *copy_metadata("uvicorn", recursive=True),
 ]
+# PyVISA loads backend modules dynamically; no upstream hook collects @py.
+BACKEND_IMPORTS = ["pyvisa_py"]
 WEBUI_STATIC = collect_data_files("scopes_tool_webui", includes=["static/*"])
 
 cli_analysis = Analysis(
     [str(REPO_ROOT / "scripts" / "windows_cli_entry.py")],
     pathex=[str(SRC_ROOT)],
+    hiddenimports=BACKEND_IMPORTS,
     datas=METADATA,
 )
 launcher_analysis = Analysis(
     [str(REPO_ROOT / "scripts" / "windows_launcher_entry.py")],
     pathex=[str(SRC_ROOT)],
+    hiddenimports=BACKEND_IMPORTS,
     datas=[*METADATA, *WEBUI_STATIC, (str(SCOPES_ICON), "desktop/assets")],
 )
 host_analysis = Analysis(
     [str(REPO_ROOT / "scripts" / "windows_host_entry.py")],
     pathex=[str(SRC_ROOT)],
+    hiddenimports=BACKEND_IMPORTS,
     datas=[*METADATA, *WEBUI_STATIC],
 )
 

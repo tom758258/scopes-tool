@@ -65,7 +65,8 @@ classifies an unset or blank selector as `system_visa`, `@py` as `pyvisa_py`,
 Backend identity does not grant Product Live support. Core applies a narrowly
 scoped backend-only policy at bundled CLI and Core run entry points: ordinary
 Product Live operations using `@py` are Pending and rejected, and those using
-`@bt` are not open. Neither selector is bundled or guaranteed to be installed.
+`@bt` are not open. The `@py` backend and its LAN discovery dependencies are
+bundled in ordinary installations and Windows packages; `pyvisa_bt` is not.
 System VISA explicitly selects and verifies an installed IVI VISA runtime and
 fails closed instead of falling back to @py. Custom VISA selector behavior is
 unchanged. **This backend policy does not implement a model/command Release

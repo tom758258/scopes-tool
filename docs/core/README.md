@@ -64,8 +64,10 @@ failed, or non-IVI backend fails closed; a created manager is closed on
 verification failure. Installing pyvisa-py or setting `PYVISA_LIBRARY=@py`
 does not change this selection. Other explicit selectors pass through unchanged.
 
-This classification does not guarantee that the selected backend is installed
-or available in the runtime environment. The Core-owned backend-only policy
+Ordinary installations and Windows packages include `pyvisa-py` and its LAN
+discovery dependencies (see [installation prerequisites](../../README.md#install)).
+Other selected backends may require separate installation. Backend availability
+does not grant Product Live support. The Core-owned backend-only policy
 rejects normal Product Live `@py` (Pending) and `@bt` (not open) executions
 before opening VISA. Contributor Validation Mode is an explicit, CLI-only
 bootstrap option restricted to the registered `@py` model/transport Pending
