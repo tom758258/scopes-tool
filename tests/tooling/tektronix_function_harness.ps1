@@ -87,9 +87,11 @@ function Invoke-FakeTransport {
     }
     $value = [pscustomobject]@{}
     if ($null -ne $property) {
-        # Clone only this result; the wrapper preserves null and array values.
-        $valueJson = ConvertTo-Json -InputObject @{ value = $property.Value } -Depth 100 -Compress
-        $value = ($valueJson | ConvertFrom-Json).value
+        # Scenario result records are flat PSCustomObjects. Copy their property
+        # bag rather than round-tripping JSON for every fake CLI invocation.
+        # Failure injection may mutate the returned payload but must not leak
+        # into a later baseline query.
+        $value = $property.Value.PSObject.Copy()
     }
     if ($Command -in @("run", "stop-acquisition")) {
         $status = @{ value = 0; raw = "0" }

@@ -13,7 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))  # direct execution starts with scripts/ on sys.path
-EXPECTED_WINDOWS_CASES = 341  # Baseline: successful PR #41 run 38782577301.
+EXPECTED_WINDOWS_CASES = 323  # Seven earlier variants and eleven readback contracts consolidated.
 
 
 class ValidationInventory:

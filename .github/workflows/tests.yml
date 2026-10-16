@@ -366,10 +366,8 @@ jobs:
         run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
       - name: Prepare pytest temp root
         run: python -c "from pathlib import Path; Path('.tmp_tests').mkdir(parents=True, exist_ok=True)"
-      - name: Run tektronix Windows validation tests (duration profile)
-        run: >-
-          .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_powershell and validation_tektronix"
-          --durations=30 --basetemp .tmp_tests/ci-windows-validation-tektronix-py3.13
+      - name: Run tektronix Windows validation tests (two isolated concurrent shards)
+        run: .\.venv\Scripts\python.exe scripts/ci_tektronix_validation.py
 
   windows-validation-gate:
     name: Windows validation scripts Python 3.13

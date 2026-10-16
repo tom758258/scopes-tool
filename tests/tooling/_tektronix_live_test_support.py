@@ -261,7 +261,7 @@ def fake_run(
         "'result': values.get(command, {})}))\n",
         encoding="utf-8",
     )
-    output_root = ROOT / ".tmp_tests" / "live_tektronix_check" / tmp_path.name
+    output_root = ROOT / ".tmp_tests" / "live_tektronix_check" / tmp_path.parent.name / tmp_path.name
     env = os.environ.copy()
     env["PYTHONPATH"] = str(tmp_path)
     arguments = [

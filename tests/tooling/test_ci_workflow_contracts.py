@@ -135,7 +135,15 @@ def test_filters_and_conditional_gate_remain_safe():
     assert "  workflow_dispatch:" not in workflow
     for group in ("shared", "keysight", "tektronix"):
         assert f"  windows-validation-{group}:" in workflow
-        assert f"windows_powershell and validation_{group}" in workflow
+        if group == "tektronix":
+            # Its marker selection now lives in the single-Job shard launcher.
+            assert "scripts/ci_tektronix_validation.py" in workflow
+            launcher = (ROOT / "scripts/ci_tektronix_validation.py").read_text(
+                encoding="utf-8"
+            )
+            assert f"windows_powershell and validation_{group}" in launcher
+        else:
+            assert f"windows_powershell and validation_{group}" in workflow
         assert f"outputs.validation_{group} == 'true'" in workflow
     assert "needs.detect-windows-validation-changes.outputs.validation_cross_vendor" in workflow
     assert "  windows-validation-gate:" in workflow
