@@ -1229,8 +1229,8 @@ command. It uses the Keysight `:TRIGger:SHOLd...` SCPI family:
     "clock_channel": 1,
     "data_channel": 2,
     "slope": "positive",
-    "setup_time": 0.000000001,
-    "hold_time": 0.000000001
+    "setup_time": 0.000000005,
+    "hold_time": 0.000000005
   }
 }
 ```
