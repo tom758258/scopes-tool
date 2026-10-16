@@ -70,6 +70,34 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 - Simulate and Dry-run do not use WebUI Scan Device. Resource discovery does
   not require a selected Live resource or instrument lock.
 
+The settings gear also selects **System VISA** (default) or **pyvisa-py
+(@py)** for Live diagnostics. System VISA explicitly requires an installed IVI
+runtime and never falls back to @py. Install the selected backend separately;
+the WebUI does not install or switch backends automatically. Simulate and
+Dry-run ignore this setting.
+
+With @py, only Scan Device and identification are available. Successful
+identification does not enable Workbench commands or Basic Controls and does
+not start Live Data Snapshot or System Information reads. Core rejects
+non-diagnostic @py Product Live jobs even when submitted directly to the API.
+Changing backend clears the selected device's identification and scan display
+without connecting; identity, editor/result caches, and snapshots are scoped
+to backend as well as mode, resource, and model. Late results from another
+backend cannot replace the current device state.
+
+**Supported devices** opens a display-only panel with System VISA and @py tabs,
+grouped by vendor. System VISA retains its four Keysight entries and connection
+ranges. The @py tab projects Core's Pending validation candidates and does not
+claim Product Live support. Display tabs never change the connection backend.
+
+For API clients, `POST /api/jobs` accepts an optional top-level `visa_library`:
+`null`, `""`, or `"system_visa"` selects System VISA; `"@py"` selects pyvisa-py.
+Omitted values default to System VISA. Planning modes discard the selection.
+Each job stores its submitted backend internally without adding response
+fields or changing job lifecycle, cancellation, or HTTP status semantics.
+`GET /api/supported-devices` preserves its default list response; optional
+`?backend=%40py` returns candidate entries with `status: "pending"`.
+
 Math/FFT readback first identifies the active operation family for a Math
 function slot. Reading a different editor (for example Math Visualization while
 the slot is currently FFT) reports the active family and operation as an

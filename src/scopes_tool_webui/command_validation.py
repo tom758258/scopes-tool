@@ -52,6 +52,11 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
     if unknown:
         raise WebUIRequestError(f"unknown parameter for {command}: {unknown[0]}")
 
+    visa_library = payload.get("visa_library")
+    if visa_library is not None and visa_library not in ("", "system_visa", "@py"):
+        raise WebUIRequestError("visa_library must select System VISA or @py")
+    visa_library = "@py" if mode == "live" and visa_library == "@py" else None
+
     resource = payload.get("resource")
     if resource is not None and (not isinstance(resource, str) or not resource.strip()):
         raise WebUIRequestError("resource must be a non-empty string when provided")
@@ -101,6 +106,7 @@ def validate_job_request(payload: Mapping[str, Any]) -> dict[str, Any]:
         "command": command,
         "mode": mode,
         "resource": resource.strip() if isinstance(resource, str) else None,
+        "visa_library": visa_library,
         "model_id": model_id,
         "pc_output_dir": pc_output_dir.strip() or DEFAULT_PC_OUTPUT_DIR,
         "parameters": normalized,

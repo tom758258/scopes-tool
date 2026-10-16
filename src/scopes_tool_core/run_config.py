@@ -151,6 +151,7 @@ def open_scope_for_run(
     config: ResolvedRunConfig,
     *,
     simulator_state: SimulatorInstrumentState | None = None,
+    command: Literal["identify"] | None = None,
 ) -> Oscilloscope:
     """Open a scope for a resolved simulated or live run."""
 
@@ -169,6 +170,7 @@ def open_scope_for_run(
     ensure_backend_live_support(
         visa_library=config.visa_library,
         resource=config.resource,
+        command=command,
     )
     opened_scope = Oscilloscope.open(
         config.resource,

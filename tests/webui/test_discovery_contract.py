@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import pytest
+
 from scopes_tool_core import discovery
 from scopes_tool_core.visa_backend import VisaLiveVerification, VisaResourceListing
 import scopes_tool_webui.command_validation as command_validation_module
 import scopes_tool_webui.command_execution as command_execution_module
 
 
-def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize("selector", [None, "@py"])
+def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch, tmp_path, selector) -> None:
     listing = VisaResourceListing(
         resources=("ASRL7::INSTR", "USB0::A::INSTR", "USB0::B::INSTR"),
         backend="fake backend",
@@ -41,7 +44,11 @@ def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch
         calls.append(("asrl", resource, kwargs))
         return verifications[resource]
 
-    monkeypatch.setattr(discovery, "list_visa_resources", lambda **_: listing)
+    selectors = []
+    monkeypatch.setattr(
+        discovery, "list_visa_resources",
+        lambda **kwargs: selectors.append(kwargs["visa_library"]) or listing,
+    )
     monkeypatch.setattr(discovery, "verify_visa_resource_live", verify)
     monkeypatch.setattr(discovery, "verify_asrl_resource_live", verify_asrl)
 
@@ -51,12 +58,14 @@ def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch
             "mode": "live",
             "model_id": "keysight-dsox4024a",
             "parameters": {"live_only": True},
+            "visa_library": selector,
         }
     )
     result = command_execution_module.execute_command(
         request["command"],
         mode=request["mode"],
         resource=request["resource"],
+        visa_library=request["visa_library"],
         model_id=request["model_id"],
         parameters=request["parameters"],
         artifact_dir=tmp_path,
@@ -104,12 +113,13 @@ def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch
             "model_id": None,
         },
     ]
+    assert selectors == [selector]
     assert calls == [
         (
             "asrl",
             "ASRL7::INSTR",
             {
-                "visa_library": None,
+                "visa_library": selector,
                 "serial_read_termination": None,
                 "serial_write_termination": None,
             },
@@ -118,7 +128,7 @@ def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch
             "generic",
             "USB0::A::INSTR",
             {
-                "visa_library": None,
+                "visa_library": selector,
                 "serial_read_termination": None,
                 "serial_write_termination": None,
             },
@@ -127,7 +137,7 @@ def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch
             "generic",
             "USB0::B::INSTR",
             {
-                "visa_library": None,
+                "visa_library": selector,
                 "serial_read_termination": None,
                 "serial_write_termination": None,
             },
@@ -147,7 +157,7 @@ def test_webui_list_resources_defaults_to_raw_mode(monkeypatch, tmp_path) -> Non
     monkeypatch.setattr(
         command_execution,
         "discover_visa_resources",
-        lambda *, live_only: calls.append(live_only) or RawListing(),
+        lambda *, live_only, visa_library: calls.append((live_only, visa_library)) or RawListing(),
     )
 
     request = command_validation_module.validate_job_request(
@@ -162,12 +172,13 @@ def test_webui_list_resources_defaults_to_raw_mode(monkeypatch, tmp_path) -> Non
         request["command"],
         mode=request["mode"],
         resource=request["resource"],
+        visa_library=request["visa_library"],
         model_id=request["model_id"],
         parameters=request["parameters"],
         artifact_dir=tmp_path,
     )
 
-    assert calls == [False]
+    assert calls == [(False, None)]
     assert result["result"] == {
         "resources": ["USB0::A::INSTR"],
         "backend": "fake backend",

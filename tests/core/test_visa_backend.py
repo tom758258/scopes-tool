@@ -2,6 +2,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+from pyvisa.ctwrapper import IVIVisaLibrary
 
 from scopes_tool_core.errors import VisaBackendError
 from scopes_tool_core.visa_backend import (
@@ -18,6 +19,17 @@ from scopes_tool_core.visa_backend import (
     verify_asrl_resource_live,
     verify_visa_resource_live,
 )
+
+
+class _FakeIviLibrary(IVIVisaLibrary):
+    def __new__(cls):
+        return object.__new__(cls)
+
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return "fake visa library"
 
 
 class _FakeResource:
@@ -51,7 +63,7 @@ class _FakeResourceManager:
     def __init__(self, resources=("USB0::FAKE::INSTR",), opened_resource=None):
         self.resources = resources
         self.opened_resource = opened_resource or _FakeResource()
-        self.visalib = "fake visa library"
+        self.visalib = _FakeIviLibrary()
         self.opened_names = []
         self.opened_kwargs = []
         self.closed = False
@@ -105,7 +117,12 @@ def test_normalize_backend_returns_canonical_identity(visa_library, expected):
 @pytest.mark.parametrize(
     ("visa_library", "expected_args"),
     [
-        (None, ()),
+        (None, ("@ivi",)),
+        ("", ("@ivi",)),
+        ("   ", ("@ivi",)),
+        ("system_visa", ("@ivi",)),
+        ("@sim", ("@sim",)),
+        ("custom-library", ("custom-library",)),
         ("@py", ("@py",)),
         ("@bt", ("@bt",)),
     ],
@@ -113,6 +130,7 @@ def test_normalize_backend_returns_canonical_identity(visa_library, expected):
 def test_list_visa_resources_preserves_resource_manager_selector(
     monkeypatch, visa_library, expected_args
 ):
+    monkeypatch.setenv("PYVISA_LIBRARY", "@py")
     manager = _FakeResourceManager()
     calls = _install_fake_pyvisa(monkeypatch, lambda *args: manager)
 
@@ -123,13 +141,13 @@ def test_list_visa_resources_preserves_resource_manager_selector(
 
 def test_list_visa_resources_uses_pyvisa_resource_manager_and_closes(monkeypatch):
     manager = _FakeResourceManager(resources=("USB0::FAKE::INSTR", 123))
-    calls = _install_fake_pyvisa(monkeypatch, lambda: manager)
+    calls = _install_fake_pyvisa(monkeypatch, lambda *args: manager)
 
     listing = list_visa_resources()
 
     assert listing.resources == ("USB0::FAKE::INSTR", "123")
     assert listing.backend == "fake visa library"
-    assert calls == [()]
+    assert calls == [("@ivi",)]
     assert manager.closed is True
 
 
@@ -196,8 +214,9 @@ def test_visa_backend_opens_resource_delegates_io_and_closes(monkeypatch):
     assert "VISA backend is closed" in str(excinfo.value)
 
 
-def test_visa_backend_wraps_resource_manager_creation_failure(monkeypatch):
-    def fail_resource_manager():
+@pytest.mark.parametrize("selector", [None, "@py"])
+def test_visa_backend_wraps_resource_manager_creation_failure(monkeypatch, selector):
+    def fail_resource_manager(*args):
         raise RuntimeError("no backend")
 
     monkeypatch.setitem(
@@ -207,9 +226,12 @@ def test_visa_backend_wraps_resource_manager_creation_failure(monkeypatch):
     )
 
     with pytest.raises(VisaBackendError) as excinfo:
-        VisaBackend("USB0::FAKE::INSTR")
+        VisaBackend("USB0::FAKE::INSTR", visa_library=selector)
 
-    assert "Failed to create PyVISA ResourceManager: no backend" in str(excinfo.value)
+    expected = ("System VISA requires an installed IVI VISA runtime" if selector is None
+                else "The selected VISA backend '@py' must be installed separately")
+    assert expected in str(excinfo.value)
+    assert "no backend" in str(excinfo.value)
 
 
 def test_visa_backend_wraps_open_failure_and_closes_manager(monkeypatch):
@@ -219,7 +241,7 @@ def test_visa_backend_wraps_open_failure_and_closes_manager(monkeypatch):
             raise RuntimeError("device busy")
 
     manager = FailingOpenResourceManager()
-    _install_fake_pyvisa(monkeypatch, lambda: manager)
+    _install_fake_pyvisa(monkeypatch, lambda *args: manager)
 
     with pytest.raises(VisaBackendError) as excinfo:
         VisaBackend("USB0::FAKE::INSTR")
@@ -276,7 +298,7 @@ def test_visa_backend_wraps_session_operation_failures(
             raise RuntimeError("binary failed")
 
     manager = _FakeResourceManager(opened_resource=FailingResource())
-    _install_fake_pyvisa(monkeypatch, lambda: manager)
+    _install_fake_pyvisa(monkeypatch, lambda *args: manager)
     backend = VisaBackend("USB0::FAKE::INSTR")
 
     with pytest.raises(VisaBackendError) as excinfo:
@@ -345,7 +367,7 @@ def test_asrl_live_verification_uses_bounded_timeouts_and_serial_settings(monkey
 def test_asrl_live_verification_omits_unspecified_serial_settings(monkeypatch):
     resource = _FakeResource()
     manager = _FakeResourceManager(opened_resource=resource)
-    _install_fake_pyvisa(monkeypatch, lambda: manager)
+    _install_fake_pyvisa(monkeypatch, lambda *args: manager)
 
     verification = verify_asrl_resource_live("ASRL1::INSTR")
 
@@ -357,7 +379,7 @@ def test_asrl_live_verification_omits_unspecified_serial_settings(monkeypatch):
 def test_generic_live_verification_uses_bounded_timeout(monkeypatch):
     resource = _FakeResource()
     manager = _FakeResourceManager(opened_resource=resource)
-    _install_fake_pyvisa(monkeypatch, lambda: manager)
+    _install_fake_pyvisa(monkeypatch, lambda *args: manager)
 
     verification = verify_visa_resource_live("USB0::INSTR")
 
@@ -376,7 +398,7 @@ def test_asrl_live_verification_returns_stale_detail_and_closes(monkeypatch):
 
     resource = FailingResource()
     manager = _FakeResourceManager(opened_resource=resource)
-    _install_fake_pyvisa(monkeypatch, lambda: manager)
+    _install_fake_pyvisa(monkeypatch, lambda *args: manager)
 
     verification = verify_asrl_resource_live("ASRL1::INSTR")
 
@@ -384,4 +406,41 @@ def test_asrl_live_verification_returns_stale_detail_and_closes(monkeypatch):
     assert verification.raw_idn is None
     assert "ASRL verification failed: timed out" in str(verification.detail)
     assert resource.closed is True
+    assert manager.closed is True
+
+
+@pytest.mark.parametrize("selector", [None, "", "  ", "system_visa"])
+def test_system_visa_ignores_py_default_and_fails_without_ivi(monkeypatch, selector):
+    monkeypatch.setenv("PYVISA_LIBRARY", "@py")
+    calls = []
+
+    def factory(*args):
+        calls.append(args)
+        if args == ("@ivi",):
+            raise OSError("IVI unavailable")
+        return _FakeResourceManager()
+
+    _install_fake_pyvisa(monkeypatch, factory)
+    with pytest.raises(VisaBackendError, match="IVI unavailable"):
+        list_visa_resources(selector)
+    assert calls == [("@ivi",)]
+
+
+def test_system_visa_rejects_non_ivi_manager_and_closes_before_io(monkeypatch):
+    manager = _FakeResourceManager()
+    # A convincing string is not backend identity.
+    manager.visalib = "IVI Visa Library at system_visa"
+    _install_fake_pyvisa(monkeypatch, lambda *args: manager)
+    with pytest.raises(VisaBackendError, match="not IVI"):
+        VisaBackend("USB0::FAKE::INSTR")
+    assert manager.closed is True
+    assert manager.opened_names == []
+
+
+def test_explicit_py_backend_accepts_non_ivi_library(monkeypatch):
+    manager = _FakeResourceManager()
+    manager.visalib = "pyvisa-py"
+    calls = _install_fake_pyvisa(monkeypatch, lambda *args: manager)
+    assert list_visa_resources("@py").backend == "pyvisa-py"
+    assert calls == [("@py",)]
     assert manager.closed is True

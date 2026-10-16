@@ -51,13 +51,18 @@ cancellation, but a blocking VISA or device read is not forcibly interrupted.
 Core also does not own Worker queue admission, persisted job lifecycle, HTTP
 control, or WebUI presentation.
 
-VISA library selectors are normalized to these Core identities without changing
-the selector passed to the runtime:
+VISA library selectors are normalized to these Core identities:
 
 - unset or blank selector → `system_visa`
 - `@py` → `pyvisa_py`
 - `@bt` → `pyvisa_bt`
 - any other explicit selector → `custom_visa`
+
+System VISA (unset, blank, or `system_visa`) explicitly opens `@ivi` and
+checks the loaded library against PyVISA's `IVIVisaLibrary` type. A missing,
+failed, or non-IVI backend fails closed; a created manager is closed on
+verification failure. Installing pyvisa-py or setting `PYVISA_LIBRARY=@py`
+does not change this selection. Other explicit selectors pass through unchanged.
 
 This classification does not guarantee that the selected backend is installed
 or available in the runtime environment. The Core-owned backend-only policy
@@ -67,9 +72,10 @@ bootstrap option restricted to the registered `@py` model/transport Pending
 scopes; after opening VISA, actual `*IDN?` identity must match before
 command-specific SCPI. The WebUI and Worker cannot select Validation Mode.
 The policy intentionally does not implement a Release Matrix and leaves
-System VISA, custom VISA, dry-run, and simulation behavior unchanged.
+System VISA and custom VISA support admission unchanged. Dry-run and
+simulation do not use a live VISA backend.
 Direct Python use of `Oscilloscope.open()` is a session interface, not a
-Product support entry point, and retains its previous behavior. For the exact
+Product support entry point, and uses the same explicit System VISA selection. For the exact
 pending inventory, see [Supported Models](supported-models.md).
 
 ## Feature Areas

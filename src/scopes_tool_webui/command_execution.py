@@ -86,12 +86,13 @@ def execute_command(
     progress_reporter: Callable[[Any], None] | None = None,
     simulator_state: SimulatorInstrumentState | None = None,
     simulator_state_reporter: Callable[[SimulatorInstrumentState], None] | None = None,
+    visa_library: str | None = None,
 ) -> dict[str, Any]:
     """Execute one validated request through the public Core APIs."""
 
     if command == "list-resources":
         live_only = parameters.get("live_only", False)
-        listing = discover_visa_resources(live_only=live_only)
+        listing = discover_visa_resources(live_only=live_only, visa_library=visa_library)
         resources = (
             [resource.to_payload() for resource in listing.resources]
             if live_only
@@ -103,17 +104,18 @@ def execute_command(
             "artifacts": [],
         }
 
-    config = _run_config(mode, resource, model_id)
+    config = _run_config(mode, resource, model_id, visa_library)
     if mode == "dry-run":
         if model_id is None:
             raise WebUIRequestError("dry-run execution requires a planning model")
         return _execute_dry_run(command, parameters, model_id, artifact_dir)
 
-    scope = (
-        open_scope_for_run(config, simulator_state=simulator_state)
-        if mode == "simulate"
-        else open_scope_for_run(config)
-    )
+    if mode == "simulate":
+        scope = open_scope_for_run(config, simulator_state=simulator_state)
+    elif command == "identify":
+        scope = open_scope_for_run(config, command="identify")
+    else:
+        scope = open_scope_for_run(config)
     try:
         normalized = dict(parameters)
         if mode == "live":
@@ -129,7 +131,7 @@ def execute_command(
             sample_reporter=sample_reporter,
             progress_reporter=progress_reporter,
         )
-        if mode == "live":
+        if mode == "live" and command != "identify":
             scope.post_webui_operation_status(command)
         if mode == "simulate" and simulator_state_reporter is not None:
             simulator_state_reporter(scope.backend.export_instrument_state())

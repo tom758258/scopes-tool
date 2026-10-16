@@ -252,9 +252,11 @@ This runs the repository hardware-free tests, including `tests/core`,
 Windows shared-temp permission conflicts; remove it after a successful run.
 Additional pytest arguments can be passed directly to pytest.
 
-Without `--visa-library`, PyVISA uses `pyvisa.ResourceManager()` and the
-default System VISA runtime discovered on the computer. The generic
-`--visa-library` option passes an explicit selector unchanged to PyVISA, so
+Without `--visa-library`, or with a blank or `system_visa` selector, Core
+explicitly requests `pyvisa.ResourceManager("@ivi")` and verifies the loaded
+library is an IVI backend. A missing or failed IVI runtime fails closed;
+`PYVISA_LIBRARY=@py` cannot change this selection. Other explicit
+`--visa-library` selectors pass unchanged to PyVISA, so
 `@py` is recognized as the `pyvisa_py` identity, `@bt` as `pyvisa_bt`, and
 other non-empty selectors as `custom_visa`.
 
@@ -265,8 +267,8 @@ product operations, `@py` is Pending and `@bt` is not open; both reject
 diagnostics may still attempt a selected installed backend, including `@bt`,
 but a successful `*IDN?` is not Product Live authorization. Scopes Tool does
 not bundle `pyvisa_bt` or claim Bluetooth Product support. System VISA and
-custom VISA execution retain their prior behavior; there is no Scopes
-Release Policy in this backend-only change.
+custom VISA support admission retain their existing behavior; there is no
+per-model Scopes Release Policy.
 
 For contributor hardware validation of an explicitly registered Pending
 model/transport pair, the maintained `scripts/live-*.ps1` wrappers select

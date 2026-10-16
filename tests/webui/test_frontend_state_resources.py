@@ -145,6 +145,7 @@ def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
         }
 
         let mode = "live";
+        let visaLibrary = null;
         let submissions = 0;
         let resolveScan;
         const runJob = async (command, parameters, context) => {
@@ -156,6 +157,7 @@ def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
         };
         const getExecutionContext = () => ({
           mode,
+          visa_library: mode === "live" ? visaLibrary : null,
           resource: null,
           model_id: "keysight-dsox4024a",
         });
@@ -184,6 +186,7 @@ def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
           model: node(),
           resource: node(),
           resourceList: node(),
+          visaLibrary: node(),
           scan: node(),
           settings: node(),
           settingsPanel: node(),
@@ -209,11 +212,26 @@ def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
 
         assertControls(false);
         assert.equal(elements.model.disabled, true);
+        assert.equal(elements.visaLibrary.disabled, false);
+        device.setIdentity({model: "System device"});
+        const systemContext = device.context();
+        assert.equal(device.hasCurrentIdentity(), true);
+        device.renderResourceList(["USB0::OLD::INSTR"]);
+        visaLibrary = "@py";
+        device.refresh();
+        assert.equal(submissions, 0);
+        assert.equal(device.hasCurrentIdentity(), false);
+        assert.equal(elements.resourceList.children.length, 1);
+        assert.equal(elements.resourceList.children[0].value, "");
+        device.setIdentity({model: "Py device"});
+        assert.equal(device.setIdentity({model: "Late system device"}, systemContext), false);
+        assert.equal(device.identity.model, "Py device");
 
         mode = "simulate";
         device.refresh();
         assertControls(true);
         assert.equal(elements.model.disabled, false);
+        assert.equal(elements.visaLibrary.disabled, true);
         await device.scan();
         assert.equal(submissions, 0);
 
@@ -230,6 +248,7 @@ def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
         device.setExternalBusy(true);
         assertControls(true);
         assert.equal(elements.mode[0].disabled, true);
+        assert.equal(elements.visaLibrary.disabled, true);
         await device.scan();
         assert.equal(submissions, 0);
         device.setExternalBusy(false);
@@ -247,6 +266,16 @@ def test_resource_controls_follow_execution_mode_and_scan_guard() -> None:
         await scanPromise;
         assert.equal(elements.scan.disabled, true);
         assert.equal(submissions, 1);
+        mode = "live";
+        device.refresh();
+        const oldScan = device.scan();
+        visaLibrary = null;
+        device.refresh();
+        resolveScan({status: "completed", result: {result: {resources: ["USB0::STALE::INSTR"]}}});
+        await oldScan;
+        assert.equal(device.resourceCount, null);
+        assert.equal(elements.resource.value, "");
+        assert.equal(elements.resourceList.children[0].value, "");
         '''
     )
     completed = subprocess.run(
@@ -676,6 +705,7 @@ def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
 
         const submitJob = async (payload) => {
           assert.equal(payload.command, "list-resources");
+          assert.equal(payload.visa_library, "@py");
           assert.deepEqual(payload.parameters, { live_only: true });
           return { job_id: "scan-job", status: "queued" };
         };
@@ -704,7 +734,7 @@ def test_common_job_runner_reports_scan_submission_and_terminal_state() -> None:
         const job = await globalThis.jobsApi.runJob(
           "list-resources",
           { live_only: true },
-          { mode: "live", resource: null, model_id: "keysight-dsox4024a" },
+          { mode: "live", visa_library: "@py", resource: null, model_id: "keysight-dsox4024a" },
           (updated) => updates.push(updated),
         );
         assert.equal(job.job_id, "scan-job");
@@ -772,6 +802,7 @@ def test_scan_submit_failure_reports_raw_error_and_preserves_scan_failure_state(
           model: node(),
           resource: node(),
           resourceList: node(),
+          visaLibrary: node(),
           scan: node(),
           settings: node(),
           settingsPanel: node(),
@@ -895,6 +926,7 @@ def test_scan_selection_notifies_identify_refresh_for_scan_and_manual_selection(
           model: node(),
           resource: globalThis.currentResource,
           resourceList: node(),
+          visaLibrary: node(),
           scan: node(),
           settings: node(),
           settingsPanel: node(),

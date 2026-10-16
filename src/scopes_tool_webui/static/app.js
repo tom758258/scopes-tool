@@ -51,6 +51,7 @@ const elements = {
   detectedModelField: document.querySelector("#detected-model-field"),
   detectedModel: document.querySelector("#detected-model"),
   resource: document.querySelector("#resource-input"),
+  visaLibrary: document.querySelector("#visa-library"),
   resourceList: document.querySelector("#resource-list"),
   scan: document.querySelector("#scan-button"),
   settings: document.querySelector("#settings-button"),
@@ -188,6 +189,9 @@ initializeSupportedDevices({
   panel: document.querySelector("#supported-devices-panel"),
   body: document.querySelector("#supported-devices-body"),
   status: document.querySelector("#supported-devices-status"),
+  tabs: [...document.querySelectorAll(".supported-devices-tabs [role=tab]")],
+  content: document.querySelector("#supported-devices-content"),
+  pendingNote: document.querySelector("#supported-devices-pending"),
   settings: elements.settings,
   onOpen: () => deviceResource?.setSettingsExpanded(false),
 });
@@ -220,7 +224,7 @@ async function initialize() {
     executeCommand,
     isExecutionBusy,
     isAvailable: () => commandAvailable("display-label"),
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}|${genericFormRevision}`,
+    contextKey: () => `${context.mode}|${context.visa_library || ""}|${context.resource || ""}|${currentModelId() || ""}|${genericFormRevision}`,
   });
   buildChannelLabelActions();
   const editors = createEditorBootstrap({
@@ -229,7 +233,7 @@ async function initialize() {
     executeCommand,
     isExecutionBusy,
     isCommandAvailable: commandAvailable,
-    contextKey: () => `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`,
+    contextKey: () => `${context.mode}|${context.visa_library || ""}|${context.resource || ""}|${currentModelId() || ""}`,
     mode: () => context.mode,
     currentModelId,
     selectedCommand: () => catalog.selected(),
@@ -270,6 +274,7 @@ async function initialize() {
     mode: elements.mode,
     model: elements.model,
     resource: elements.resource,
+    visaLibrary: elements.visaLibrary,
     resourceList: elements.resourceList,
     scan: elements.scan,
     settings: elements.settings,
@@ -683,6 +688,7 @@ function presentSelectedResourceJob(job, commandContext) {
 
 function sameExecutionContext(left, right) {
   return left?.mode === right?.mode
+    && (left?.visa_library || null) === (right?.visa_library || null)
     && left?.resource === right?.resource
     && left?.model_id === right?.model_id;
 }
@@ -1138,9 +1144,10 @@ function serialEditorModelInfo() {
 function updateCommandSupport(rerender = true) {
   if (!catalog) return false;
   const modelId = currentModelId();
-  const changed = catalog.activeModelId !== modelId;
-  const draft = changed && rerender && commandForm ? commandForm.draft() : null;
-  catalog.updateModel(modelId, currentModelLabel());
+  const backendChanged = catalog.activeVisaLibrary !== (context.visa_library || null);
+  const changed = catalog.activeModelId !== modelId || backendChanged;
+  const draft = changed && !backendChanged && rerender && commandForm ? commandForm.draft() : null;
+  catalog.updateModel(modelId, currentModelLabel(), context.visa_library || null);
   if (changed && rerender && commandForm) syncCommandSelection(draft);
   return changed && rerender && Boolean(commandForm);
 }
@@ -1204,7 +1211,7 @@ function renderVersion() {
 }
 
 function liveDataContextKey() {
-  return `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`;
+  return `${context.mode}|${context.visa_library || ""}|${context.resource || ""}|${currentModelId() || ""}`;
 }
 
 function syncLiveDataContext() {
@@ -1311,7 +1318,7 @@ function renderLiveData() {
 let systemSnapshot = { contextKey: null, value: null, loading: false, error: null };
 
 function systemInformationContextKey() {
-  return `${context.mode}|${context.resource || ""}|${currentModelId() || ""}`;
+  return `${context.mode}|${context.visa_library || ""}|${context.resource || ""}|${currentModelId() || ""}`;
 }
 
 async function refreshSystemInformationSnapshot() {

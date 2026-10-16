@@ -68,7 +68,9 @@ def _operation_payload(result: OperationResult) -> dict[str, Any]:
     }
 
 
-def _run_config(mode: str, resource: str | None, model_id: str | None) -> ResolvedRunConfig:
+def _run_config(
+    mode: str, resource: str | None, model_id: str | None, visa_library: str | None = None,
+) -> ResolvedRunConfig:
     if mode != "live" and model_id is None:
         raise WebUIRequestError(f"{mode} execution requires a planning model")
     options = RunModeOptions(
@@ -87,6 +89,7 @@ def _run_config(mode: str, resource: str | None, model_id: str | None) -> Resolv
         expected_physical_model_id=None,
         capabilities=(capabilities_for_model_id(model_id) if mode != "live" else None),
         resource=resolved_resource,
+        visa_library=visa_library if mode == "live" else None,
         options=options,
     )
 

@@ -62,6 +62,7 @@ class Job:
     pc_output_dir: str
     parameters: dict[str, Any]
     pc_output_root: Path
+    visa_library: str | None = None
     status: str = "queued"
     created_at: str = field(default_factory=lambda: _timestamp())
     started_at: str | None = None
@@ -163,6 +164,7 @@ class JobManager:
                 command=request["command"],
                 mode=request["mode"],
                 resource=request.get("resource"),
+                visa_library=request.get("visa_library"),
                 model_id=request["model_id"],
                 pc_output_dir=request.get("pc_output_dir", "data"),
                 parameters=dict(request["parameters"]),
@@ -284,6 +286,7 @@ class JobManager:
                         job.command,
                         mode=job.mode,
                         resource=job.resource,
+                        visa_library=job.visa_library,
                         model_id=job.model_id,
                         parameters=job.parameters,
                         artifact_dir=job.pc_output_root,

@@ -5,6 +5,7 @@ import { runJob } from "/static/jobs.js";
 function contextSnapshot(context) {
   return {
     mode: context?.mode || null,
+    visa_library: context?.mode === "live" ? context?.visa_library || null : null,
     resource: context?.resource || null,
     model_id: context?.model_id || null,
   };
@@ -13,7 +14,8 @@ function contextSnapshot(context) {
 function sameContext(left, right) {
   const a = contextSnapshot(left);
   const b = contextSnapshot(right);
-  return a.mode === b.mode && a.resource === b.resource && a.model_id === b.model_id;
+  return a.mode === b.mode && a.visa_library === b.visa_library
+    && a.resource === b.resource && a.model_id === b.model_id;
 }
 
 function identityLabel(identity) {
@@ -79,6 +81,7 @@ export class DeviceResource {
       this.changed();
       this.onModelChange(this.context());
     });
+    elements.visaLibrary?.addEventListener("change", () => this.changed());
     elements.resource.addEventListener("input", () => this.changed());
     elements.resource.addEventListener("change", () => {
       this.changed(true);
@@ -98,6 +101,7 @@ export class DeviceResource {
       mode: this.elements.mode.find((input) => input.checked),
       resource: this.elements.resource,
       model: this.elements.model,
+      visaLibrary: this.elements.visaLibrary,
       pcOutput: this.elements.pcOutput,
     });
   }
@@ -106,6 +110,16 @@ export class DeviceResource {
     const context = this.context();
     const live = context.mode === "live";
     const contextChanged = !sameContext(this.lastContext, context);
+    if (this.lastContext && this.lastContext.visa_library !== contextSnapshot(context).visa_library) {
+      this.resourceCount = null;
+      this.elements.resourceList.replaceChildren();
+      const option = new Option(translate("device.liveResourcePlaceholder"), "");
+      option.dataset.i18n = "device.liveResourcePlaceholder";
+      this.elements.resourceList.append(option);
+      this.scanStatus = "not-scanned";
+      this.statusKey = "device.ready";
+      this.statusError = null;
+    }
     if (forceIdentityClear || contextChanged) {
       this.clearIdentity();
       if (contextChanged && !this.scanInProgress) {
@@ -137,6 +151,7 @@ export class DeviceResource {
     const busy = this.scanInProgress || this.externalBusy;
     this.elements.mode.forEach((input) => { input.disabled = busy; });
     this.elements.model.disabled = live || busy;
+    if (this.elements.visaLibrary) this.elements.visaLibrary.disabled = !live || busy;
     this.elements.resource.disabled = !live || busy;
     this.elements.resourceList.disabled = !live || busy;
     this.elements.scan.disabled = !live || busy;
@@ -219,8 +234,6 @@ export class DeviceResource {
 
   setIdentity(identity, associatedContext = this.context()) {
     if (!sameContext(this.context(), associatedContext)) {
-      this.clearIdentity();
-      this.renderSummary(this.context());
       return false;
     }
     this.identity = identity || null;
@@ -289,10 +302,13 @@ export class DeviceResource {
         context,
         (updated) => {
           backendJobReceived = Boolean(updated.job_id);
-          this.onCommandStateChange({ status: updated.status });
+          if (sameContext(this.context(), context)) {
+            this.onCommandStateChange({ status: updated.status });
+          }
           this.onJobUpdate(updated);
         },
       );
+      if (!sameContext(this.context(), context)) return;
       if (job.status !== "completed") throw new Error(job.error || translate("status.scanFailed"));
       const resources = job.result?.result?.resources || [];
       this.renderResourceList(resources);
@@ -303,6 +319,7 @@ export class DeviceResource {
       this.changed();
       if (resources.length) await this.onSelectedResourceChange(this.context());
     } catch (error) {
+      if (!sameContext(this.context(), context)) return;
       this.onCommandStateChange({ status: "failed" });
       this.resourceCount = null;
       this.scanStatus = "failed";

@@ -1,4 +1,8 @@
 export const zhTW = {
+  "device.visaBackend": "VISA 後端",
+  "device.visaBackendHelp": "僅限 Live。@py 僅允許掃描與識別；請自行安裝所選後端。",
+  "support.pyvisaPyDiagnosticsOnly": "@py 僅供診斷，不開放 Product Live 操作。",
+  "supported_devices.pending": "Pending／驗證中候選；不代表正式 Product Live 支援。",
   "accessibility.switch_language_to_zh_tw": "切換語言為繁體中文",
   "accessibility.switch_language_to_en": "切換語言為英文",
   "page.appearance": "外觀",
@@ -13,7 +17,7 @@ export const zhTW = {
   "locale.display_en": "English",
   "locale.display_zh_tw": "繁體中文",
   "supported_devices.heading": "支援裝置",
-  "supported_devices.description": "可供支援使用的裝置與連線方式。",
+  "supported_devices.description": "僅供連線方式展示；分頁不會變更所選的 VISA 後端。",
   "supported_devices.vendor": "廠商",
   "supported_devices.model": "型號",
   "supported_devices.connection.usb": "USB",

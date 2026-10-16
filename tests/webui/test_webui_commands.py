@@ -1363,7 +1363,7 @@ def test_command_catalog_projects_setting_and_model_presentation() -> None:
         "mode": "tv_mode"
     }
     vectors = commands["display-vectors"]["presentation"]
-    assert {key: value for key, value in vectors.items() if key != "models"} == {
+    assert {key: value for key, value in vectors.items() if key not in {"models", "pyvisa_py_diagnostic"}} == {
         "kind": "one-way",
         "action": "enable",
         "action_field": "action",

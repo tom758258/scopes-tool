@@ -278,12 +278,29 @@ def _load_pyvisa() -> Any:
 
 def _create_resource_manager(visa_library: str | None = None) -> Any:
     pyvisa = _load_pyvisa()
+    system_visa = normalize_backend(visa_library) == BACKEND_SYSTEM_VISA
+    selector = "@ivi" if system_visa else visa_library
+    resource_manager = None
     try:
-        if visa_library is None:
-            return pyvisa.ResourceManager()
-        return pyvisa.ResourceManager(visa_library)
-    except Exception as exc:  # pragma: no cover - depends on installed VISA stack
-        raise VisaBackendError(f"Failed to create PyVISA ResourceManager: {exc}") from exc
+        resource_manager = pyvisa.ResourceManager(selector)
+        if system_visa:
+            from pyvisa.ctwrapper import IVIVisaLibrary
+
+            if not isinstance(resource_manager.visalib, IVIVisaLibrary):
+                raise VisaBackendError("System VISA requires an IVI backend; loaded backend is not IVI.")
+        return resource_manager
+    except Exception as exc:
+        if resource_manager is not None:
+            _close_quietly(resource_manager)
+        if isinstance(exc, VisaBackendError):
+            raise
+        requirement = (
+            "System VISA requires an installed IVI VISA runtime. " if system_visa
+            else f"The selected VISA backend {selector!r} must be installed separately. "
+        )
+        raise VisaBackendError(
+            f"Failed to create PyVISA ResourceManager: {requirement}{exc}"
+        ) from exc
 
 
 def _describe_backend(resource_manager: Any) -> str:

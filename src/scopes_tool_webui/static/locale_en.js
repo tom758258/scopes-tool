@@ -1,4 +1,8 @@
 export const en = {
+  "device.visaBackend": "VISA backend",
+  "device.visaBackendHelp": "Live only. @py allows scanning and identification only; install the selected backend separately.",
+  "support.pyvisaPyDiagnosticsOnly": "@py is diagnostic only; Product Live operations are unavailable.",
+  "supported_devices.pending": "Pending validation candidates only; Product Live operations are unavailable.",
   "accessibility.switch_language_to_zh_tw": "Switch language to Traditional Chinese",
   "accessibility.switch_language_to_en": "Switch language to English",
   "page.appearance": "Appearance",
@@ -13,7 +17,7 @@ export const en = {
   "locale.display_en": "English",
   "locale.display_zh_tw": "繁體中文",
   "supported_devices.heading": "Supported devices",
-  "supported_devices.description": "Devices and connections available for supported use.",
+  "supported_devices.description": "Connection display only; tabs do not change the selected VISA backend.",
   "supported_devices.vendor": "Vendor",
   "supported_devices.model": "Model",
   "supported_devices.connection.usb": "USB",

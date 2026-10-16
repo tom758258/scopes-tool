@@ -15,6 +15,7 @@ export class CommandCatalog {
     this.selectedId = "";
     this.filterText = "";
     this.activeModelId = null;
+    this.activeVisaLibrary = null;
     this.activeModelLabel = "";
     this.collapsedGroups = new Set();
 
@@ -206,17 +207,24 @@ export class CommandCatalog {
     this.renderCategories();
   }
 
-  updateModel(modelId, modelLabel = "") {
+  updateModel(modelId, modelLabel = "", visaLibrary = null) {
+    this.activeVisaLibrary = visaLibrary;
     this.activeModelId = modelId || null;
     this.activeModelLabel = modelLabel || modelId || "";
     this.renderCategories(false);
   }
 
   supported(command) {
+    if (this.activeMode === "live" && this.activeVisaLibrary === "@py"
+        && command?.presentation?.pyvisa_py_diagnostic !== true) return false;
     return !this.activeModelId || commandSupported(command, this.activeModelId);
   }
 
   supportReason(command) {
+    if (this.activeMode === "live" && this.activeVisaLibrary === "@py"
+        && command?.presentation?.pyvisa_py_diagnostic !== true) {
+      return translate("support.pyvisaPyDiagnosticsOnly");
+    }
     return this.activeModelId
       ? commandSupportReason(command, this.activeModelId, this.activeModelLabel)
       : "";

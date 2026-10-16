@@ -81,8 +81,10 @@ async def models() -> list[dict[str, str]]:
 
 
 @app.get("/api/supported-devices")
-async def supported_devices() -> list[dict[str, str | list[str]]]:
-    return supported_devices_payload()
+async def supported_devices(backend: str = "system_visa") -> list[dict[str, str | list[str]]]:
+    if backend not in {"system_visa", "@py"}:
+        raise HTTPException(status_code=400, detail="backend must be system_visa or @py")
+    return supported_devices_payload(backend)
 
 
 @app.post("/api/sequence/validate")

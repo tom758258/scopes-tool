@@ -176,7 +176,6 @@ def test_command_editor_and_result_presentation_contract() -> None:
     assert "commandForm.queryValues()" in app_source
     assert 'intent: "readback"' in app_source
     assert 'if (options.intent === "apply") commandForm.clearDirty();' in app_source
-    assert 'const draft = changed && rerender && commandForm ? commandForm.draft() : null;' in app_source
     assert 'if (changed && rerender && commandForm) syncCommandSelection(draft);' in app_source
     assert 'if (lockEditor) commandForm.setDisabled(true);' in app_source
     assert 'commandForm.setDisabled(false);' in app_source
@@ -357,3 +356,98 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.frontend_node
+def test_py_diagnostics_keep_product_controls_and_automatic_snapshots_disabled():
+    import json
+
+    app_source = read_static("app.js")
+    declarations = "\n".join(
+        extract_function_declaration(app_source, signature)
+        for signature in (
+            "function commandAvailable(command)",
+            "function updateCommandSupport(rerender = true)",
+            "async function finishResourceLiveSupportEvaluation(jobId)",
+            "function handleScanBusyChange(busy)",
+            "async function refreshLiveDataSnapshot()",
+            "function liveDataContextKey()",
+            "function systemInformationContextKey()",
+            "function sameExecutionContext(left, right)",
+            "function updateIdentity(job, commandContext)",
+        )
+    )
+    projected = json.dumps([
+        {"id": entry["id"], "category": entry["category"], "modes": entry["modes"],
+         "presentation": {"pyvisa_py_diagnostic": entry["presentation"]["pyvisa_py_diagnostic"]}}
+        for entry in command_catalog(include_hidden=True)
+        if entry["id"] in {"identify", "list-resources", "run", "single", "capture", "measure",
+                           "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"}
+    ])
+    script = COMMAND_CATALOG_HARNESS + f"\ncommands.splice(0, commands.length, ...{projected});\n" + r'''
+        const {catalog} = buildCatalog();
+        let context = {mode: "live", resource: "USB0::SAME::INSTR", model_id: null, visa_library: null};
+        const currentModelId = () => "keysight-dsox4024a";
+        catalog.updateModel(currentModelId());
+        let pendingResourceLiveSupport = null;
+        let snapshotJobs = 0;
+        const identityUpdates = [];
+        const deviceResource = {
+          hasCurrentIdentity: () => true,
+          setIdentity: (idn) => identityUpdates.push(idn),
+          setIdentityPending: () => identityUpdates.push("pending"),
+          setIdentityError: () => identityUpdates.push("error"),
+        };
+        const isExecutionBusy = () => false;
+        const updateAvailability = () => {};
+        const refreshRequestedResourceLiveSupport = async () => {};
+        const executeCommand = async () => { snapshotJobs++; };
+        const renderWorkspace = () => {};
+        const renderLiveData = () => {};
+        const renderSystemInformation = () => {};
+        const currentModelLabel = () => "Keysight";
+        let restoredDraft = "unset";
+        const commandForm = {draft: () => ({values: "old backend readback"})};
+        const syncCommandSelection = (draft) => { restoredDraft = draft; };
+        const translate = (key) => key;
+        let liveDataSnapshot = {};
+        const systemContext = {...context};
+    ''' + declarations + r'''
+        const systemLiveKey = liveDataContextKey();
+        const systemInfoKey = systemInformationContextKey();
+        assert.equal(commandAvailable("run"), true);
+        context = {...context, visa_library: "@py"};
+        updateCommandSupport();
+        assert.equal(restoredDraft, null);
+        assert.notEqual(liveDataContextKey(), systemLiveKey);
+        assert.notEqual(systemInformationContextKey(), systemInfoKey);
+        for (const command of commands) {
+          assert.equal(catalog.supported(command), command.presentation.pyvisa_py_diagnostic);
+        }
+        assert.equal(commandAvailable("identify"), true);
+        assert.equal(commandAvailable("list-resources"), true);
+        for (const command of ["run", "single", "capture", "measure", "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"]) {
+          assert.equal(commandAvailable(command), false, command);
+          assert.equal(catalog.supportReason(commands.find((item) => item.id === command)), "support.pyvisaPyDiagnosticsOnly");
+        }
+        // Late queued/running/terminal identity results from the same resource on System VISA are ignored.
+        for (const status of ["queued", "running", "completed", "failed"]) {
+          updateIdentity({command: "identify", status, result: {result: {idn: {model_id: "keysight-dsox4024a"}}}}, systemContext);
+        }
+        assert.deepEqual(identityUpdates, []);
+        updateIdentity({command: "identify", status: "completed", result: {result: {idn: {model_id: "keysight-dsox4024a"}}}}, context);
+        assert.equal(identityUpdates.length, 1);
+        pendingResourceLiveSupport = {jobId: "identify-py", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("identify-py");
+        handleScanBusyChange(false);
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 0);
+        context = {...context, mode: "simulate", visa_library: null};
+        catalog.updateMode("simulate");
+        assert.equal(commandAvailable("run"), true);
+    '''
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", textwrap.dedent(script), str(STATIC_ROOT / "command-catalog.js")],
+        capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0, (completed.stderr or completed.stdout)[-4000:]

@@ -391,6 +391,9 @@ def test_identify_workspace_keeps_latest_success_after_a_later_failure() -> None
           contextApi.findWorkspaceResult(results, pendingContext, true).job_id,
           "identify-success",
         );
+        const pyContext = { ...pendingContext, visa_library: "@py" };
+        assert.equal(contextApi.findWorkspaceResult(results, pyContext, true), null);
+        assert.equal(contextApi.findWorkspaceResult(results, { ...completedContext, visa_library: "@py" }), null);
         const otherResource = { ...pendingContext, resource: "USB0::SCOPE-B::INSTR" };
         assert.equal(contextApi.findWorkspaceResult(results, otherResource, true), null);
         const simulateContext = contextApi.buildWorkspaceContext("identify", {

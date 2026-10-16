@@ -36,7 +36,7 @@ def run_node(script: str) -> None:
           dispatchEvent(event) { this.emit(event.type, event); }
           setAttribute(name, value) { this.attributes[name] = value; }
           focus() { this.focused = true; }
-          append(child) { this.children.push(child); }
+          append(...children) { this.children.push(...children); }
           replaceChildren() { this.children = []; }
         }
         globalThis.localStorage = { getItem() { return "en"; }, setItem() {} };
@@ -131,6 +131,22 @@ def test_supported_devices_api_is_display_only() -> None:
             ("DSOX4024A", ["USB", "TCPIP"]), ("DSOX4034A", ["USB"]),
         ]
     ]
+    pending = client.get("/api/supported-devices", params={"backend": "@py"})
+    assert pending.status_code == 200
+    expected_pending = [
+        {"vendor": vendor, "model": model, "connections": connections, "status": "pending"}
+        for vendor, model, connections in [
+            ("Keysight", "DSOX2004A", ["USB"]),
+            ("Keysight", "DSOX3024A", ["USB"]),
+            ("Keysight", "DSOX4024A", ["USB", "TCPIP"]),
+            ("Keysight", "DSOX4034A", ["USB", "TCPIP"]),
+            ("Tektronix", "TBS1052B", ["USB"]),
+            ("Tektronix", "TBS2074", ["TCPIP"]),
+        ]
+    ]
+    assert sorted(pending.json(), key=lambda item: (item["vendor"], item["model"])) == expected_pending
+    assert sum(len(item["connections"]) for item in pending.json()) == 8
+    assert client.get("/api/supported-devices", params={"backend": "@bt"}).status_code == 400
     assert client.get("/api/models").json() == models_before == model_catalog()
     for module in ("command_catalog.py", "command_validation.py", "jobs.py"):
         assert "supported_devices" not in (STATIC.parent / module).read_text(encoding="utf-8")
@@ -152,6 +168,9 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
     run_node(r'''
         const { initializeSupportedDevices } = await load("supported-devices.js");
         const button = new Node(), panel = new Node(), body = new Node(), status = new Node(), settings = new Node();
+        const tabs = [new Node(), new Node()], content = new Node(), pendingNote = new Node();
+        tabs[0].dataset.backend = "system_visa"; tabs[0].id = "system";
+        tabs[1].dataset.backend = "@py"; tabs[1].id = "py";
         button.ownerDocument = doc; panel.hidden = true;
         let requests = 0, opened = 0, fail = true;
         const devices = [
@@ -163,7 +182,7 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
           assert.equal(path, "/api/supported-devices"); requests++;
           return {ok: !fail, json: async () => devices};
         };
-        initializeSupportedDevices({button, panel, body, status, settings, onOpen: () => opened++});
+        initializeSupportedDevices({button, panel, body, status, settings, tabs, content, pendingNote, onOpen: () => opened++});
         const event = {stopPropagation() { this.stopped = true; }};
         button.emit("click", event);
         assert.equal(panel.hidden, false); assert.equal(button.attributes["aria-expanded"], "true");
@@ -176,15 +195,15 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
         assert.equal(panel.hidden, true); assert.equal(button.attributes["aria-expanded"], "false");
         assert.equal(button.focused, true);
         fail = false; button.emit("click", event); await new Promise(setImmediate);
-        assert.deepEqual(body.children[0].children.map((cell) => cell.textContent), ["Keysight", "DSOX4024A", "USB、LAN / TCPIP"]);
-        assert.equal(body.children[1].children[2].textContent, "USB");
+        assert.deepEqual(body.children[0].children[1].children[0].children.map((cell) => cell.textContent), ["DSOX4024A", "USB、LAN / TCPIP"]);
+        assert.equal(body.children[0].children[1].children[1].children[1].textContent, "USB");
         assert.equal(status.hidden, true);
         setLocale("en");
-        assert.deepEqual(body.children[0].children.map((cell) => cell.textContent), ["Keysight", "DSOX4024A", "USB, LAN / TCPIP"]);
-        assert.equal(body.children[1].children[2].textContent, "USB");
+        assert.deepEqual(body.children[0].children[1].children[0].children.map((cell) => cell.textContent), ["DSOX4024A", "USB, LAN / TCPIP"]);
+        assert.equal(body.children[0].children[1].children[1].children[1].textContent, "USB");
         assert.equal(requests, 2);
         setLocale("zh-TW");
-        assert.equal(body.children[0].children[2].textContent, "USB、LAN / TCPIP");
+        assert.equal(body.children[0].children[1].children[0].children[1].textContent, "USB、LAN / TCPIP");
         assert.equal(requests, 2);
         assert.equal(JSON.stringify(devices), originalDevices);
         const inside = {stopPropagation() { this.stopped = true; }};
@@ -192,6 +211,22 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
         doc.emit("click"); assert.equal(panel.hidden, true);
         button.emit("click", event); settings.emit("click"); assert.equal(panel.hidden, true);
         assert.equal(requests, 2);
+        assert.equal(pendingNote.hidden, true);
+        globalThis.fetch = async (path) => {
+          assert.equal(path, "/api/supported-devices?backend=%40py"); requests++;
+          return {ok: true, json: async () => [{vendor: "Tektronix", model: "TBS2074", connections: ["TCPIP"], status: "pending"}]};
+        };
+        tabs[1].emit("click"); await new Promise(setImmediate);
+        assert.equal(pendingNote.hidden, false);
+        assert.equal(tabs[1].attributes["aria-selected"], "true");
+        assert.equal(content.attributes["aria-labelledby"], "py");
+        assert.equal(body.children[0].children[0].textContent, "Tektronix");
+        assert.equal(body.children[0].children[1].children[0].children[0].textContent, "TBS2074");
+        tabs[1].emit("keydown", {key: "ArrowLeft", preventDefault() {}});
+        assert.equal(tabs[0].focused, true);
+        assert.equal(pendingNote.hidden, true);
+        assert.equal(body.children[0].children[0].textContent, "Keysight");
+        assert.equal(requests, 3);
     ''')
 
 
