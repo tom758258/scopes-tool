@@ -66,8 +66,10 @@ Backend identity does not grant Product Live support. Core applies a narrowly
 scoped backend-only policy at bundled CLI and Core run entry points: ordinary
 Product Live operations using `@py` are Pending and rejected, and those using
 `@bt` are not open. Neither selector is bundled or guaranteed to be installed.
-System VISA and custom VISA retain their existing execution behavior; **this
-backend policy does not implement a model/command Release Policy**.
+System VISA explicitly selects and verifies an installed IVI VISA runtime and
+fails closed instead of falling back to @py. Custom VISA selector behavior is
+unchanged. **This backend policy does not implement a model/command Release
+Policy**.
 
 Only the following model/transport scopes are registered for controlled
 contributor validation using `@py` (`pyvisa_py`). Each entry is **Pending**, not
@@ -91,8 +93,8 @@ capability checks, or bypass normal session cleanup. `list-resources` and
 `identify` are connection diagnostics, not Product-open declarations.
 
 `Oscilloscope.open()` remains a low-level session entry usable directly by
-Python callers and does not enforce this Product policy. Dry-run, simulation,
-and existing System VISA use remain unchanged.
+Python callers and does not enforce this Product policy. Dry-run and simulation do not open real VISA sessions. System VISA requires
+an IVI runtime, including for discovery.
 
 ## Runtime Profiles
 
