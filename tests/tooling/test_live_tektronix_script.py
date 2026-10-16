@@ -1365,7 +1365,7 @@ def test_tektronix_readback_contract_matrix(tmp_path: Path) -> None:
         add("strict", TARGETS[1], command, field, 1.0, actual, False)
 
     path = tmp_path / "matrix.json"
-    path.write_text(json.dumps(scenarios), encoding="utf-8")
+    path.write_text(json.dumps({"scenarios": scenarios}), encoding="utf-8")
     result = run_script(
         "-RepoRoot", str(ROOT),
         "-ScenarioPath", str(path),

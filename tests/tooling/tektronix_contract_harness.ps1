@@ -115,9 +115,12 @@ function Invoke-Cli {
     return [pscustomobject]@{ result = [pscustomobject]$value }
 }
 
-$scenarios = @(Get-Content -LiteralPath $ScenarioPath -Raw | ConvertFrom-Json)
+$document = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($ScenarioPath))
+if ($null -eq $document.scenarios -or @($document.scenarios).Count -eq 0) {
+    throw "Missing batch validation scenarios"
+}
 $results = New-Object System.Collections.Generic.List[object]
-foreach ($scenario in $scenarios) {
+foreach ($scenario in $document.scenarios) {
     # Important: reset all mutable fake state between scenarios, even though
     # the production functions and PowerShell interpreter are reused.
     $script:Scenario = $scenario
