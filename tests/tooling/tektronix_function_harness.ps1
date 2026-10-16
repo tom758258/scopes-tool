@@ -381,20 +381,82 @@ $start = Get-Date
     $stderr = ""
 '@
 $source = $runnerAst.Extent.Text
+# Real CLI JSON is parsed once already. The test transport need not encode
+# and decode an identical payload a second time for every simulated command.
+$serializedAssignment = @($invokeAst.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left.Extent.Text -eq '$serializedJson'
+}, $true))
+$payloadAssignment = @($invokeAst.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left.Extent.Text -eq '$payload'
+}, $true))
+if ($serializedAssignment.Count -ne 1 -or $payloadAssignment.Count -ne 1) {
+    throw 'Mock JSON transport boundary changed'
+}
+$payloadOffset = $payloadAssignment[0].Extent.StartOffset - $runnerAst.Extent.StartOffset
+$serializedOffset = $serializedAssignment[0].Extent.StartOffset - $runnerAst.Extent.StartOffset
+if ($serializedOffset -ge $payloadOffset -or
+    $serializedAssignment[0].Right.Extent.Text -notlike '*ConvertTo-Json*' -or
+    $payloadAssignment[0].Right.Extent.Text -notlike '*ConvertFrom-Json*') {
+    throw 'Mock JSON conversion boundary changed'
+}
+$source = $source.Remove($payloadOffset, $payloadAssignment[0].Extent.EndOffset - $payloadAssignment[0].Extent.StartOffset).Insert($payloadOffset, '$payload = $parsed')
+$source = $source.Remove($serializedOffset, $serializedAssignment[0].Extent.EndOffset - $serializedAssignment[0].Extent.StartOffset).Insert($serializedOffset, '$serializedJson = $stdout')
 $startOffset = $first[0].Extent.StartOffset - $runnerAst.Extent.StartOffset
 $endOffset = $last[0].Extent.EndOffset - $runnerAst.Extent.StartOffset
 $source = $source.Remove($startOffset, $endOffset - $startOffset).Insert($startOffset, $transport)
 
-if ($fixture.focused) {
-    # Exercise only the affected round trip and one unchanged restore case.
+# A narrow test-only execution scope retains the real gate, fixture, cleanup,
+# summary and report paths. Unknown scopes fail closed instead of running less.
+$focusedScripts = @{
+    "trigger-edge" = @'
+            try {
+                $before = Invoke-Cli -Stage "trigger-edge-before" -Command "trigger-edge" -Options @("--query")
+                Assert-ReadbackEqual 1 (Get-Readback $before "source_channel") "trigger-edge" "source_channel"
+                Assert-ReadbackEqual 1.0 (Get-Readback $before "level_volts") "trigger-edge" "level_volts"
+                Assert-ReadbackEqual "positive" (Get-Readback $before "slope") "trigger-edge" "slope"
+                Invoke-SameValueCase "trigger-edge" "trigger-edge" $before @(
+                    "--source-channel", "1", "--level", "1", "--slope", "positive"
+                ) @("source_channel", "level_volts", "slope")
+            } catch { Add-Case "trigger-edge" "FAIL" $_.Exception.Message }
+'@
+    "trigger-edge-level" = @'
+            Invoke-RoundTrip "trigger-edge-level" "trigger-edge-level" @("--source-channel", "1") "level_volts" "--level-volts"
+'@
+    "trigger-pulse-width" = @'
+            Invoke-SpecialTriggerCase "trigger-pulse-width" @(
+                "--channel", "1", "--polarity", "positive", "--qualifier", "greater-than",
+                "--time-seconds", "0.000001", "--level-volts", "1"
+            ) @{ mode = "glitch"; channel = 1; polarity = "positive"; qualifier = "greater-than";
+                 greater_than_seconds = 1e-6; level_volts = 1.0 }
+'@
+}
+$focusedScripts["strict-readback"] = @'
+            Invoke-RoundTrip "channel-scale" "channel-scale" @("--channel", "1") "volts_per_division" "--volts-per-division"
+'@
+$focusedScripts["strict-readback"] += $focusedScripts["trigger-edge"]
+$focusedCase = [string]$fixture.focused_case
+if ($fixture.focused -or $focusedCase) {
+    # Existing focused safety cases retain their original command selection.
     $firstCase = $source.IndexOf('            $ch = @("--channel", "1")')
     $finalCase = $source.LastIndexOf('            try {')
     if ($firstCase -lt 0 -or $finalCase -le $firstCase) { throw "Focused case boundary was not found" }
-    $source = $source.Remove($firstCase, $finalCase - $firstCase).Insert($firstCase, @'
+    if ($focusedCase -and -not $focusedScripts.ContainsKey($focusedCase)) {
+        throw "Unsupported focused test case: $focusedCase"
+    }
+    if ($focusedCase) {
+        $body = $focusedScripts[$focusedCase]
+    } else {
+        $body = @'
             Invoke-RoundTrip "save-pwd" "save-pwd" @() "path" "--path"
             Invoke-RoundTrip "channel-scale" "channel-scale" @("--channel", "1") "volts_per_division" "--volts-per-division"
 
-'@)
+'@
+    }
+    $source = $source.Remove($firstCase, $finalCase - $firstCase).Insert($firstCase, $body)
 }
 
 $arguments = @($fixture.arguments)

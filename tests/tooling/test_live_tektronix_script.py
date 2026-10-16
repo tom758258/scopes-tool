@@ -1031,7 +1031,7 @@ def test_edge_readback_tolerance(tmp_path, target, command, expected, actual, pa
         return {"ExitCode": 0, "Payload": {"ok": True, "result": {
             "source_channel": 1, "level_volts": value, "slope": "positive",
         }}}
-    result, report = fake_run(tmp_path, target, stage_responses={
+    result, report = fake_run(tmp_path, target, focused_case=("trigger-edge-level" if command == "trigger-edge-level" else "trigger-edge"), stage_responses={
         f"{command}-before": response(expected), f"{command}-after": response(actual),
         f"{command}-restored": response(expected),
     })
@@ -1075,7 +1075,7 @@ def test_fixture_trigger_level_readback_tolerance(tmp_path, target, actual, pass
     ("greater_than_seconds", 1.011e-6, False),
 ])
 def test_pulse_width_level_readback_tolerance(tmp_path, target, field, actual, passed):
-    result, report = fake_run(tmp_path, target, mode="glitch", stage_responses={
+    result, report = fake_run(tmp_path, target, mode="glitch", focused_case="trigger-pulse-width", stage_responses={
         "trigger-pulse-width-query": {"ResultOverrides": {field: actual}},
     })
     case = next(case for case in report["cases"] if case["name"] == "trigger-pulse-width")
@@ -1097,7 +1097,7 @@ def test_pulse_width_level_readback_tolerance(tmp_path, target, field, actual, p
     ("trigger-edge", "slope", "negative"),
 ])
 def test_unrelated_readback_retains_strict_tolerance(tmp_path, target, command, field, actual):
-    result, report = fake_run(tmp_path, target, stage_responses={
+    result, report = fake_run(tmp_path, target, focused_case="strict-readback", stage_responses={
         f"{command}-after": {"ResultOverrides": {field: actual}},
     })
     assert result.returncode != 0
