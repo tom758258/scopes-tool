@@ -110,9 +110,16 @@ exclusive shared, Keysight, and Tektronix groups without removing any tests.
 Collection automatically assigns exactly one of `validation_shared`,
 `validation_keysight`, or `validation_tektronix` to each
 `windows_powershell` node. Unknown modules or unclassified cases fail
-collection. The Linux quality job verifies the 341-case baseline inventory
-without running the Windows tests, while the Windows groups run in parallel
-when their own inputs or common vendor-neutral inputs change. The Windows
+collection. The Linux quality job verifies a reviewed case inventory without running
+the Windows tests, while the Windows groups run in parallel when their own
+inputs or common vendor-neutral inputs change. Inventory changes require a
+coverage justification, not just a numeric update. The Windows
 3.10/3.12 `windows_boundary_smoke` tests remain unchanged. Only hardware-free
 validation runs in CI; actual instrument access remains explicit and opt-in.
-The original Windows test cases are retained in this initial grouping phase.
+Representative Tektronix parser and pulse-width readback cases cover distinct
+public contracts rather than every equivalent model/trigger combination. The
+Tektronix baseline run is reused between contract assertions for the same model,
+but fault-injection and cleanup cases each execute independently. Keysight
+Autoscale/Trigger cases remain separated by distinct capability profiles.
+Large PowerShell Controls/Artifacts harnesses use a shared process launcher,
+while each maintains its own independent runtime assertions.

@@ -19,6 +19,18 @@ def ps_quote(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
+def run_live_harness(harness_path: Path, script_path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    """Run an isolated PowerShell contract harness with its production script path."""
+    return subprocess.run(
+        [
+            "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive",
+            "-ExecutionPolicy", "Bypass", "-File", str(harness_path),
+            "-ScriptPath", str(script_path), *arguments,
+        ],
+        cwd=REPO_ROOT, text=True, capture_output=True, check=False,
+    )
+
+
 def run_powershell(body, tmp_path, timeout=180):
     harness = tmp_path / "harness.ps1"
     harness.write_text(

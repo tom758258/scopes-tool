@@ -4,10 +4,9 @@ import json
 import os
 from pathlib import Path
 import re
-import subprocess
 
 import pytest
-from tests.tooling._live_script_test_support import REPO_ROOT, extract_live_cli_functions_ps
+from tests.tooling._live_script_test_support import REPO_ROOT, extract_live_cli_functions_ps, run_live_harness
 
 
 @pytest.mark.windows_powershell
@@ -119,24 +118,7 @@ function Invoke-Scenario {
         encoding="utf-8",
     )
 
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    completed = run_live_harness(harness_path, script_path)
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
@@ -311,24 +293,7 @@ function Invoke-Scenario {
         encoding="utf-8",
     )
 
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    completed = run_live_harness(harness_path, script_path)
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
@@ -574,24 +539,7 @@ function Invoke-Scenario {
         encoding="utf-8",
     )
 
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    completed = run_live_harness(harness_path, script_path)
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
@@ -780,24 +728,7 @@ Invoke-Expression $caseBlock
         encoding="utf-8",
     )
 
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    completed = run_live_harness(harness_path, script_path)
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
@@ -1017,26 +948,7 @@ Invoke-Expression $caseBlock
         encoding="utf-8",
     )
 
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-            "-ArtifactRoot",
-            str(artifact_root),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    completed = run_live_harness(harness_path, script_path, "-ArtifactRoot", str(artifact_root))
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
@@ -1265,24 +1177,7 @@ $unknownInvocations = @($script:Invocations | ForEach-Object { $_ })
         encoding="utf-8",
     )
 
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    completed = run_live_harness(harness_path, script_path)
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
@@ -1726,26 +1621,7 @@ $scenarios = @(
         encoding="utf-8",
     )
 
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-            "-ArtifactRoot",
-            str(artifact_root),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    completed = run_live_harness(harness_path, script_path, "-ArtifactRoot", str(artifact_root))
 
     assert completed.returncode == 0, completed.stderr
     scenarios = {
@@ -1992,24 +1868,7 @@ $results += [pscustomobject]@{
         encoding="utf-8",
     )
 
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(harness_path),
-            "-ScriptPath",
-            str(script_path),
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    completed = run_live_harness(harness_path, script_path)
 
     assert completed.returncode == 0, completed.stderr
     scenarios = {

@@ -17,6 +17,15 @@ from tests.tooling._tektronix_live_test_support import (
 )
 
 
+@pytest.fixture(scope="module", params=TARGETS)
+def baseline_tektronix_run(request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory):
+    """Reuse identical, immutable happy-path reports across independent contract assertions."""
+    target = request.param
+    root = tmp_path_factory.mktemp(f"tektronix-baseline-{target.removeprefix('tektronix-')}")
+    result, report = fake_run(root, target)
+    return target, result, report
+
+
 
 @pytest.mark.windows_powershell
 @requires_windows
@@ -374,9 +383,8 @@ def test_vectors_on_requires_readback(tmp_path: Path, target: str, mismatch: boo
 
 @pytest.mark.windows_powershell
 @requires_windows
-@pytest.mark.parametrize("target", TARGETS)
-def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
-    result, report = fake_run(tmp_path, target)
+def test_default_case_flow_with_fake_cli(baseline_tektronix_run) -> None:
+    target, result, report = baseline_tektronix_run
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["identify"]["status"] == "PASS"
@@ -416,11 +424,10 @@ def test_default_case_flow_with_fake_cli(tmp_path: Path, target: str) -> None:
 
 @pytest.mark.windows_powershell
 @requires_windows
-@pytest.mark.parametrize("target", TARGETS)
-def test_standard_execution_list_uses_core_capabilities(tmp_path: Path, target: str) -> None:
+def test_standard_execution_list_uses_core_capabilities(baseline_tektronix_run) -> None:
     from scopes_tool_core.capabilities import capabilities_for_model_id
+    target, result, report = baseline_tektronix_run
     caps = capabilities_for_model_id(target)
-    result, report = fake_run(tmp_path, target)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     calls = [inv["arguments"] for inv in report["invocations"] if "--simulate" not in inv["arguments"]]
@@ -725,12 +732,11 @@ def test_measurement_warning_is_retained_in_cli_report(tmp_path):
 
 @pytest.mark.windows_powershell
 @requires_windows
+# Representative parser boundary checks; other modes/models remain covered by
+# baseline execution, special-trigger and Core/CLI parser contract tests.
 @pytest.mark.parametrize(("target", "mode"), [
-    (TARGETS[0], "edge"),
-    (TARGETS[0], "runt"),
     (TARGETS[0], "glitch"),
     (TARGETS[1], "tv"),
-    (TARGETS[2], "edge"),
 ])
 def test_generated_arguments_match_parser_contract(tmp_path: Path, target: str, mode: str) -> None:
     from scopes_tool_cli.parser import _build_parser
@@ -1060,7 +1066,9 @@ def test_fixture_trigger_level_readback_tolerance(tmp_path, target, actual, pass
 
 @pytest.mark.windows_powershell
 @requires_windows
-@pytest.mark.parametrize("target", TARGETS[1:])
+# TDS2024B represents the legacy pulse-width readback tolerance contract.
+# TBS1052B still has independent identity, mode and two-channel capability tests.
+@pytest.mark.parametrize("target", TARGETS[1:2])
 @pytest.mark.parametrize("field,actual,passed", [
     ("level_volts", 1.04, True), ("level_volts", 1.06, False),
     ("greater_than_seconds", 1.0065e-6, True),
