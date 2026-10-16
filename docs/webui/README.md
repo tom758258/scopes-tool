@@ -73,34 +73,36 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
   Dry-run `list-resources` requests are rejected before job creation.
   Live discovery does not require a selected resource or instrument lock.
 
-The settings gear also selects **System VISA** (default) or **pyvisa-py
-(@py)** for Live diagnostics. System VISA explicitly requires an installed IVI
-runtime and never falls back to @py. The `@py` backend and its LAN discovery
-dependencies are included in ordinary installations and Windows packages; see
-[installation prerequisites](../../README.md#install). The WebUI does not switch
-backends automatically. Simulate and Dry-run ignore this setting.
+The settings gear selects **System VISA** (default) or **pyvisa-py
+(@py)** for Live use. System VISA requires an installed IVI runtime and never
+falls back to @py. The `@py` backend and its LAN discovery dependencies are
+included in ordinary installations and Windows packages; see
+[installation prerequisites](../../README.md#install). The WebUI does not
+switch backends automatically. Simulate and Dry-run ignore this setting.
 
-With @py, only Scan Device and identification are available. Successful
-identification does not enable Workbench commands or Basic Controls and does
-not start Live Data Snapshot or System Information reads. Core rejects
-non-diagnostic @py Product Live jobs even when submitted directly to the API.
-Changing backend clears the selected device's identification and scan display
-without connecting; identity, editor/result caches, and snapshots are scoped
-to backend as well as mode, resource, and model. Late results from another
-backend cannot replace the current device state.
+Product Live support is exact by detected model, transport, and backend.
+PyVISA-py commands, Basic Controls, and Live Data are available only for the
+approved DSOX4024A, DSOX4034A, and TBS2074 TCPIP connections. The same Core
+policy rejects unapproved requests submitted directly to the API. Changing the
+backend clears the selected device's identification and scan display without
+connecting; identity, editor/result caches, and snapshots remain scoped to
+backend, mode, resource, and model. Late results from another backend cannot
+replace the current device state.
 
-**Supported devices** opens a display-only panel with System VISA and @py tabs,
-grouped by vendor. System VISA retains its four Keysight entries and connection
-ranges. The @py tab projects Core's Pending validation candidates and does not
-claim Product Live support. Display tabs never change the connection backend.
+**Supported devices** displays the Core Product-open connections for each
+backend, grouped by vendor. System VISA includes the seven registered models
+with their approved USB/TCPIP transports; the @py tab shows the three approved
+TCPIP connections. Other `@py` connections are not Product-open. Display
+tabs do not switch the current connection backend or authorize commands.
 
 For API clients, `POST /api/jobs` accepts an optional top-level `visa_library`:
 `null`, `""`, or `"system_visa"` selects System VISA; `"@py"` selects pyvisa-py.
 Omitted values default to System VISA. Planning modes discard the selection.
 Each job stores its submitted backend internally without adding response
 fields or changing job lifecycle, cancellation, or HTTP status semantics.
-`GET /api/supported-devices` preserves its default list response; optional
-`?backend=%40py` returns candidate entries with `status: "pending"`.
+`GET /api/supported-devices` preserves its list response; optional
+`?backend=%40py` returns the Product-open `@py` connection entries.
+This display endpoint does not authorize operations.
 
 Math/FFT readback first identifies the active operation family for a Math
 function slot. Reading a different editor (for example Math Visualization while

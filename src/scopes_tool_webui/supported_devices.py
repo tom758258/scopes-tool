@@ -1,36 +1,23 @@
-"""Display-only supported connections, independent of runtime admission."""
+"""Display-only Product Live connections projected from Core support policy."""
 
 from scopes_tool_core.identity import PHYSICAL_MODEL_REGISTRY, VENDOR_REGISTRY
-from scopes_tool_core.support_policy import PYVISA_PY_PENDING_SCOPES
-
-
-# Approved display scope; never use this list to admit or reject operations.
-DISPLAY_CONNECTIONS = {
-    "keysight-dsox2004a": ("USB",),
-    "keysight-dsox3024a": ("USB",),
-    "keysight-dsox4024a": ("USB", "TCPIP"),
-    "keysight-dsox4034a": ("USB",),
-}
+from scopes_tool_core.support_policy import product_live_transport_scopes
 
 
 def supported_devices_payload(backend: str = "system_visa") -> list[dict[str, str | list[str]]]:
-    connections = DISPLAY_CONNECTIONS
-    if backend == "@py":
-        connections = {
-            model.model_id: tuple(
-                transport.upper() for transport in ("usb", "tcpip")
-                if (model.model_id, transport) in PYVISA_PY_PENDING_SCOPES
-            )
-            for model in PHYSICAL_MODEL_REGISTRY
-        }
+    # This projection never authorizes execution; Core checks detected IDN.
+    approved = product_live_transport_scopes(backend)
     vendors = {vendor.vendor_id: vendor.display_name for vendor in VENDOR_REGISTRY}
     return [
         {
             "vendor": vendors[model.vendor_id],
             "model": model.canonical_model,
-            "connections": list(connections[model.model_id]),
-            **({"status": "pending"} if backend == "@py" else {}),
+            "connections": [
+                transport.upper()
+                for transport in ("usb", "tcpip")
+                if (model.model_id, transport) in approved
+            ],
         }
         for model in PHYSICAL_MODEL_REGISTRY
-        if connections.get(model.model_id)
+        if any(model.model_id == model_id for model_id, _ in approved)
     ]

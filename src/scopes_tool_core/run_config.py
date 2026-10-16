@@ -178,6 +178,12 @@ def open_scope_for_run(
     )
     try:
         idn = opened_scope.query_idn()
+        ensure_backend_live_support(
+            visa_library=config.visa_library,
+            resource=config.resource,
+            command=command,
+            detected_model_id=idn.model_id,
+        )
         scope = scope_for_physical_model(
             idn.physical_model,
             opened_scope.backend,

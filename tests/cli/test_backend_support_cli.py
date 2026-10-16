@@ -9,14 +9,14 @@ from scopes_tool_core.fake_backend import FakeBackend
 from scopes_tool_core.scope import Oscilloscope
 
 
-@pytest.mark.parametrize("selector", ("@py", "@bt"))
+@pytest.mark.parametrize("selector", ("@py", "@bt", "@ivi"))
 def test_product_live_rejects_backend_without_opening_visa(monkeypatch, capsys, selector):
     def unexpected_open(*_args, **_kwargs):
         pytest.fail("unopened Product backend must be rejected before VISA open")
 
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(unexpected_open))
     assert cli.main(["run", "--resource", "USB0::FAKE::INSTR", "--visa-library", selector]) == 1
-    assert "Pending" in capsys.readouterr().err or selector == "@bt"
+    assert "not open" in capsys.readouterr().err or selector == "@py"
 
 
 @pytest.mark.parametrize(
@@ -59,7 +59,7 @@ def test_pyvisa_py_validation_rejects_unregistered_idn_without_business_scpi(mon
         "run", "--resource", "USB0::FAKE::INSTR",
         "--visa-library", "@py", "--validation-allow-pending-live-support",
     ]) == 1
-    assert "no registered Pending scope" in capsys.readouterr().err
+    assert "no registered scope" in capsys.readouterr().err
     assert backend.history == ["*IDN?"]
     assert backend.closed is True
 
@@ -106,3 +106,33 @@ def test_identity_diagnostic_keeps_optional_backend_selector(monkeypatch, capsys
     ]) == 0
     assert selectors == [selector]
     capsys.readouterr()
+
+
+def test_product_py_tcpip_cli_runs_without_contributor_override(monkeypatch, capsys):
+    backend = FakeBackend(responses={
+        "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,SN1,1.0",
+        ":SYSTem:ERRor?": '+0,"No error"',
+    })
+    monkeypatch.setattr(
+        runtime.Oscilloscope, "open",
+        staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
+    )
+    assert cli.main([
+        "run", "--resource", "TCPIP0::FAKE::INSTR", "--visa-library", "@py",
+    ]) == 0
+    assert backend.history == ["*IDN?", ":RUN", ":SYSTem:ERRor?"]
+    capsys.readouterr()
+
+
+def test_product_py_tcpip_rejects_other_detected_model_before_run(monkeypatch, capsys):
+    backend = FakeBackend(responses={"*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX2004A,SN1,1.0"})
+    monkeypatch.setattr(
+        runtime.Oscilloscope, "open",
+        staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
+    )
+    assert cli.main([
+        "run", "--resource", "TCPIP0::FAKE::INSTR", "--visa-library", "@py",
+    ]) == 1
+    assert "No Product Live support" in capsys.readouterr().err
+    assert backend.history == ["*IDN?"]
+    assert backend.closed is True

@@ -19,11 +19,13 @@ no separate installation of these Python packages is needed.
 
 `psutil` enables TCPIP/VXI-11 discovery across network interfaces, and
 `zeroconf` enables HiSLIP mDNS discovery. Discovery is not guaranteed for every
-instrument or network. Bundling `@py` does not open Product Live operation:
-`@py` remains **Pending**, with WebUI access limited to Scan / Identify
-diagnostics. USB through `@py` has separate PyUSB, libusb, and driver
-requirements; USB dependencies and support are not added by this installation.
-Users must perform real-instrument validation explicitly on their own hardware.
+instrument or network. Product Live support is limited to exact detected model, connection transport,
+and VISA backend combinations in [Supported Models](docs/core/supported-models.md).
+PyVISA-py (`@py`) Product operation is open only for DSOX4024A, DSOX4034A,
+and TBS2074 over TCPIP/LAN. USB through `@py` is not Product-open and has
+separate PyUSB, libusb, and driver requirements that are not bundled.
+Bluetooth (`@bt`) and explicit custom VISA backends are not Product-open.
+Connection diagnostics do not imply Product authorization.
 Simulation and Core-planned dry-run operations require no instrument session.
 
 ## Features

@@ -6,7 +6,6 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from scopes_tool_core.support_policy import BACKEND_POLICY_DIAGNOSTICS
 from scopes_tool_core import capabilities_for_model_id
 from scopes_tool_core.capabilities import operation_supported
 from scopes_tool_core.demo import DEMO_FUNCTIONS
@@ -376,7 +375,6 @@ def _command_catalog_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
     catalog_entry = dict(entry)
     catalog_entry["pc_output"] = entry["id"] in PC_OUTPUT_COMMAND_IDS
     presentation = _command_presentation(entry)
-    presentation["pyvisa_py_diagnostic"] = entry["id"] in BACKEND_POLICY_DIAGNOSTICS
     presentation["models"] = {
         model.model_id: _model_command_presentation(entry, model.model_id)
         for model in PHYSICAL_MODEL_REGISTRY

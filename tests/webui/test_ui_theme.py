@@ -127,25 +127,24 @@ def test_supported_devices_api_is_display_only() -> None:
     assert response.json() == [
         {"vendor": "Keysight", "model": model, "connections": connections}
         for model, connections in [
+            ("TBS2074", ["USB", "TCPIP"]), ("TDS2024B", ["USB"]),
+            ("TBS1052B", ["USB"]),
             ("DSOX2004A", ["USB"]), ("DSOX3024A", ["USB"]),
-            ("DSOX4024A", ["USB", "TCPIP"]), ("DSOX4034A", ["USB"]),
+            ("DSOX4024A", ["USB", "TCPIP"]), ("DSOX4034A", ["USB", "TCPIP"]),
         ]
     ]
     pending = client.get("/api/supported-devices", params={"backend": "@py"})
     assert pending.status_code == 200
-    expected_pending = [
-        {"vendor": vendor, "model": model, "connections": connections, "status": "pending"}
-        for vendor, model, connections in [
-            ("Keysight", "DSOX2004A", ["USB"]),
-            ("Keysight", "DSOX3024A", ["USB"]),
-            ("Keysight", "DSOX4024A", ["USB", "TCPIP"]),
-            ("Keysight", "DSOX4034A", ["USB", "TCPIP"]),
-            ("Tektronix", "TBS1052B", ["USB"]),
-            ("Tektronix", "TBS2074", ["TCPIP"]),
+    expected_open = [
+        {"vendor": vendor, "model": model, "connections": ["TCPIP"]}
+        for vendor, model in [
+            ("Keysight", "DSOX4024A"),
+            ("Keysight", "DSOX4034A"),
+            ("Tektronix", "TBS2074"),
         ]
     ]
-    assert sorted(pending.json(), key=lambda item: (item["vendor"], item["model"])) == expected_pending
-    assert sum(len(item["connections"]) for item in pending.json()) == 8
+    assert sorted(pending.json(), key=lambda item: (item["vendor"], item["model"])) == expected_open
+    assert sum(len(item["connections"]) for item in pending.json()) == 3
     assert client.get("/api/supported-devices", params={"backend": "@bt"}).status_code == 400
     assert client.get("/api/models").json() == models_before == model_catalog()
     for module in ("command_catalog.py", "command_validation.py", "jobs.py"):
@@ -157,9 +156,9 @@ def test_supported_devices_api_is_display_only() -> None:
 def test_supported_projection_uses_core_identity_and_omits_unapproved_models(monkeypatch) -> None:
     model = next(model for model in supported_devices.PHYSICAL_MODEL_REGISTRY if model.model_id == "keysight-dsox2004a")
     monkeypatch.setattr(supported_devices, "PHYSICAL_MODEL_REGISTRY", (replace(model, canonical_model="Core model"),))
-    monkeypatch.setattr(supported_devices, "DISPLAY_CONNECTIONS", {model.model_id: ("USB",), "unknown": ("TCPIP",)})
+    monkeypatch.setattr(supported_devices, "product_live_transport_scopes", lambda _backend: frozenset({(model.model_id, "usb"), ("unknown", "tcpip")}))
     assert supported_devices.supported_devices_payload() == [{"vendor": "Keysight", "model": "Core model", "connections": ["USB"]}]
-    monkeypatch.setattr(supported_devices, "DISPLAY_CONNECTIONS", {model.model_id: ()})
+    monkeypatch.setattr(supported_devices, "product_live_transport_scopes", lambda _backend: frozenset())
     assert supported_devices.supported_devices_payload() == []
 
 

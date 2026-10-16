@@ -196,7 +196,7 @@ def test_live_unknown_driver_fails_before_command_execution(monkeypatch):
     assert backend.history == ["*IDN?"]
 
 
-@pytest.mark.parametrize("visa_library", ("@py", "@bt"))
+@pytest.mark.parametrize("visa_library", ("@py", "@bt", "@ivi"))
 def test_live_core_product_backend_rejects_without_opening_visa(monkeypatch, visa_library):
     def unexpected_open(*_args, **_kwargs):
         pytest.fail("unopened Product backend must be rejected before VISA open")
@@ -213,5 +213,39 @@ def test_live_core_product_backend_rejects_without_opening_visa(monkeypatch, vis
         resource="USB0::FAKE::INSTR",
         visa_library=visa_library,
     )
-    with pytest.raises(OscilloscopeError, match="Pending|not open"):
+    with pytest.raises(OscilloscopeError, match="not open|no Product Live support"):
         open_scope_for_run(config)
+
+
+@pytest.mark.parametrize("model_id, allowed", [
+    ("keysight-dsox4024a", True),
+    ("keysight-dsox2004a", False),
+    ("tektronix-tbs1052b", False),
+])
+def test_product_py_tcpip_uses_actual_idn_before_business_commands(monkeypatch, model_id, allowed):
+    from scopes_tool_core.fake_backend import FakeBackend
+
+    model = {
+        "keysight-dsox4024a": ("KEYSIGHT TECHNOLOGIES", "DSOX4024A"),
+        "keysight-dsox2004a": ("KEYSIGHT TECHNOLOGIES", "DSOX2004A"),
+        "tektronix-tbs1052b": ("TEKTRONIX", "TBS1052B"),
+    }[model_id]
+    backend = FakeBackend(responses={"*IDN?": f"{model[0]},{model[1]},TEST,1.0"})
+    monkeypatch.setattr(
+        "scopes_tool_core.run_config.Oscilloscope.open",
+        lambda *args, **kwargs: Oscilloscope(backend),
+    )
+    config = ResolvedRunConfig(
+        mode="live", planning_physical_model_id=None,
+        expected_physical_model_id=None, capabilities=None,
+        resource="TCPIP0::FAKE::INSTR", visa_library="@py",
+    )
+    if allowed:
+        with open_scope_for_run(config) as scope:
+            assert scope.idn.model_id == model_id
+    else:
+        with pytest.raises(OscilloscopeError, match="No Product Live support"):
+            open_scope_for_run(config)
+        assert backend.closed is True
+    assert backend.history == ["*IDN?"]
+

@@ -142,10 +142,6 @@ def test_list_resources_is_hidden_and_identify_hidden_from_catalog() -> None:
 
     assert "list-resources" not in catalog
     assert "identify" not in catalog
-    from scopes_tool_core.support_policy import BACKEND_POLICY_DIAGNOSTICS
-
-    for entry in command_catalog_module.command_catalog(include_hidden=True):
-        assert entry["presentation"]["pyvisa_py_diagnostic"] == (entry["id"] in BACKEND_POLICY_DIAGNOSTICS)
     # System snapshot is also hidden from presentation (internal command only).
     assert "system-information-snapshot" not in catalog
     request = command_validation_module.validate_job_request(
@@ -231,7 +227,7 @@ def test_identify_job_keeps_backend_and_only_queries_idn(monkeypatch, tmp_path, 
     ("channel-scale", {"action": "set", "channel": 1, "volts_per_division": 1}),
     ("live-data-snapshot", {}), ("system-information-snapshot", {}),
 ])
-def test_direct_job_api_cannot_open_py_product_operations(monkeypatch, tmp_path, command, parameters):
+def test_direct_job_api_cannot_open_unreleased_py_usb_operations(monkeypatch, tmp_path, command, parameters):
     import asyncio
     import importlib
 
@@ -259,7 +255,7 @@ def test_direct_job_api_cannot_open_py_product_operations(monkeypatch, tmp_path,
         manager.get(job_id).future.result(timeout=5)
         result = client.get(f"/api/jobs/{job_id}").json()
         assert result["status"] == "failed"
-        assert "@py Product Live support is Pending" in result["error"]
+        assert "no Product Live support" in result["error"]
     finally:
         asyncio.run(manager.shutdown())
 
@@ -284,3 +280,40 @@ def test_old_requests_and_planning_modes_do_not_select_py_backend():
             payload["visa_library"] = "@py"
         request = command_validation_module.validate_job_request(payload)
         assert request["visa_library"] is None
+
+
+def test_direct_job_api_opens_approved_py_tcpip_product_command(monkeypatch, tmp_path):
+    import asyncio
+    import importlib
+
+    from fastapi.testclient import TestClient
+    from scopes_tool_core.fake_backend import FakeBackend
+    from scopes_tool_core.scope import Oscilloscope
+    from scopes_tool_webui.jobs import JobManager
+
+    app_module = importlib.import_module("scopes_tool_webui.app")
+    manager = JobManager()
+    monkeypatch.setattr(app_module, "job_manager", manager)
+    backend = FakeBackend(responses={
+        "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,TEST,1.0",
+        ":SYSTem:ERRor?": '+0,"No error"',
+    })
+    monkeypatch.setattr(
+        Oscilloscope, "open",
+        staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
+    )
+    try:
+        client = TestClient(app_module.app)
+        response = client.post("/api/jobs", json={
+            "command": "run", "parameters": {}, "mode": "live",
+            "resource": "TCPIP0::FAKE::INSTR", "visa_library": "@py",
+            "pc_output_dir": str(tmp_path),
+        })
+        assert response.status_code == 202, response.text
+        job_id = response.json()["job_id"]
+        manager.get(job_id).future.result(timeout=5)
+        assert client.get(f"/api/jobs/{job_id}").json()["status"] == "completed"
+        assert backend.history == ["*IDN?", ":RUN", ":SYSTem:ERRor?"]
+        assert backend.closed is True
+    finally:
+        asyncio.run(manager.shutdown())
