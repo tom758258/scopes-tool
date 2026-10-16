@@ -551,7 +551,9 @@ def test_manual_port_fallback_reports_permission_denied_and_can_retry(monkeypatc
 
     def socket_binder(port):
         attempted_ports.append(port)
-        raise PermissionError(errno.EACCES, "permission denied")
+        if port == 9000:
+            raise PermissionError(errno.EACCES, "permission denied")
+        return FakeSocket()
 
     app = make_app(initial_port=9000, socket_binder=socket_binder)
     app._manual_port_fallback = True
@@ -571,14 +573,15 @@ def test_manual_port_fallback_reports_permission_denied_and_can_retry(monkeypatc
     assert "PermissionError" in errors[0][1]
     assert "already in use" not in errors[0][1]
 
-    app._socket_binder = lambda _port: FakeSocket()
+    app._port_value.set("9001")
     monkeypatch.setattr(launcher.threading, "Thread", ImmediateThread)
 
     app.start()
     drain_ui(app)
 
+    assert attempted_ports == [9000, 9001]
     assert app._root.destroyed is False
-    assert app._url_value.get() == "http://127.0.0.1:9000"
+    assert app._url_value.get() == "http://127.0.0.1:9001"
 
 
 def test_clean_shutdown_runs_on_server_loop_before_server_exit(monkeypatch):
