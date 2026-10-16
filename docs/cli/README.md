@@ -1423,7 +1423,7 @@ Configure or query DSO analog-channel setup-hold trigger settings with the
 canonical `trigger-setup-hold` command:
 
 ```powershell
-.\.venv\Scripts\scopes-tool.exe trigger-setup-hold --resource "$env:SCOPES_TOOL_RESOURCE" --clock-channel 1 --data-channel 2 --slope positive --setup-time 1e-9 --hold-time 1e-9 --log-scpi
+.\.venv\Scripts\scopes-tool.exe trigger-setup-hold --resource "$env:SCOPES_TOOL_RESOURCE" --clock-channel 1 --data-channel 2 --slope positive --setup-time 5e-9 --hold-time 5e-9 --log-scpi
 .\.venv\Scripts\scopes-tool.exe trigger-setup-hold --resource "$env:SCOPES_TOOL_RESOURCE" --query --log-scpi
 .\.venv\Scripts\scopes-tool.exe trigger-setup-hold --dry-run --json --model keysight-dsox4024a --query
 .\.venv\Scripts\scopes-tool.exe trigger-setup-hold --simulate --json --query
@@ -1462,7 +1462,7 @@ Worker usage:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-setup-hold --arguments-json "{\"query\":true}" --json
-.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-setup-hold --arguments-json "{\"clock_channel\":1,\"data_channel\":2,\"slope\":\"positive\",\"setup_time\":0.000000001,\"hold_time\":0.000000001}" --json
+.\.venv\Scripts\scopes-tool.exe send-command --port 8765 --command trigger-setup-hold --arguments-json "{\"clock_channel\":1,\"data_channel\":2,\"slope\":\"positive\",\"setup_time\":0.000000005,\"hold_time\":0.000000005}" --json
 ```
 
 Worker JSON uses canonical keys `setup_time` and `hold_time`, matching the CLI

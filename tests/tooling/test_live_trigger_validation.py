@@ -80,7 +80,7 @@ def keysight_fixture(model):
         "trigger-runt": ["--channel", "1", "--polarity", "positive", "--qualifier", "none", "--low-level-volts", "-0.5", "--high-level-volts", "0.5"],
         "trigger-transition": ["--channel", "1", "--slope", "positive", "--qualifier", "greater-than", "--time-seconds", "0.000001", "--low-level-volts", "-0.5", "--high-level-volts", "0.5"],
         "trigger-delay": ["--arm-channel", "1", "--arm-slope", "positive", "--trigger-channel", "2", "--trigger-slope", "positive", "--time-seconds", "0.000001", "--count", "2"],
-        "trigger-setup-hold": ["--clock-channel", "1", "--data-channel", "2", "--slope", "positive", "--setup-time", "0.000000001", "--hold-time", "0.000000001"],
+        "trigger-setup-hold": ["--clock-channel", "1", "--data-channel", "2", "--slope", "positive", "--setup-time", "0.000000005", "--hold-time", "0.000000005"],
         "trigger-edge-burst": ["--source-channel", "1", "--slope", "positive", "--count", "2", "--idle-time", "0.000001", "--level-volts", "0"],
         "trigger-tv": ["--source-channel", "1", "--standard", "ntsc", "--mode", "all-lines", "--polarity", "positive"],
         "trigger-pattern": ["--pattern", "XXX1"], "trigger-or": ["--pattern", "XXXR"],
@@ -104,7 +104,7 @@ def keysight_fixture(model):
         "trigger-runt": {"mode": "runt", "channel": 1, "polarity": "positive", "qualifier": "none", "low_level_volts": -0.5, "high_level_volts": 0.5},
         "trigger-transition": {"mode": "transition", "channel": 1, "slope": "positive", "qualifier": "greater-than", "time_seconds": 1e-6, "low_level_volts": -0.5, "high_level_volts": 0.5},
         "trigger-delay": {"mode": "delay", "arm_channel": 1, "trigger_channel": 2, "arm_slope": "positive", "trigger_slope": "positive", "count": 2, "time_seconds": 1e-6},
-        "trigger-setup-hold": {"mode": "setup-hold", "clock_channel": 1, "data_channel": 2, "slope": "positive", "setup_time_seconds": 1e-9, "hold_time_seconds": 1e-9},
+        "trigger-setup-hold": {"mode": "setup-hold", "clock_channel": 1, "data_channel": 2, "slope": "positive", "setup_time_seconds": 5e-9, "hold_time_seconds": 5e-9},
         "trigger-edge-burst": {"mode": "edge-burst", "source_channel": 1, "slope": "positive", "count": 2, "idle_time": 1e-6, "level_volts": 0},
         "trigger-tv": {"mode": "tv", "source_channel": 1, "standard": "ntsc", "tv_mode": "all-lines", "polarity": "positive"},
         "trigger-pattern": {"mode": "pattern", "pattern": "XXX1"}, "trigger-or": {"mode": "or", "pattern": "XXXR"},
@@ -283,17 +283,17 @@ def test_keysight_missing_plus_is_explicit_na(tmp_path):
 
 @pytest.mark.parametrize("model,patches,case,status", [
     ("keysight-dsox3024a", {"trigger-setup-hold-query": {
-        "setup_time_seconds": 2e-9, "hold_time_seconds": 2e-9}}, "trigger-setup-hold", "PASS"),
+        "setup_time_seconds": 5.004e-9, "hold_time_seconds": 4.996e-9}}, "trigger-setup-hold", "PASS"),
     ("keysight-dsox2004a", {"trigger-setup-hold-query": {
-        "setup_time_seconds": 2e-9, "hold_time_seconds": 2e-9}}, "trigger-setup-hold", "PASS"),
-    ("keysight-dsox3024a", {"trigger-setup-hold-query": {
-        "hold_time_seconds": 6e-9}}, "trigger-setup-hold", "PASS"),
+        "setup_time_seconds": 4.996e-9, "hold_time_seconds": 5.004e-9}}, "trigger-setup-hold", "PASS"),
+    ("keysight-dsox4034a", {"trigger-setup-hold-query": {
+        "hold_time_seconds": 5.004e-9}}, "trigger-setup-hold", "PASS"),
     ("keysight-dsox4024a", {"trigger-setup-hold-query": {
-        "setup_time_seconds": 2e-9}}, "trigger-setup-hold", "FAIL"),
+        "setup_time_seconds": 5.006e-9}}, "trigger-setup-hold", "FAIL"),
     ("keysight-dsox2004a", {"trigger-setup-hold-query": {
-        "hold_time_seconds": 7e-9}}, "trigger-setup-hold", "FAIL"),
+        "hold_time_seconds": 5.006e-9}}, "trigger-setup-hold", "FAIL"),
     ("keysight-dsox3024a", {"trigger-setup-hold-query": {
-        "setup_time_seconds": 7e-9}}, "trigger-setup-hold", "FAIL"),
+        "setup_time_seconds": 4.994e-9}}, "trigger-setup-hold", "FAIL"),
     ("keysight-dsox3024a", {"trigger-pulse-width-query": {
         "greater_than_seconds": 2e-6}}, "trigger-pulse-width", "FAIL"),
 ])
@@ -305,7 +305,7 @@ def test_keysight_setup_hold_tolerance_scope(tmp_path, model, patches, case, sta
         setter = next(c for c in report["calls"] if c["stage"] == "trigger-setup-hold-set")
         assert setter["arguments"] == [
             "--clock-channel", "1", "--data-channel", "2", "--slope", "positive",
-            "--setup-time", "0.000000001", "--hold-time", "0.000000001",
+            "--setup-time", "0.000000005", "--hold-time", "0.000000005",
         ]
 
 

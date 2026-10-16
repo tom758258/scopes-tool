@@ -1500,7 +1500,7 @@ function Invoke-HardwareFreePreflight {
         [pscustomobject]@{ Command = "trigger-runt"; Arguments = @("--channel", "1", "--polarity", "positive", "--qualifier", "none", "--low-level-volts", "-0.5", "--high-level-volts", "0.5") },
         [pscustomobject]@{ Command = "trigger-transition"; Arguments = @("--channel", "1", "--slope", "positive", "--qualifier", "greater-than", "--time-seconds", "0.000001", "--low-level-volts", "-0.5", "--high-level-volts", "0.5") },
         [pscustomobject]@{ Command = "trigger-delay"; Arguments = @("--arm-channel", "1", "--arm-slope", "positive", "--trigger-channel", "2", "--trigger-slope", "positive", "--time-seconds", "0.000001", "--count", "2") },
-        [pscustomobject]@{ Command = "trigger-setup-hold"; Arguments = @("--clock-channel", "1", "--data-channel", "2", "--slope", "positive", "--setup-time", "0.000000001", "--hold-time", "0.000000001") },
+        [pscustomobject]@{ Command = "trigger-setup-hold"; Arguments = @("--clock-channel", "1", "--data-channel", "2", "--slope", "positive", "--setup-time", "0.000000005", "--hold-time", "0.000000005") },
         [pscustomobject]@{ Command = "trigger-edge-burst"; Arguments = @("--source-channel", "1", "--slope", "positive", "--count", "2", "--idle-time", "0.000001", "--level-volts", "0") },
         [pscustomobject]@{ Command = "trigger-tv"; Arguments = @("--source-channel", "1", "--standard", "ntsc", "--mode", "all-lines", "--polarity", "positive") },
         [pscustomobject]@{ Command = "trigger-pattern"; Arguments = @("--pattern", "XXX1") },
@@ -4626,7 +4626,7 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
             $configured = Invoke-LiveCli -Stage "trigger-setup-hold-set" -Command "trigger-setup-hold" `
                 -Arguments @(
                     "--clock-channel", "1", "--data-channel", "2", "--slope", "positive",
-                    "--setup-time", "0.000000001", "--hold-time", "0.000000001"
+                    "--setup-time", "0.000000005", "--hold-time", "0.000000005"
                 )
             Assert-ScpiSent -Payload $configured -Label "Setup/hold trigger mode" `
                 -ExpectedCommands @(":TRIGger:MODE SHOLd")
@@ -4640,11 +4640,8 @@ with Oscilloscope.open(resource, visa_library=visa_library) as scope:
                 [int]$readback.result.data_channel -ne 2) {
                 throw "Setup/hold trigger readback is invalid."
             }
-            $setupHoldTolerance = if ($script:Target -in @(
-                "keysight-dsox2004a", "keysight-dsox3024a"
-            )) { 5e-9 } else { $null }
-            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.setup_time_seconds -Label "setup-hold setup_time_seconds") -Expected 1e-09 -Label "setup-hold setup_time_seconds" -AbsoluteTolerance $setupHoldTolerance
-            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.hold_time_seconds -Label "setup-hold hold_time_seconds") -Expected 1e-09 -Label "setup-hold hold_time_seconds" -AbsoluteTolerance $setupHoldTolerance
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.setup_time_seconds -Label "setup-hold setup_time_seconds") -Expected 5e-9 -Label "setup-hold setup_time_seconds"
+            Assert-NearlyEqual -Actual (Assert-FiniteNumber -Value $readback.result.hold_time_seconds -Label "setup-hold hold_time_seconds") -Expected 5e-9 -Label "setup-hold hold_time_seconds"
         }
     }
 
