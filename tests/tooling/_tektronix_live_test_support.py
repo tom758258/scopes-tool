@@ -316,4 +316,3 @@ VISA_FAILURE = {
     "ExitCode": 1,
     "Payload": {"ok": False, "error": {"type": "VisaIOError", "message": "Injected I/O failure"}},
 }
-
