@@ -75,6 +75,14 @@ def _is_port_in_use_error(exc: OSError) -> bool:
     return exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048
 
 
+def _is_retryable_bind_error(exc: OSError) -> bool:
+    return (
+        _is_port_in_use_error(exc)
+        or exc.errno == errno.EACCES
+        or getattr(exc, "winerror", None) == 10013
+    )
+
+
 def create_uvicorn_server(port: int) -> Any:
     try:
         import uvicorn
@@ -256,25 +264,27 @@ class LauncherApp:
             try:
                 server_socket = self._socket_binder(port)
             except OSError as exc:
-                if not _is_port_in_use_error(exc):
+                if not _is_retryable_bind_error(exc):
                     self._show_startup_error(
                         exc,
                         startup_attempt=startup_attempt,
                     )
                     return
                 if not auto_port:
+                    port_in_use = _is_port_in_use_error(exc)
                     if self._manual_port_fallback:
                         self._show_manual_port_conflict(
                             port,
                             exc,
                             startup_attempt=startup_attempt,
+                            port_in_use=port_in_use,
                         )
                     else:
                         self._show_startup_error(
                             exc,
                             startup_attempt=startup_attempt,
                             port=port,
-                            port_in_use=True,
+                            port_in_use=port_in_use,
                         )
                     return
                 continue
@@ -490,6 +500,7 @@ class LauncherApp:
         exc: BaseException,
         *,
         startup_attempt: int,
+        port_in_use: bool,
     ) -> None:
         if (
             startup_attempt != self._startup_attempt
@@ -500,7 +511,7 @@ class LauncherApp:
         message = self._startup_error_message(
             exc,
             port=port,
-            port_in_use=True,
+            port_in_use=port_in_use,
         )
         self._status_value.set(f"Failed: {message}")
         self._show_fallback_window()

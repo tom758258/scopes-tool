@@ -328,8 +328,10 @@ def test_default_port_and_auto_fallback(monkeypatch):
     def socket_binder(port):
         events.append(("bind", port))
         attempted_ports.append(port)
-        if port < 8027:
+        if port == 8025:
             raise OSError(errno.EADDRINUSE, "in use")
+        if port == 8026:
+            raise PermissionError(errno.EACCES, "permission denied")
         sockets[port] = FakeSocket()
         return sockets[port]
 
@@ -359,6 +361,34 @@ def test_default_port_and_auto_fallback(monkeypatch):
     assert events.index(("ready", "http://127.0.0.1:8027/api/health")) < events.index(
         ("browser", "http://127.0.0.1:8027")
     )
+
+
+def test_auto_port_skips_windows_port_bind_errors(monkeypatch):
+    attempted_ports = []
+    sockets = {}
+    server = FakeServer()
+
+    def socket_binder(port):
+        attempted_ports.append(port)
+        if port in (8025, 8026):
+            error = OSError(errno.EPERM, "bind failed")
+            error.winerror = 10013 if port == 8025 else 10048
+            raise error
+        sockets[port] = FakeSocket()
+        return sockets[port]
+
+    app = make_app(
+        socket_binder=socket_binder,
+        server_factory=lambda _port: server,
+    )
+    monkeypatch.setattr(launcher.threading, "Thread", ImmediateThread)
+
+    app.start(auto_port=True)
+    drain_ui(app)
+
+    assert attempted_ports == [8025, 8026, 8027]
+    assert server.served_sockets == [sockets[8027]]
+    assert app._url_value.get() == "http://127.0.0.1:8027"
 
 
 def test_readiness_requires_scopes_service_identity(monkeypatch):
@@ -419,6 +449,54 @@ def test_fixed_port_conflict_fails_and_does_not_fallback(monkeypatch):
     assert errors[0][0] == "Start failed"
 
 
+def test_fixed_port_permission_denied_reports_without_scanning(monkeypatch):
+    errors = []
+    attempted_ports = []
+
+    def socket_binder(port):
+        attempted_ports.append(port)
+        raise PermissionError(errno.EACCES, "permission denied")
+
+    app = make_app(initial_port=9000, socket_binder=socket_binder)
+    monkeypatch.setattr(
+        launcher.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+    )
+
+    app.start()
+
+    assert attempted_ports == [9000]
+    assert app._root.destroyed is True
+    assert app.exit_code == 1
+    assert errors[0][0] == "Start failed"
+    assert "PermissionError" in errors[0][1]
+
+
+def test_unexpected_bind_error_is_not_retried(monkeypatch):
+    errors = []
+    attempted_ports = []
+
+    def socket_binder(port):
+        attempted_ports.append(port)
+        raise OSError(errno.ENETUNREACH, "network unreachable")
+
+    app = make_app(socket_binder=socket_binder)
+    monkeypatch.setattr(
+        launcher.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+    )
+
+    app.start(auto_port=True)
+
+    assert attempted_ports == [8025]
+    assert app._root.destroyed is True
+    assert app.exit_code == 1
+    assert errors[0][0] == "Start failed"
+    assert "network unreachable" in errors[0][1]
+
+
 def test_startup_failure_closes_owned_socket(monkeypatch):
     server_socket = FakeSocket()
     errors = []
@@ -465,6 +543,42 @@ def test_auto_port_exhaustion_exposes_manual_fallback(monkeypatch):
     assert app._root.destroyed is False
     assert app._start_button.state == "normal"
     assert errors[0][0] == "No available port"
+
+
+def test_manual_port_fallback_reports_permission_denied_and_can_retry(monkeypatch):
+    errors = []
+    attempted_ports = []
+
+    def socket_binder(port):
+        attempted_ports.append(port)
+        raise PermissionError(errno.EACCES, "permission denied")
+
+    app = make_app(initial_port=9000, socket_binder=socket_binder)
+    app._manual_port_fallback = True
+    monkeypatch.setattr(
+        launcher.messagebox,
+        "showerror",
+        lambda title, message: errors.append((title, message)),
+    )
+
+    app.start()
+
+    assert attempted_ports == [9000]
+    assert app._root.destroyed is False
+    assert app._start_button.state == "normal"
+    assert app.exit_code == 0
+    assert errors[0][0] == "Port unavailable"
+    assert "PermissionError" in errors[0][1]
+    assert "already in use" not in errors[0][1]
+
+    app._socket_binder = lambda _port: FakeSocket()
+    monkeypatch.setattr(launcher.threading, "Thread", ImmediateThread)
+
+    app.start()
+    drain_ui(app)
+
+    assert app._root.destroyed is False
+    assert app._url_value.get() == "http://127.0.0.1:9000"
 
 
 def test_clean_shutdown_runs_on_server_loop_before_server_exit(monkeypatch):

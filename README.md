@@ -190,8 +190,8 @@ Start the recommended local WebUI Launcher:
 
 The WebUI is localhost-only. The direct server defaults to `127.0.0.1:8025`.
 Without an explicit port, the Launcher starts at port 8025 and automatically
-tries up to 100 ports for port-in-use conflicts before offering a manual-port
-fallback. The direct server can also be started with:
+tries up to 100 ports for port-in-use and permission-denied conflicts before
+offering a manual-port fallback. The direct server can also be started with:
 
 ```powershell
 .\.venv\Scripts\scopes-tool-webui.exe

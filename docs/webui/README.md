@@ -41,11 +41,11 @@ The Launcher is the recommended local browser entry point:
 ```
 
 Without an explicit port, the Launcher tries up to 100 ports beginning at
-8025. It automatically falls back only for port-in-use conflicts, waits for
-`GET /api/health` to verify the `scopes-tool-webui` service identity, and opens
-the browser only after readiness succeeds. If all automatic candidates are
-unavailable, it provides a manual-port fallback. An explicit `--port` is
-fixed unless `--auto-port` is also supplied.
+8025. It automatically falls back for port-in-use and permission-denied
+conflicts, waits for `GET /api/health` to verify the `scopes-tool-webui` service
+identity, and opens the browser only after readiness succeeds. If all automatic
+candidates are unavailable, it provides a manual-port fallback. An explicit
+`--port` is fixed unless `--auto-port` is also supplied.
 
 Remote binding is not supported.
 
