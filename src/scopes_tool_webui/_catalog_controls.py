@@ -27,7 +27,7 @@ CONTROLS_COMMANDS = (
         "category": "Device",
         "label": "List resources",
         "hidden": True,
-        "modes": ("live", "simulate", "dry-run"),
+        "modes": ("live", "simulate"),
         "fields": (
             {"name": "live_only", "type": "boolean", "default": False},
         ),

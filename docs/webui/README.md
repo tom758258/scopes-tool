@@ -67,8 +67,11 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 - Core/CLI raw `list-resources` remains available as host VISA resource
   discovery. WebUI Scan Device is a separate Live-mode-only action that
   requests `live_only` discovery with bounded `*IDN?` probes.
-- Simulate and Dry-run do not use WebUI Scan Device. Resource discovery does
-  not require a selected Live resource or instrument lock.
+- Simulate and Dry-run keep the Scan Device button disabled. Direct WebUI
+  `list-resources` API jobs in Simulate return one virtual resource for the
+  selected planning model, using Core's simulator without accessing VISA.
+  Dry-run `list-resources` requests are rejected before job creation.
+  Live discovery does not require a selected resource or instrument lock.
 
 The settings gear also selects **System VISA** (default) or **pyvisa-py
 (@py)** for Live diagnostics. System VISA explicitly requires an installed IVI
@@ -260,7 +263,9 @@ The Command workbench exposes:
   `triggered-capture-series`, plus Generic Sequence v1 under Automation
 
 Resource scanning uses the internal `list-resources` command. Its jobs remain
-in Result History, but it is not shown in the Command workbench.
+in Result History, but it is not shown in the Command workbench. This command
+uses real VISA only in Live mode; Simulate returns a planning-model virtual
+resource and Dry-run rejects the request.
 
 The Command Browser keeps Category as its first level. Commands with
 group metadata are shown under Category → Group → Commands sections,

@@ -92,6 +92,38 @@ def execute_command(
 
     if command == "list-resources":
         live_only = parameters.get("live_only", False)
+        if mode == "simulate":
+            # Simulated discovery must never enter the host VISA path.
+            config = _run_config(mode, None, model_id, None)
+            scope = open_scope_for_run(config)
+            try:
+                simulated_resource = config.resource
+                if live_only:
+                    idn = scope.query_idn()
+                    resources = [{
+                        "name": simulated_resource,
+                        "interface": "SIM",
+                        "reachable": True,
+                        "idn": {
+                            "raw": idn.raw,
+                            "manufacturer": idn.vendor,
+                            "model": idn.model,
+                            "serial": idn.serial,
+                            "firmware": idn.firmware,
+                        },
+                        "model_id": idn.model_id,
+                    }]
+                else:
+                    resources = [simulated_resource]
+            finally:
+                scope.close()
+            return {
+                "exit_code": 0,
+                "result": {"resources": resources, "backend": "simulator"},
+                "artifacts": [],
+            }
+        if mode != "live":
+            raise WebUIRequestError("list-resources is not available in dry-run mode")
         listing = discover_visa_resources(live_only=live_only, visa_library=visa_library)
         resources = (
             [resource.to_payload() for resource in listing.resources]
