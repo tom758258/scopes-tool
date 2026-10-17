@@ -500,13 +500,21 @@ def test_live_data_auto_refresh_wiring() -> None:
     device_source = read_static("device-resource.js")
 
     assert 'elements.liveDataRefresh.addEventListener("click", refreshLiveDataSnapshot);' in app_source
-    assert "await refreshLiveDataSnapshot();" in app_source
-    assert "void refreshLiveDataSnapshot();" in app_source
-    assert """  if (!completed.requestedContext
-      && sameExecutionContext(context, completed.context)
-      && deviceResource?.hasCurrentIdentity?.(context)) {
-    await refreshLiveDataSnapshot();
-  }""" in app_source
+    finished_identify = extract_function_declaration(
+        app_source, "async function finishResourceLiveSupportEvaluation(jobId)"
+    )
+    finished_scan = extract_function_declaration(
+        app_source, "function handleScanBusyChange(busy)"
+    )
+    auto_read = extract_function_declaration(
+        app_source, "function drainPendingAutoSnapshot()"
+    )
+    assert "requestAutoSnapshot();" in finished_identify
+    assert "requestAutoSnapshot();" in finished_scan
+    assert "void refreshLiveDataSnapshot();" in auto_read
+    assert "drainPendingAutoSnapshot();" in app_source.split(
+        "onSupportChanged: () => {", 1
+    )[1].split("},", 1)[0]
     assert "onModelChange = () => {}," in device_source
     assert "this.onModelChange(this.context());" in device_source
     assert "modelContext?.mode === \"simulate\"" in app_source
