@@ -390,6 +390,9 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         extract_function_declaration(app_source, signature)
         for signature in (
             "function liveProductSupportReason(command)",
+            "function resetAutoSnapshot()",
+            "function requestAutoSnapshot()",
+            "function drainPendingAutoSnapshot()",
             "function commandAvailable(command)",
             "function updateSelectedCommandSupportReason()",
             "function updateCommandSupport(rerender = true)",
@@ -425,7 +428,10 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         const elements = {commandSupportReason: {hidden: true, textContent: "", title: ""}};
         const currentModelId = () => "keysight-dsox4024a";
         let pendingResourceLiveSupport = null;
+        let pendingAutoSnapshotKey = null;
+        let autoSnapshotIssuedKey = null;
         let snapshotJobs = 0;
+        let foregroundBusy = false;
         const identityUpdates = [];
         const deviceResource = {
           identity: {model_id: "keysight-dsox4024a"},
@@ -434,7 +440,7 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
           setIdentityPending: () => identityUpdates.push("pending"),
           setIdentityError: () => identityUpdates.push("error"),
         };
-        const isExecutionBusy = () => false;
+        const isExecutionBusy = () => foregroundBusy;
         const updateAvailability = () => {};
         const refreshRequestedResourceLiveSupport = async () => {};
         const executeCommand = async () => { snapshotJobs++; };
@@ -504,7 +510,107 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         await finishResourceLiveSupportEvaluation("identify-py-lan");
         handleScanBusyChange(false);
         await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 1); // Identify and Scan completion represent one auto read.
+
+        // Identify may finish while Product metadata is still loading.
+        resetAutoSnapshot();
+        supportLoaded = false;
+        pendingResourceLiveSupport = {jobId: "late-metadata", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("late-metadata");
+        assert.equal(snapshotJobs, 1);
+        drainPendingAutoSnapshot(); // An unrelated backend response cannot start this read.
+        assert.equal(snapshotJobs, 1);
+        supportLoaded = true; // Current backend metadata arrives or a failed load is retried.
+        drainPendingAutoSnapshot();
+        await new Promise(setImmediate);
         assert.equal(snapshotJobs, 2);
+        drainPendingAutoSnapshot();
+        handleScanBusyChange(false);
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 2); // No duplicate job on repeated notifications.
+
+        // Scan may finish Identify before its Busy flag is released.
+        foregroundBusy = true;
+        handleScanBusyChange(true);
+        pendingResourceLiveSupport = {jobId: "scan-busy", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("scan-busy");
+        assert.equal(snapshotJobs, 2);
+        foregroundBusy = false;
+        handleScanBusyChange(false);
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 3);
+        handleScanBusyChange(false);
+        assert.equal(snapshotJobs, 3);
+
+        // A pending read for the previous Resource must never run after a switch.
+        resetAutoSnapshot();
+        supportLoaded = false;
+        pendingResourceLiveSupport = {jobId: "old-resource", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("old-resource");
+        context = {...context, resource: "TCPIP0::NEW::INSTR"};
+        resetAutoSnapshot(); // The DeviceResource context-change callback invalidates it.
+        supportLoaded = true;
+        drainPendingAutoSnapshot();
+        assert.equal(snapshotJobs, 3);
+
+        // A new Identify or Scan of the same Resource legitimately requests a new read.
+        pendingResourceLiveSupport = {jobId: "new-resource", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("new-resource");
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 4);
+
+        // Other foreground work must finish before the deferred read starts.
+        resetAutoSnapshot();
+        foregroundBusy = true;
+        pendingResourceLiveSupport = {jobId: "foreground", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("foreground");
+        assert.equal(snapshotJobs, 4);
+        foregroundBusy = false;
+        drainPendingAutoSnapshot(); // The foreground Job finally callback.
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 5);
+
+        // A pending request must not leak across Backend changes.
+        resetAutoSnapshot();
+        supportLoaded = false;
+        pendingResourceLiveSupport = {jobId: "old-backend", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("old-backend");
+        context = {...context, visa_library: "system_visa"};
+        resetAutoSnapshot(); // The Resource context-change callback.
+        supportLoaded = true;
+        drainPendingAutoSnapshot();
+        assert.equal(snapshotJobs, 5);
+
+        // Core-approved System USB does not imply System TCPIP approval.
+        pendingResourceLiveSupport = {jobId: "not-approved", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("not-approved");
+        assert.equal(snapshotJobs, 5);
+        context = {...context, visa_library: "@bt"};
+        resetAutoSnapshot();
+        pendingResourceLiveSupport = {jobId: "unknown-backend", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("unknown-backend");
+        assert.equal(snapshotJobs, 5);
+
+        // A fresh Identify invalidates the prior deferred request.
+        context = {...context, visa_library: "@py"};
+        resetAutoSnapshot();
+        supportLoaded = false;
+        pendingResourceLiveSupport = {jobId: "identity-lost", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("identity-lost");
+        updateIdentity({command: "identify", status: "queued"}, context);
+        identityReady = false;
+        supportLoaded = true;
+        drainPendingAutoSnapshot();
+        assert.equal(snapshotJobs, 5);
+        identityReady = true;
+
+        // A genuinely new Identify/Scan may read again even at the same Resource.
+        pendingResourceLiveSupport = {jobId: "fresh-identify", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("fresh-identify");
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 6);
+        handleScanBusyChange(false);
+        assert.equal(snapshotJobs, 6);
         context = {...context, mode: "simulate", visa_library: null};
         catalog.updateMode("simulate");
         assert.equal(commandAvailable("run"), true);
