@@ -87,7 +87,7 @@ COMMAND_CATALOG_HARNESS = r'''
           { id: "serial-mode", category: "Serial", label: "Serial mode", modes: ["live"], group: "uart" },
           { id: "acquisition", category: "Acquisition", label: "Acquisition", modes: ["live"] },
         ];
-        const buildCatalog = () => {
+        const buildCatalog = (productSupportReason = () => "") => {
           const elements = {
             filter: new FakeNode("input"),
             categories: new FakeNode(),
@@ -98,6 +98,7 @@ COMMAND_CATALOG_HARNESS = r'''
             commands,
             elements,
             (selected) => selections.push(selected?.id || ""),
+            productSupportReason,
           );
           return { elements, selections, catalog };
         };
@@ -359,6 +360,28 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
 
 
 @pytest.mark.frontend_node
+def test_live_product_policy_disables_catalog_command_with_reason() -> None:
+    script = COMMAND_CATALOG_HARNESS + r"""
+        const { catalog, elements } = buildCatalog((command) =>
+          command === "trigger-edge" ? "Not Product-open" : "");
+        catalog.render();
+        const section = sectionFor(elements.list, "edge");
+        const button = section.children[1].children.find(
+          (item) => item.dataset.command === "trigger-edge");
+        assert.equal(button.disabled, true);
+        assert.equal(button.title, "Not Product-open");
+        assert.equal(catalog.supported(commands[0]), false);
+        assert.equal(catalog.supported(commands[1]), true);
+    """
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", textwrap.dedent(script),
+         str(STATIC_ROOT / "command-catalog.js")],
+        capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.frontend_node
 def test_product_py_reuses_detected_capabilities_and_live_snapshots():
     import json
 
@@ -386,7 +409,11 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
                            "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"}
     ])
     script = COMMAND_CATALOG_HARNESS + f"\ncommands.splice(0, commands.length, ...{projected});\n" + r'''
-        const {catalog} = buildCatalog();
+        const {catalog} = buildCatalog((command) =>
+          context.mode === "live" && context.visa_library === "@py"
+            && context.resource.startsWith("USB") && !["identify", "list-resources"].includes(command)
+              ? "not released" : ""
+        );
         let context = {mode: "live", resource: "USB0::SAME::INSTR", model_id: null, visa_library: null};
         const currentModelId = () => "keysight-dsox4024a";
         catalog.updateModel(currentModelId());
@@ -423,13 +450,14 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         assert.notEqual(liveDataContextKey(), systemLiveKey);
         assert.notEqual(systemInformationContextKey(), systemInfoKey);
         for (const command of commands) {
-          assert.equal(catalog.supported(command), true);
-          assert.equal(catalog.supportReason(command), "");
+          const diagnostic = ["identify", "list-resources"].includes(command.id);
+          assert.equal(catalog.supported(command), diagnostic);
+          assert.equal(catalog.supportReason(command), diagnostic ? "" : "not released");
         }
         assert.equal(commandAvailable("identify"), true);
         assert.equal(commandAvailable("list-resources"), true);
         for (const command of ["run", "single", "capture", "measure", "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"]) {
-          assert.equal(commandAvailable(command), true, command);
+          assert.equal(commandAvailable(command), false, command);
         }
         // Late queued/running/terminal identity results from the same resource on System VISA are ignored.
         for (const status of ["queued", "running", "completed", "failed"]) {
@@ -440,6 +468,14 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         assert.equal(identityUpdates.length, 1);
         pendingResourceLiveSupport = {jobId: "identify-py", context: {...context}, requestedContext: null};
         await finishResourceLiveSupportEvaluation("identify-py");
+        handleScanBusyChange(false);
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 0);
+        context = {...context, resource: "TCPIP0::SAME::INSTR"};
+        updateCommandSupport();
+        assert.equal(commandAvailable("run"), true);
+        pendingResourceLiveSupport = {jobId: "identify-py-lan", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("identify-py-lan");
         handleScanBusyChange(false);
         await new Promise(setImmediate);
         assert.equal(snapshotJobs, 2);

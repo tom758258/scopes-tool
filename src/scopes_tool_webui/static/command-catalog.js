@@ -6,10 +6,11 @@ import {
 } from "/static/command-support.js";
 
 export class CommandCatalog {
-  constructor(commands, elements, onSelectionChange = () => {}) {
+  constructor(commands, elements, onSelectionChange = () => {}, productSupportReason = () => "") {
     this.commands = commands;
     this.elements = elements;
     this.onSelectionChange = onSelectionChange;
+    this.productSupportReason = productSupportReason;
     this.activeMode = "live";
     this.activeCategory = "";
     this.selectedId = "";
@@ -215,13 +216,14 @@ export class CommandCatalog {
   }
 
   supported(command) {
-    return !this.activeModelId || commandSupported(command, this.activeModelId);
+    return !this.supportReason(command);
   }
 
   supportReason(command) {
-    return this.activeModelId
+    const modelReason = this.activeModelId
       ? commandSupportReason(command, this.activeModelId, this.activeModelLabel)
       : "";
+    return modelReason || (this.activeMode === "live" ? this.productSupportReason(command.id) : "");
   }
 
   fieldsFor(command) {

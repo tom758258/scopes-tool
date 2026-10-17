@@ -184,7 +184,12 @@ const themeUi = initializeThemeUi({
   cookieDocument: document,
   mediaQuery: window.matchMedia("(prefers-color-scheme: dark)"),
 });
-initializeSupportedDevices({
+const supportedDevices = initializeSupportedDevices({
+  onSupportChanged: () => {
+    if (!deviceResource) return;
+    catalog?.renderCommands(false);
+    updateAvailability();
+  },
   button: document.querySelector("#supported-devices-toggle"),
   panel: document.querySelector("#supported-devices-panel"),
   body: document.querySelector("#supported-devices-body"),
@@ -218,7 +223,7 @@ async function initialize() {
     filter: elements.filter,
     categories: elements.categories,
     list: elements.commandList,
-  }, () => syncCommandSelection());
+  }, () => syncCommandSelection(), liveProductSupportReason);
   commandForm = new CommandForm(elements.form, catalog);
   channelLabelVisibility = new LabelVisibility(elements.channelLabelVisibility, catalog, {
     executeCommand,
@@ -319,6 +324,10 @@ async function initialize() {
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   bindPcOutputControls();
   elements.liveDataRefresh.addEventListener("click", refreshLiveDataSnapshot);
+  await Promise.all([
+    supportedDevices.loadBackend("system_visa"),
+    supportedDevices.loadBackend("@py"),
+  ]);
   updateAvailability();
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
@@ -584,7 +593,7 @@ function updateIdentity(job, commandContext) {
 
 function handleScanBusyChange(busy) {
   updateAvailability();
-  if (!busy && deviceResource?.hasCurrentIdentity?.(context)) {
+  if (!busy && commandAvailable("live-data-snapshot")) {
     void refreshLiveDataSnapshot();
   }
 }
@@ -663,7 +672,7 @@ async function finishResourceLiveSupportEvaluation(jobId) {
   await refreshRequestedResourceLiveSupport(completed);
   if (!completed.requestedContext
       && sameExecutionContext(context, completed.context)
-      && deviceResource?.hasCurrentIdentity?.(context)) {
+      && commandAvailable("live-data-snapshot")) {
     await refreshLiveDataSnapshot();
   }
   return true;
@@ -893,6 +902,16 @@ function syncCommandSelection(draft = null) {
 
 function invalidateGenericFormOwnership() {
   genericFormRevision += 1;
+}
+
+function liveProductSupportReason(command) {
+  if (context.mode !== "live" || command === "identify" || command === "list-resources"
+    || !context.resource) return "";
+  if (!deviceResource?.hasCurrentIdentity(context)) return translate("support.identityRequired");
+  if (supportedDevices.productOpen(context.visa_library, deviceResource.identity?.model_id, context.resource)) return "";
+  return translate(supportedDevices.supportLoaded(context.visa_library)
+    ? "support.connectionNotApproved"
+    : "support.connectionStatusUnavailable");
 }
 
 function commandAvailable(command) {

@@ -125,25 +125,25 @@ def test_supported_devices_api_is_display_only() -> None:
     response = client.get("/api/supported-devices")
     assert response.status_code == 200
     assert response.json() == [
-        {"vendor": vendor, "model": model, "connections": connections}
-        for vendor, model, connections in [
-            ("Tektronix", "TBS2074", ["USB", "TCPIP"]),
-            ("Tektronix", "TDS2024B", ["USB"]),
-            ("Tektronix", "TBS1052B", ["USB"]),
-            ("Keysight", "DSOX2004A", ["USB"]),
-            ("Keysight", "DSOX3024A", ["USB"]),
-            ("Keysight", "DSOX4024A", ["USB", "TCPIP"]),
-            ("Keysight", "DSOX4034A", ["USB", "TCPIP"]),
+        {"vendor": vendor, "model": model, "model_id": model_id, "connections": connections}
+        for vendor, model, model_id, connections in [
+            ("Tektronix", "TBS2074", "tektronix-tbs2074", ["USB", "TCPIP"]),
+            ("Tektronix", "TDS2024B", "tektronix-tds2024b", ["USB"]),
+            ("Tektronix", "TBS1052B", "tektronix-tbs1052b", ["USB"]),
+            ("Keysight", "DSOX2004A", "keysight-dsox2004a", ["USB"]),
+            ("Keysight", "DSOX3024A", "keysight-dsox3024a", ["USB"]),
+            ("Keysight", "DSOX4024A", "keysight-dsox4024a", ["USB", "TCPIP"]),
+            ("Keysight", "DSOX4034A", "keysight-dsox4034a", ["USB", "TCPIP"]),
         ]
     ]
     pending = client.get("/api/supported-devices", params={"backend": "@py"})
     assert pending.status_code == 200
     expected_open = [
-        {"vendor": vendor, "model": model, "connections": ["TCPIP"]}
-        for vendor, model in [
-            ("Keysight", "DSOX4024A"),
-            ("Keysight", "DSOX4034A"),
-            ("Tektronix", "TBS2074"),
+        {"vendor": vendor, "model": model, "model_id": model_id, "connections": ["TCPIP"]}
+        for vendor, model, model_id in [
+            ("Keysight", "DSOX4024A", "keysight-dsox4024a"),
+            ("Keysight", "DSOX4034A", "keysight-dsox4034a"),
+            ("Tektronix", "TBS2074", "tektronix-tbs2074"),
         ]
     ]
     assert sorted(pending.json(), key=lambda item: (item["vendor"], item["model"])) == expected_open
@@ -160,7 +160,7 @@ def test_supported_projection_uses_core_identity_and_omits_unapproved_models(mon
     model = next(model for model in supported_devices.PHYSICAL_MODEL_REGISTRY if model.model_id == "keysight-dsox2004a")
     monkeypatch.setattr(supported_devices, "PHYSICAL_MODEL_REGISTRY", (replace(model, canonical_model="Core model"),))
     monkeypatch.setattr(supported_devices, "product_live_transport_scopes", lambda _backend: frozenset({(model.model_id, "usb"), ("unknown", "tcpip")}))
-    assert supported_devices.supported_devices_payload() == [{"vendor": "Keysight", "model": "Core model", "connections": ["USB"]}]
+    assert supported_devices.supported_devices_payload() == [{"vendor": "Keysight", "model": "Core model", "model_id": model.model_id, "connections": ["USB"]}]
     monkeypatch.setattr(supported_devices, "product_live_transport_scopes", lambda _backend: frozenset())
     assert supported_devices.supported_devices_payload() == []
 
@@ -176,15 +176,16 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
         button.ownerDocument = doc; panel.hidden = true;
         let requests = 0, opened = 0, fail = true;
         const devices = [
-          {vendor: "Keysight", model: "DSOX4024A", connections: ["USB", "TCPIP"]},
-          {vendor: "Keysight", model: "DSOX2004A", connections: ["USB"]},
+          {vendor: "Keysight", model: "DSOX4024A", model_id: "keysight-dsox4024a", connections: ["USB", "TCPIP"]},
+          {vendor: "Keysight", model: "DSOX2004A", model_id: "keysight-dsox2004a", connections: ["USB"]},
         ];
         const originalDevices = JSON.stringify(devices);
         globalThis.fetch = async (path) => {
           assert.equal(path, "/api/supported-devices"); requests++;
           return {ok: !fail, json: async () => devices};
         };
-        initializeSupportedDevices({button, panel, body, status, settings, tabs, content, pendingNote, onOpen: () => opened++});
+        const support = initializeSupportedDevices({button, panel, body, status, settings, tabs, content, pendingNote, onOpen: () => opened++});
+        assert.equal(support.productOpen("system_visa", "keysight-dsox4024a", "USB0::TEST::INSTR"), false);
         const event = {stopPropagation() { this.stopped = true; }};
         button.emit("click", event);
         assert.equal(panel.hidden, false); assert.equal(button.attributes["aria-expanded"], "true");
@@ -200,6 +201,13 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
         assert.deepEqual(body.children[0].children[1].children[0].children.map((cell) => cell.textContent), ["DSOX4024A", "USB、LAN / TCPIP"]);
         assert.equal(body.children[0].children[1].children[1].children[1].textContent, "USB");
         assert.equal(status.hidden, true);
+        assert.equal(support.supportLoaded("system_visa"), true);
+        assert.equal(support.productOpen("system_visa", "keysight-dsox4024a", "USB0::TEST::INSTR"), true);
+        assert.equal(support.productOpen("system_visa", "keysight-dsox4024a", "TCPIP0::TEST::INSTR"), true);
+        assert.equal(support.productOpen("system_visa", "keysight-dsox2004a", "TCPIP0::TEST::INSTR"), false);
+        assert.equal(support.productOpen("system_visa", "keysight-dsox4024a", "GPIB0::TEST::INSTR"), false);
+        assert.equal(support.productOpen("system_visa", "wrong-model", "USB0::TEST::INSTR"), false);
+        assert.equal(support.productOpen("@bt", "keysight-dsox4024a", "USB0::TEST::INSTR"), false);
         setLocale("en");
         assert.deepEqual(body.children[0].children[1].children[0].children.map((cell) => cell.textContent), ["DSOX4024A", "USB, LAN / TCPIP"]);
         assert.equal(body.children[0].children[1].children[1].children[1].textContent, "USB");
@@ -216,10 +224,12 @@ def test_supported_panel_open_close_escape_outside_click_and_retry() -> None:
         assert.equal(pendingNote.hidden, true);
         globalThis.fetch = async (path) => {
           assert.equal(path, "/api/supported-devices?backend=%40py"); requests++;
-          return {ok: true, json: async () => [{vendor: "Tektronix", model: "TBS2074", connections: ["TCPIP"], status: "pending"}]};
+          return {ok: true, json: async () => [{vendor: "Tektronix", model: "TBS2074", model_id: "tektronix-tbs2074", connections: ["TCPIP"]}]};
         };
         tabs[1].emit("click"); await new Promise(setImmediate);
         assert.equal(pendingNote.hidden, false);
+        assert.equal(support.productOpen("@py", "tektronix-tbs2074", "TCPIP0::TEST::INSTR"), true);
+        assert.equal(support.productOpen("@py", "tektronix-tbs2074", "USB0::TEST::INSTR"), false);
         assert.equal(tabs[1].attributes["aria-selected"], "true");
         assert.equal(content.attributes["aria-labelledby"], "py");
         assert.equal(body.children[0].children[0].textContent, "Tektronix");
