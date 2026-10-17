@@ -12,6 +12,7 @@ def supported_devices_payload(backend: str = "system_visa") -> list[dict[str, st
         {
             "vendor": vendors[model.vendor_id],
             "model": model.canonical_model,
+            "model_id": model.model_id,
             "connections": [
                 transport.upper()
                 for transport in ("usb", "tcpip")

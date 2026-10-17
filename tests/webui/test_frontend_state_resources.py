@@ -391,6 +391,7 @@ def test_selected_resource_snapshot_serializes_latest_requested_context() -> Non
         const currentResults = [];
         const clientErrors = [];
         const identities = [];
+        const resetAutoSnapshot = () => {};
         const updateCommandSupport = () => {};
         const renderWorkspace = () => {};
         const scheduleEditorRead = () => {};
@@ -533,6 +534,7 @@ def test_stale_snapshot_submission_failure_is_kept_before_requested_snapshot_run
         const clientErrors = [];
         const backendJobs = new Set();
         const identities = [];
+        const resetAutoSnapshot = () => {};
         const updateCommandSupport = () => {};
         const renderWorkspace = () => {};
         const scheduleEditorRead = () => {};
@@ -627,6 +629,9 @@ def test_scan_busy_change_refreshes_live_data_once_identity_ready() -> None:
         extract_function_declaration(app_source, signature)
         for signature in (
             "function handleScanBusyChange(busy)",
+            "function resetAutoSnapshot()",
+            "function requestAutoSnapshot()",
+            "function drainPendingAutoSnapshot()",
             "async function refreshLiveDataSnapshot()",
             "function isExecutionBusy()",
             "function liveDataContextKey()",
@@ -640,13 +645,20 @@ def test_scan_busy_change_refreshes_live_data_once_identity_ready() -> None:
         let context = { mode: "live", resource: "RESOURCE-A", model_id: null };
         let executing = false;
         let pendingResourceLiveSupport = null;
+        let pendingAutoSnapshotKey = null;
+        let autoSnapshotIssuedKey = null;
         let identityReady = false;
         let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false };
         const calls = [];
         const currentModelId = () => "keysight-dsox4024a";
         const deviceResource = {
           scanInProgress: false,
+          identity: {model_id: "keysight-dsox4024a"},
           hasCurrentIdentity: () => identityReady,
+        };
+        const supportedDevices = {
+          supportLoaded: () => true,
+          productOpen: () => true,
         };
         const commandAvailable = (command) => command === "live-data-snapshot";
         const executeCommand = async (command) => {

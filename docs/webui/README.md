@@ -100,9 +100,13 @@ For API clients, `POST /api/jobs` accepts an optional top-level `visa_library`:
 Omitted values default to System VISA. Planning modes discard the selection.
 Each job stores its submitted backend internally without adding response
 fields or changing job lifecycle, cancellation, or HTTP status semantics.
-`GET /api/supported-devices` preserves its list response; optional
-`?backend=%40py` returns the Product-open `@py` connection entries.
-This display endpoint does not authorize operations.
+`GET /api/supported-devices` preserves its list response and includes the
+Core registry `model_id` on each entry; optional `?backend=%40py` returns the
+Product-open `@py` connection entries. The browser uses this Core-owned
+connection projection to disable Live actions for unapproved model, backend,
+and transport combinations, while allowing Identify and resource discovery.
+This display endpoint does not authorize operations; Core continues to reject
+unapproved direct API, CLI, and Worker execution.
 
 Math/FFT readback first identifies the active operation family for a Math
 function slot. Reading a different editor (for example Math Visualization while

@@ -87,7 +87,7 @@ COMMAND_CATALOG_HARNESS = r'''
           { id: "serial-mode", category: "Serial", label: "Serial mode", modes: ["live"], group: "uart" },
           { id: "acquisition", category: "Acquisition", label: "Acquisition", modes: ["live"] },
         ];
-        const buildCatalog = () => {
+        const buildCatalog = (productSupportReason = () => "") => {
           const elements = {
             filter: new FakeNode("input"),
             categories: new FakeNode(),
@@ -98,6 +98,7 @@ COMMAND_CATALOG_HARNESS = r'''
             commands,
             elements,
             (selected) => selections.push(selected?.id || ""),
+            productSupportReason,
           );
           return { elements, selections, catalog };
         };
@@ -179,7 +180,7 @@ def test_command_editor_and_result_presentation_contract() -> None:
     assert 'if (changed && rerender && commandForm) syncCommandSelection(draft);' in app_source
     assert 'if (lockEditor) commandForm.setDisabled(true);' in app_source
     assert 'commandForm.setDisabled(false);' in app_source
-    assert "}, () => syncCommandSelection());" in app_source
+    assert "}, () => syncCommandSelection(), liveProductSupportReason);" in app_source
     assert "renderWorkspaceResult" in results_source
     assert 'job.command === "identify"' in results_source
     assert "appendWorkspaceFields(container, fields);" in results_source
@@ -359,6 +360,28 @@ def test_command_catalog_filter_keeps_matching_groups_visible() -> None:
 
 
 @pytest.mark.frontend_node
+def test_live_product_policy_disables_catalog_command_with_reason() -> None:
+    script = COMMAND_CATALOG_HARNESS + r"""
+        const { catalog, elements } = buildCatalog((command) =>
+          command === "trigger-edge" ? "Not Product-open" : "");
+        catalog.render();
+        const section = sectionFor(elements.list, "edge");
+        const button = section.children[1].children.find(
+          (item) => item.dataset.command === "trigger-edge");
+        assert.equal(button.disabled, true);
+        assert.equal(button.title, "Not Product-open");
+        assert.equal(catalog.supported(commands[0]), false);
+        assert.equal(catalog.supported(commands[1]), true);
+    """
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", textwrap.dedent(script),
+         str(STATIC_ROOT / "command-catalog.js")],
+        capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+
+
+@pytest.mark.frontend_node
 def test_product_py_reuses_detected_capabilities_and_live_snapshots():
     import json
 
@@ -366,7 +389,12 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
     declarations = "\n".join(
         extract_function_declaration(app_source, signature)
         for signature in (
+            "function liveProductSupportReason(command)",
+            "function resetAutoSnapshot()",
+            "function requestAutoSnapshot()",
+            "function drainPendingAutoSnapshot()",
             "function commandAvailable(command)",
+            "function updateSelectedCommandSupportReason()",
             "function updateCommandSupport(rerender = true)",
             "async function finishResourceLiveSupportEvaluation(jobId)",
             "function handleScanBusyChange(busy)",
@@ -386,20 +414,33 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
                            "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"}
     ])
     script = COMMAND_CATALOG_HARNESS + f"\ncommands.splice(0, commands.length, ...{projected});\n" + r'''
-        const {catalog} = buildCatalog();
+        const {catalog} = buildCatalog(liveProductSupportReason);
         let context = {mode: "live", resource: "USB0::SAME::INSTR", model_id: null, visa_library: null};
+        let supportLoaded = true;
+        let identityReady = true;
+        const supportedDevices = {
+          supportLoaded: () => supportLoaded,
+          productOpen: (backend, modelId, resource) => supportLoaded
+            && modelId === "keysight-dsox4024a"
+            && (backend === "@py" ? resource.startsWith("TCPIP")
+              : (backend === null || backend === "system_visa") && resource.startsWith("USB")),
+        };
+        const elements = {commandSupportReason: {hidden: true, textContent: "", title: ""}};
         const currentModelId = () => "keysight-dsox4024a";
-        catalog.updateModel(currentModelId());
         let pendingResourceLiveSupport = null;
+        let pendingAutoSnapshotKey = null;
+        let autoSnapshotIssuedKey = null;
         let snapshotJobs = 0;
+        let foregroundBusy = false;
         const identityUpdates = [];
         const deviceResource = {
-          hasCurrentIdentity: () => true,
+          identity: {model_id: "keysight-dsox4024a"},
+          hasCurrentIdentity: () => identityReady,
           setIdentity: (idn) => identityUpdates.push(idn),
           setIdentityPending: () => identityUpdates.push("pending"),
           setIdentityError: () => identityUpdates.push("error"),
         };
-        const isExecutionBusy = () => false;
+        const isExecutionBusy = () => foregroundBusy;
         const updateAvailability = () => {};
         const refreshRequestedResourceLiveSupport = async () => {};
         const executeCommand = async () => { snapshotJobs++; };
@@ -412,6 +453,7 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         const syncCommandSelection = (draft) => { restoredDraft = draft; };
         const translate = (key) => key;
         let liveDataSnapshot = {};
+        catalog.updateModel(currentModelId());
         const systemContext = {...context};
     ''' + declarations + r'''
         const systemLiveKey = liveDataContextKey();
@@ -423,13 +465,27 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         assert.notEqual(liveDataContextKey(), systemLiveKey);
         assert.notEqual(systemInformationContextKey(), systemInfoKey);
         for (const command of commands) {
-          assert.equal(catalog.supported(command), true);
-          assert.equal(catalog.supportReason(command), "");
+          const diagnostic = ["identify", "list-resources"].includes(command.id);
+          assert.equal(catalog.supported(command), diagnostic);
+          assert.equal(catalog.supportReason(command), diagnostic ? "" : "support.connectionNotApproved");
         }
         assert.equal(commandAvailable("identify"), true);
         assert.equal(commandAvailable("list-resources"), true);
+        catalog.select("run");
+        updateSelectedCommandSupportReason();
+        assert.equal(elements.commandSupportReason.textContent, "support.connectionNotApproved");
+        assert.equal(elements.commandSupportReason.title, elements.commandSupportReason.textContent);
+        identityReady = false;
+        assert.equal(catalog.supportReason(catalog.selected()), "support.identityRequired");
+        identityReady = true;
+        supportLoaded = false;
+        assert.equal(catalog.supportReason(catalog.selected()), "support.connectionStatusUnavailable");
+        supportLoaded = true;
+        deviceResource.identity.model_id = "unregistered";
+        assert.equal(commandAvailable("run"), false);
+        deviceResource.identity.model_id = "keysight-dsox4024a";
         for (const command of ["run", "single", "capture", "measure", "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"]) {
-          assert.equal(commandAvailable(command), true, command);
+          assert.equal(commandAvailable(command), false, command);
         }
         // Late queued/running/terminal identity results from the same resource on System VISA are ignored.
         for (const status of ["queued", "running", "completed", "failed"]) {
@@ -442,7 +498,119 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         await finishResourceLiveSupportEvaluation("identify-py");
         handleScanBusyChange(false);
         await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 0);
+        context = {...context, resource: "TCPIP0::SAME::INSTR"};
+        updateCommandSupport();
+        assert.equal(commandAvailable("run"), true);
+        updateSelectedCommandSupportReason();
+        assert.equal(elements.commandSupportReason.hidden, true);
+        assert.equal(elements.commandSupportReason.textContent, "");
+        assert.equal(elements.commandSupportReason.title, "");
+        pendingResourceLiveSupport = {jobId: "identify-py-lan", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("identify-py-lan");
+        handleScanBusyChange(false);
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 1); // Identify and Scan completion represent one auto read.
+
+        // Identify may finish while Product metadata is still loading.
+        resetAutoSnapshot();
+        supportLoaded = false;
+        pendingResourceLiveSupport = {jobId: "late-metadata", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("late-metadata");
+        assert.equal(snapshotJobs, 1);
+        drainPendingAutoSnapshot(); // An unrelated backend response cannot start this read.
+        assert.equal(snapshotJobs, 1);
+        supportLoaded = true; // Current backend metadata arrives or a failed load is retried.
+        drainPendingAutoSnapshot();
+        await new Promise(setImmediate);
         assert.equal(snapshotJobs, 2);
+        drainPendingAutoSnapshot();
+        handleScanBusyChange(false);
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 2); // No duplicate job on repeated notifications.
+
+        // Scan may finish Identify before its Busy flag is released.
+        foregroundBusy = true;
+        handleScanBusyChange(true);
+        pendingResourceLiveSupport = {jobId: "scan-busy", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("scan-busy");
+        assert.equal(snapshotJobs, 2);
+        foregroundBusy = false;
+        handleScanBusyChange(false);
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 3);
+        handleScanBusyChange(false);
+        assert.equal(snapshotJobs, 3);
+
+        // A pending read for the previous Resource must never run after a switch.
+        resetAutoSnapshot();
+        supportLoaded = false;
+        pendingResourceLiveSupport = {jobId: "old-resource", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("old-resource");
+        context = {...context, resource: "TCPIP0::NEW::INSTR"};
+        resetAutoSnapshot(); // The DeviceResource context-change callback invalidates it.
+        supportLoaded = true;
+        drainPendingAutoSnapshot();
+        assert.equal(snapshotJobs, 3);
+
+        // A new Identify or Scan of the same Resource legitimately requests a new read.
+        pendingResourceLiveSupport = {jobId: "new-resource", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("new-resource");
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 4);
+
+        // Other foreground work must finish before the deferred read starts.
+        resetAutoSnapshot();
+        foregroundBusy = true;
+        pendingResourceLiveSupport = {jobId: "foreground", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("foreground");
+        assert.equal(snapshotJobs, 4);
+        foregroundBusy = false;
+        drainPendingAutoSnapshot(); // The foreground Job finally callback.
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 5);
+
+        // A pending request must not leak across Backend changes.
+        resetAutoSnapshot();
+        supportLoaded = false;
+        pendingResourceLiveSupport = {jobId: "old-backend", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("old-backend");
+        context = {...context, visa_library: "system_visa"};
+        resetAutoSnapshot(); // The Resource context-change callback.
+        supportLoaded = true;
+        drainPendingAutoSnapshot();
+        assert.equal(snapshotJobs, 5);
+
+        // Core-approved System USB does not imply System TCPIP approval.
+        pendingResourceLiveSupport = {jobId: "not-approved", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("not-approved");
+        assert.equal(snapshotJobs, 5);
+        context = {...context, visa_library: "@bt"};
+        resetAutoSnapshot();
+        pendingResourceLiveSupport = {jobId: "unknown-backend", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("unknown-backend");
+        assert.equal(snapshotJobs, 5);
+
+        // A fresh Identify invalidates the prior deferred request.
+        context = {...context, visa_library: "@py"};
+        resetAutoSnapshot();
+        supportLoaded = false;
+        pendingResourceLiveSupport = {jobId: "identity-lost", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("identity-lost");
+        updateIdentity({command: "identify", status: "queued"}, context);
+        identityReady = false;
+        supportLoaded = true;
+        drainPendingAutoSnapshot();
+        assert.equal(snapshotJobs, 5);
+        identityReady = true;
+
+        // A genuinely new Identify/Scan may read again even at the same Resource.
+        pendingResourceLiveSupport = {jobId: "fresh-identify", context: {...context}, requestedContext: null};
+        await finishResourceLiveSupportEvaluation("fresh-identify");
+        await new Promise(setImmediate);
+        assert.equal(snapshotJobs, 6);
+        handleScanBusyChange(false);
+        assert.equal(snapshotJobs, 6);
         context = {...context, mode: "simulate", visa_library: null};
         catalog.updateMode("simulate");
         assert.equal(commandAvailable("run"), true);

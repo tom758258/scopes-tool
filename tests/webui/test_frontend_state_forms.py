@@ -20,6 +20,7 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
             "async function executeCommand(command, parameters, options = null)",
             "function isExecutionBusy()",
             "function invalidateGenericFormOwnership()",
+            "function updateSelectedCommandSupportReason()",
             "function syncCommandSelection(draft = null)",
         )
     )
@@ -87,6 +88,7 @@ def run_generic_form_ownership_behavior(assertions: str) -> None:
         const syncEditorPresentation = () => {};
         const commandAction = () => "apply";
         const updateAvailability = () => {};
+        const drainPendingAutoSnapshot = () => {};
         const setExecutionStatus = () => {};
         const renderCurrentResult = () => {
           if (resultPresentation.job?.status === "completed") {

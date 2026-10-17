@@ -172,6 +172,8 @@ let resultPresentation = { kind: "empty", job: null, message: null };
 let healthState = { status: "checking", version: null, error: null };
 let liveCommandState = { key: "device.ready" };
 let pendingResourceLiveSupport = null;
+let pendingAutoSnapshotKey = null;
+let autoSnapshotIssuedKey = null;
 let updateBasicAvailability = () => {};
 let pcOutputSelectionStatus = null;
 let liveDataSnapshot = { contextKey: null, value: null, error: null, loading: false, updatedAt: null };
@@ -184,7 +186,14 @@ const themeUi = initializeThemeUi({
   cookieDocument: document,
   mediaQuery: window.matchMedia("(prefers-color-scheme: dark)"),
 });
-initializeSupportedDevices({
+const supportedDevices = initializeSupportedDevices({
+  onSupportChanged: () => {
+    if (!deviceResource) return;
+    catalog?.renderCommands(false);
+    updateSelectedCommandSupportReason();
+    updateAvailability();
+    drainPendingAutoSnapshot();
+  },
   button: document.querySelector("#supported-devices-toggle"),
   panel: document.querySelector("#supported-devices-panel"),
   body: document.querySelector("#supported-devices-body"),
@@ -218,7 +227,7 @@ async function initialize() {
     filter: elements.filter,
     categories: elements.categories,
     list: elements.commandList,
-  }, () => syncCommandSelection());
+  }, () => syncCommandSelection(), liveProductSupportReason);
   commandForm = new CommandForm(elements.form, catalog);
   channelLabelVisibility = new LabelVisibility(elements.channelLabelVisibility, catalog, {
     executeCommand,
@@ -286,6 +295,7 @@ async function initialize() {
     status: elements.deviceStatus,
     pcOutput: elements.pcOutput,
   }, (nextContext) => {
+    if (!sameExecutionContext(context, nextContext)) resetAutoSnapshot();
     context = nextContext;
     state.executionContext = nextContext;
     if (catalog) catalog.updateMode(context.mode);
@@ -368,6 +378,9 @@ async function initialize() {
       elements.deviceStatus.textContent = error.message;
     }
   });
+  // Support metadata must not delay diagnostic controls or event binding.
+  void supportedDevices.loadBackend("system_visa");
+  void supportedDevices.loadBackend("@py");
 }
 
 function bindPresentationControls() {
@@ -516,7 +529,10 @@ async function executeCommand(command, parameters, options = {}) {
   const lockEditor = options.intent === "apply"
     && ownsCommandForm();
   if (lockEditor) commandForm.setDisabled(true);
-  if (command === "identify") deviceResource?.setIdentityPending?.(commandContext);
+  if (command === "identify") {
+    resetAutoSnapshot();
+    deviceResource?.setIdentityPending?.(commandContext);
+  }
   updateAvailability();
   elements.execute.disabled = true;
   elements.cancel.classList.remove("hidden");
@@ -556,12 +572,14 @@ async function executeCommand(command, parameters, options = {}) {
     currentJobId = null;
     elements.cancel.classList.add("hidden");
     updateAvailability();
+    drainPendingAutoSnapshot();
   }
 }
 
 function updateIdentity(job, commandContext) {
   if (job.command !== "identify" || !deviceResource || !sameExecutionContext(context, commandContext)) return;
   if (["queued", "running"].includes(job.status)) {
+    resetAutoSnapshot();
     deviceResource.setIdentityPending?.(commandContext);
     updateCommandSupport();
     renderWorkspace();
@@ -573,6 +591,7 @@ function updateIdentity(job, commandContext) {
   if (job.status === "completed" && idn) {
     deviceResource.setIdentity(idn, commandContext);
   } else if (["failed", "cancelled"].includes(job.status)) {
+    resetAutoSnapshot();
     deviceResource.setIdentityError?.(job.error || translate("status.identifyFailed"), commandContext);
   }
   updateCommandSupport();
@@ -582,11 +601,54 @@ function updateIdentity(job, commandContext) {
   if (typeof updateAvailability === "function") updateAvailability();
 }
 
-function handleScanBusyChange(busy) {
-  updateAvailability();
-  if (!busy && deviceResource?.hasCurrentIdentity?.(context)) {
-    void refreshLiveDataSnapshot();
+// One auto-read intent per identified Live context. A later Product metadata
+// response or Busy transition must not start duplicate or stale reads.
+function resetAutoSnapshot() {
+  pendingAutoSnapshotKey = null;
+  autoSnapshotIssuedKey = null;
+}
+
+function requestAutoSnapshot() {
+  if (context.mode !== "live" || !deviceResource?.hasCurrentIdentity?.(context)) return;
+  const key = liveDataContextKey();
+  if (autoSnapshotIssuedKey === key) return;
+  pendingAutoSnapshotKey = key;
+  drainPendingAutoSnapshot();
+}
+
+function drainPendingAutoSnapshot() {
+  const key = pendingAutoSnapshotKey;
+  if (!key) return;
+  if (context.mode !== "live" || !deviceResource?.hasCurrentIdentity?.(context)
+      || liveDataContextKey() !== key) {
+    pendingAutoSnapshotKey = null;
+    return;
   }
+  if (!supportedDevices.supportLoaded(context.visa_library)) return;
+  if (!supportedDevices.productOpen(context.visa_library, deviceResource.identity?.model_id, context.resource)) {
+    pendingAutoSnapshotKey = null;
+    return;
+  }
+  if (isExecutionBusy()) return;
+  if (liveDataSnapshot.contextKey === key && liveDataSnapshot.loading) {
+    pendingAutoSnapshotKey = null;
+    autoSnapshotIssuedKey = key;
+    return;
+  }
+  if (!commandAvailable("live-data-snapshot")) {
+    pendingAutoSnapshotKey = null;
+    return;
+  }
+  pendingAutoSnapshotKey = null;
+  autoSnapshotIssuedKey = key;
+  void refreshLiveDataSnapshot();
+}
+
+function handleScanBusyChange(busy) {
+  if (busy) resetAutoSnapshot();
+  updateAvailability();
+  if (!busy && deviceResource?.hasCurrentIdentity?.(context)) requestAutoSnapshot();
+  if (!busy) drainPendingAutoSnapshot();
 }
 
 async function refreshSelectedResourceContext(selectedContext) {
@@ -611,6 +673,7 @@ async function refreshSelectedResourceContext(selectedContext) {
 }
 
 async function evaluateResourceLiveSupport(commandContext) {
+  resetAutoSnapshot();
   const pending = {
     context: commandContext,
     jobId: null,
@@ -664,7 +727,7 @@ async function finishResourceLiveSupportEvaluation(jobId) {
   if (!completed.requestedContext
       && sameExecutionContext(context, completed.context)
       && deviceResource?.hasCurrentIdentity?.(context)) {
-    await refreshLiveDataSnapshot();
+    requestAutoSnapshot();
   }
   return true;
 }
@@ -817,6 +880,14 @@ document.addEventListener("localechange", () => {
   renderSystemInformation();
 });
 
+function updateSelectedCommandSupportReason() {
+  const selected = catalog?.selected();
+  const reason = selected ? catalog.supportReason(selected) : "";
+  elements.commandSupportReason.hidden = !reason;
+  elements.commandSupportReason.textContent = reason;
+  elements.commandSupportReason.title = reason;
+}
+
 function syncCommandSelection(draft = null) {
   if (!catalog || !commandForm) return;
   const selected = catalog.selected();
@@ -880,10 +951,7 @@ function syncCommandSelection(draft = null) {
     : translate("commands.noDescription");
   elements.commandDescription.textContent = selectedDescription;
   elements.commandDescription.title = selectedDescription;
-  const supportReason = selected ? catalog.supportReason(selected) : "";
-  elements.commandSupportReason.hidden = !supportReason;
-  elements.commandSupportReason.textContent = supportReason;
-  elements.commandSupportReason.title = supportReason;
+  updateSelectedCommandSupportReason();
   renderPcOutputNote();
   elements.execute.textContent = translate(`actions.${commandAction(selected)}`);
   renderWorkspace();
@@ -893,6 +961,16 @@ function syncCommandSelection(draft = null) {
 
 function invalidateGenericFormOwnership() {
   genericFormRevision += 1;
+}
+
+function liveProductSupportReason(command) {
+  if (context.mode !== "live" || command === "identify" || command === "list-resources"
+    || !context.resource) return "";
+  if (!deviceResource?.hasCurrentIdentity(context)) return translate("support.identityRequired");
+  if (supportedDevices.productOpen(context.visa_library, deviceResource.identity?.model_id, context.resource)) return "";
+  return translate(supportedDevices.supportLoaded(context.visa_library)
+    ? "support.connectionNotApproved"
+    : "support.connectionStatusUnavailable");
 }
 
 function commandAvailable(command) {

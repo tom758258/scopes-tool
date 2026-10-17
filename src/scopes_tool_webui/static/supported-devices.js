@@ -1,6 +1,19 @@
 import { translate } from "/static/i18n.js";
 
-export function initializeSupportedDevices({ button, panel, body, status, settings, tabs, content, pendingNote, onOpen }) {
+function supportBackend(backend) {
+  if (backend === "@py") return "@py";
+  if (backend === null || backend === undefined || backend === "" || backend === "system_visa") return "system_visa";
+  return null;
+}
+
+function resourceTransport(resource) {
+  const prefix = String(resource || "").trim().split("::", 1)[0].toUpperCase();
+  if (/^USB\d*$/.test(prefix)) return "USB";
+  if (/^TCPIP\d*$/.test(prefix)) return "TCPIP";
+  return null;
+}
+
+export function initializeSupportedDevices({ button, panel, body, status, settings, tabs, content, pendingNote, onOpen, onSupportChanged = () => {} }) {
   const owner = button.ownerDocument;
   let backend = "system_visa";
   const devices = new Map();
@@ -52,8 +65,7 @@ export function initializeSupportedDevices({ button, panel, body, status, settin
     panel.hidden = !expanded;
     button.setAttribute("aria-expanded", String(expanded));
   };
-  const load = async () => {
-    const requested = backend;
+  const load = async (requested = backend) => {
     if (devices.has(requested) || loading.has(requested)) return;
     loading.add(requested);
     errors.delete(requested);
@@ -68,6 +80,7 @@ export function initializeSupportedDevices({ button, panel, body, status, settin
     } finally {
       loading.delete(requested);
       render();
+      onSupportChanged();
     }
   };
   const selectTab = (tab) => {
@@ -104,4 +117,22 @@ export function initializeSupportedDevices({ button, panel, body, status, settin
   });
   owner.addEventListener("localechange", render);
   render();
+  return {
+    loadBackend: (requested) => {
+      const key = supportBackend(requested);
+      return key ? load(key) : Promise.resolve();
+    },
+    supportLoaded: (requested) => {
+      const key = supportBackend(requested);
+      return key ? devices.has(key) : false;
+    },
+    productOpen: (requested, modelId, resource) => {
+      const key = supportBackend(requested);
+      const rows = key ? devices.get(key) : null;
+      const transport = resourceTransport(resource);
+      return Boolean(rows && modelId && transport && rows.some(
+        (item) => item.model_id === modelId && item.connections.includes(transport)
+      ));
+    },
+  };
 }
