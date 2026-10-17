@@ -593,7 +593,7 @@ function updateIdentity(job, commandContext) {
 
 function handleScanBusyChange(busy) {
   updateAvailability();
-  if (!busy && commandAvailable("live-data-snapshot")) {
+  if (!busy && deviceResource?.hasCurrentIdentity?.(context)) {
     void refreshLiveDataSnapshot();
   }
 }
@@ -672,7 +672,7 @@ async function finishResourceLiveSupportEvaluation(jobId) {
   await refreshRequestedResourceLiveSupport(completed);
   if (!completed.requestedContext
       && sameExecutionContext(context, completed.context)
-      && commandAvailable("live-data-snapshot")) {
+      && deviceResource?.hasCurrentIdentity?.(context)) {
     await refreshLiveDataSnapshot();
   }
   return true;
