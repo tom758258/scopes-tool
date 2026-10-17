@@ -624,6 +624,7 @@ def test_foreground_execution_rejects_overlap_without_changing_job_ownership() -
         const currentWorkspaceContext = () => ({});
         const isCurrentEditorJob = () => false;
         const updateAvailability = () => {};
+        const drainPendingAutoSnapshot = () => {};
         const setExecutionStatus = (state) => states.push(state.status);
         const renderCurrentResult = () => presentations.push(resultPresentation.job?.job_id || null);
         const updateIdentity = () => {};
