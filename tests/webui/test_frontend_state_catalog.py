@@ -389,7 +389,9 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
     declarations = "\n".join(
         extract_function_declaration(app_source, signature)
         for signature in (
+            "function liveProductSupportReason(command)",
             "function commandAvailable(command)",
+            "function updateSelectedCommandSupportReason()",
             "function updateCommandSupport(rerender = true)",
             "async function finishResourceLiveSupportEvaluation(jobId)",
             "function handleScanBusyChange(busy)",
@@ -409,19 +411,25 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
                            "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"}
     ])
     script = COMMAND_CATALOG_HARNESS + f"\ncommands.splice(0, commands.length, ...{projected});\n" + r'''
-        const {catalog} = buildCatalog((command) =>
-          context.mode === "live" && context.visa_library === "@py"
-            && context.resource.startsWith("USB") && !["identify", "list-resources"].includes(command)
-              ? "not released" : ""
-        );
+        const {catalog} = buildCatalog(liveProductSupportReason);
         let context = {mode: "live", resource: "USB0::SAME::INSTR", model_id: null, visa_library: null};
+        let supportLoaded = true;
+        let identityReady = true;
+        const supportedDevices = {
+          supportLoaded: () => supportLoaded,
+          productOpen: (backend, modelId, resource) => supportLoaded
+            && modelId === "keysight-dsox4024a"
+            && (backend === "@py" ? resource.startsWith("TCPIP")
+              : (backend === null || backend === "system_visa") && resource.startsWith("USB")),
+        };
+        const elements = {commandSupportReason: {hidden: true, textContent: "", title: ""}};
         const currentModelId = () => "keysight-dsox4024a";
-        catalog.updateModel(currentModelId());
         let pendingResourceLiveSupport = null;
         let snapshotJobs = 0;
         const identityUpdates = [];
         const deviceResource = {
-          hasCurrentIdentity: () => true,
+          identity: {model_id: "keysight-dsox4024a"},
+          hasCurrentIdentity: () => identityReady,
           setIdentity: (idn) => identityUpdates.push(idn),
           setIdentityPending: () => identityUpdates.push("pending"),
           setIdentityError: () => identityUpdates.push("error"),
@@ -439,6 +447,7 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         const syncCommandSelection = (draft) => { restoredDraft = draft; };
         const translate = (key) => key;
         let liveDataSnapshot = {};
+        catalog.updateModel(currentModelId());
         const systemContext = {...context};
     ''' + declarations + r'''
         const systemLiveKey = liveDataContextKey();
@@ -452,10 +461,23 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         for (const command of commands) {
           const diagnostic = ["identify", "list-resources"].includes(command.id);
           assert.equal(catalog.supported(command), diagnostic);
-          assert.equal(catalog.supportReason(command), diagnostic ? "" : "not released");
+          assert.equal(catalog.supportReason(command), diagnostic ? "" : "support.connectionNotApproved");
         }
         assert.equal(commandAvailable("identify"), true);
         assert.equal(commandAvailable("list-resources"), true);
+        catalog.select("run");
+        updateSelectedCommandSupportReason();
+        assert.equal(elements.commandSupportReason.textContent, "support.connectionNotApproved");
+        assert.equal(elements.commandSupportReason.title, elements.commandSupportReason.textContent);
+        identityReady = false;
+        assert.equal(catalog.supportReason(catalog.selected()), "support.identityRequired");
+        identityReady = true;
+        supportLoaded = false;
+        assert.equal(catalog.supportReason(catalog.selected()), "support.connectionStatusUnavailable");
+        supportLoaded = true;
+        deviceResource.identity.model_id = "unregistered";
+        assert.equal(commandAvailable("run"), false);
+        deviceResource.identity.model_id = "keysight-dsox4024a";
         for (const command of ["run", "single", "capture", "measure", "screenshot", "channel-scale", "live-data-snapshot", "system-information-snapshot"]) {
           assert.equal(commandAvailable(command), false, command);
         }
@@ -474,6 +496,10 @@ def test_product_py_reuses_detected_capabilities_and_live_snapshots():
         context = {...context, resource: "TCPIP0::SAME::INSTR"};
         updateCommandSupport();
         assert.equal(commandAvailable("run"), true);
+        updateSelectedCommandSupportReason();
+        assert.equal(elements.commandSupportReason.hidden, true);
+        assert.equal(elements.commandSupportReason.textContent, "");
+        assert.equal(elements.commandSupportReason.title, "");
         pendingResourceLiveSupport = {jobId: "identify-py-lan", context: {...context}, requestedContext: null};
         await finishResourceLiveSupportEvaluation("identify-py-lan");
         handleScanBusyChange(false);

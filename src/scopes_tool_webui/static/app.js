@@ -188,6 +188,7 @@ const supportedDevices = initializeSupportedDevices({
   onSupportChanged: () => {
     if (!deviceResource) return;
     catalog?.renderCommands(false);
+    updateSelectedCommandSupportReason();
     updateAvailability();
   },
   button: document.querySelector("#supported-devices-toggle"),
@@ -324,10 +325,6 @@ async function initialize() {
   updateBasicAvailability = bindBasicControls(elements.basic, executeCommand, basicAvailable);
   bindPcOutputControls();
   elements.liveDataRefresh.addEventListener("click", refreshLiveDataSnapshot);
-  await Promise.all([
-    supportedDevices.loadBackend("system_visa"),
-    supportedDevices.loadBackend("@py"),
-  ]);
   updateAvailability();
   elements.execute.addEventListener("click", (event) => {
     event.preventDefault();
@@ -377,6 +374,9 @@ async function initialize() {
       elements.deviceStatus.textContent = error.message;
     }
   });
+  // Support metadata must not delay diagnostic controls or event binding.
+  void supportedDevices.loadBackend("system_visa");
+  void supportedDevices.loadBackend("@py");
 }
 
 function bindPresentationControls() {
@@ -826,6 +826,14 @@ document.addEventListener("localechange", () => {
   renderSystemInformation();
 });
 
+function updateSelectedCommandSupportReason() {
+  const selected = catalog?.selected();
+  const reason = selected ? catalog.supportReason(selected) : "";
+  elements.commandSupportReason.hidden = !reason;
+  elements.commandSupportReason.textContent = reason;
+  elements.commandSupportReason.title = reason;
+}
+
 function syncCommandSelection(draft = null) {
   if (!catalog || !commandForm) return;
   const selected = catalog.selected();
@@ -889,10 +897,7 @@ function syncCommandSelection(draft = null) {
     : translate("commands.noDescription");
   elements.commandDescription.textContent = selectedDescription;
   elements.commandDescription.title = selectedDescription;
-  const supportReason = selected ? catalog.supportReason(selected) : "";
-  elements.commandSupportReason.hidden = !supportReason;
-  elements.commandSupportReason.textContent = supportReason;
-  elements.commandSupportReason.title = supportReason;
+  updateSelectedCommandSupportReason();
   renderPcOutputNote();
   elements.execute.textContent = translate(`actions.${commandAction(selected)}`);
   renderWorkspace();
