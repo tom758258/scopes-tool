@@ -62,3 +62,18 @@ def test_standalone_server_uses_fixed_loopback_default(monkeypatch) -> None:
     assert server.main([]) == 0
     assert server.main(["--port", "8030"]) == 0
     assert calls == [("127.0.0.1", 8025), ("127.0.0.1", 8030)]
+
+
+def test_offline_help_routes_are_local_and_no_store():
+    client = TestClient(app)
+    for name, lang in (("webui.html", "en"), ("webui.zh-TW.html", "zh-TW"),
+                       ("supported-models.html", "en"), ("supported-models.zh-TW.html", "zh-TW")):
+        response = client.get(f"/static/help/{name}?theme=dark")
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store"
+        assert "text/html" in response.headers["content-type"]
+        assert f'<html lang="{lang}">' in response.text
+    css = client.get("/static/help/help.css")
+    assert css.status_code == 200 and css.headers["Cache-Control"] == "no-store"
+    assert client.get("/static/help/missing.html").status_code == 404
+    assert client.get("/static/help/%2e%2e/%2e%2e/%2e%2e/pyproject.toml").status_code == 404

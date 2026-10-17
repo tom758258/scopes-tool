@@ -18,6 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "build>=1.2",
+  "Markdown>=3.7",
   "fastapi>=0.100.0",
   "httpx2>=2.0",
   "pyinstaller>=6.0; sys_platform == 'win32'",
@@ -44,10 +45,13 @@ where = ["src"]
 include = ["scopes_tool_*"]
 
 [tool.setuptools.package-data]
+scopes_tool_cli = ["help/*.html", "help/*.css"]
 scopes_tool_webui = [
   "static/*.html",
   "static/*.css",
   "static/*.js",
+  "static/help/*.html",
+  "static/help/*.css",
 ]
 
 [tool.pytest.ini_options]

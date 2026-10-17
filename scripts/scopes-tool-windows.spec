@@ -17,13 +17,14 @@ METADATA = [
 ]
 # PyVISA loads backend modules dynamically; no upstream hook collects @py.
 BACKEND_IMPORTS = ["pyvisa_py"]
-WEBUI_STATIC = collect_data_files("scopes_tool_webui", includes=["static/*"])
+CLI_HELP = collect_data_files("scopes_tool_cli", includes=["help/*"])
+WEBUI_STATIC = collect_data_files("scopes_tool_webui", includes=["static/*", "static/help/*"])
 
 cli_analysis = Analysis(
     [str(REPO_ROOT / "scripts" / "windows_cli_entry.py")],
     pathex=[str(SRC_ROOT)],
     hiddenimports=BACKEND_IMPORTS,
-    datas=METADATA,
+    datas=[*METADATA, *CLI_HELP],
 )
 launcher_analysis = Analysis(
     [str(REPO_ROOT / "scripts" / "windows_launcher_entry.py")],

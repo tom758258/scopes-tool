@@ -106,6 +106,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="scopes-tool")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    guide_parser = subparsers.add_parser(
+        "user-guide", allow_abbrev=False, help="open the bundled offline CLI user guide"
+    )
+    guide_parser.add_argument("--lang", choices=("en", "zh-TW"), default="en")
+
     worker_parser = subparsers.add_parser("worker", help="run the local Scopes worker")
     worker_parser.set_defaults(lifecycle_command=True)
     worker_parser.add_argument("--host", default="127.0.0.1")

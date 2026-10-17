@@ -24,6 +24,9 @@ def assert_headings(text: str, *headings: str) -> None:
 
 def test_cli_docs_are_root_level_and_contracts_are_root_level():
     assert (DOC_ROOT / "README.md").exists()
+    assert (DOC_ROOT / "README.zh-TW.md").exists()
+    for guide in ("USER_GUIDE.md", "USER_GUIDE.zh-TW.md"):
+        assert (DOC_ROOT / guide).is_file()
     assert (REPO_ROOT / "CHANGELOG.md").exists()
     assert (DOC_ROOT / "cli-integration.md").exists()
     assert (REPO_ROOT / "AGENTS.md").exists()

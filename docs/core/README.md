@@ -1,5 +1,7 @@
 # Scopes Tool Core
 
+[繁體中文](README.zh-TW.md)
+
 Core runtime package for vendor-neutral oscilloscope control through
 PyVISA-compatible backends.
 
@@ -77,7 +79,7 @@ DSOX4034A, and TBS2074 over TCPIP. The `@py` USB pairs are not Product-open.
 to request the verified IVI backend.
 
 Contributor Validation Mode is an explicit CLI-only option for registered
-`@py` USB candidates and supported `@py` TCPIP scopes. It still requires
+validation-only `@py` USB connections and supported `@py` TCPIP scopes. It still requires
 actual `*IDN?` identity and does not grant Product access. WebUI and Worker
 cannot select Validation Mode. Identification and resource discovery remain
 diagnostics; dry-run and simulation do not open a live VISA session.

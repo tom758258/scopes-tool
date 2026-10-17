@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scopes Tool WebUI and Desktop User Guide</title>
+  <script>
+    (function () {
+      var VALID = { system: 1, light: 1, dark: 1 };
+      var preference = "system";
+      try {
+        var query = new URLSearchParams(location.search).get("theme");
+        if (query && VALID[query]) {
+          preference = query;
+        } else {
+          var prefix = "scopes-tool.webui.theme=";
+          var saved = document.cookie
+            .split(";")
+            .map(function (part) { return part.trim(); })
+            .find(function (part) { return part.indexOf(prefix) === 0; });
+          var cookieValue = saved ? saved.slice(prefix.length) : "";
+          try { cookieValue = decodeURIComponent(cookieValue); } catch (_e) {}
+          if (VALID[cookieValue]) preference = cookieValue;
+        }
+      } catch (_error) {}
+      var effective = "light";
+      if (preference === "dark") {
+        effective = "dark";
+      } else if (preference === "light") {
+        effective = "light";
+      } else {
+        try {
+          effective = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        } catch (_error) {
+          effective = "light";
+        }
+      }
+      try {
+        document.documentElement.dataset.theme = effective;
+      } catch (_error) {}
+      if (preference === "system") {
+        try {
+          var mq = matchMedia("(prefers-color-scheme: dark)");
+          var handler = function (event) {
+            try {
+              document.documentElement.dataset.theme = event.matches ? "dark" : "light";
+            } catch (_e) {}
+          };
+          if (mq.addEventListener) mq.addEventListener("change", handler);
+          else if (mq.addListener) mq.addListener(handler);
+        } catch (_error) {}
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="help.css">
+</head>
+<body>
+  <aside class="help-sidebar">
+    <div class="help-sidebar-title" id="toc-title">Contents</div>
+    <nav id="toc" aria-labelledby="toc-title"></nav>
+  </aside>
+
+  <main class="help-content" id="help-content">
+<h1 id="scopes-tool-webui-and-desktop-user-guide">Scopes Tool WebUI and Desktop User Guide</h1>
+<p><a href="webui.zh-TW.html">繁體中文</a></p>
+<p>The browser WebUI and Electron Desktop share the same controls and this guide.
+They use Core's model, capability, and safety rules. Check
+<a href="supported-models.html">Supported Models</a> for the exact supported
+model/backend/transport combinations and optional feature limits.</p>
+<h2 id="start-and-close-the-application">Start and close the application</h2>
+<p>For a Windows directory package, keep all extracted files together, including
+the single shared <code>_internal</code> directory. Start <code>Scopes Tool.exe</code> for Desktop,
+or <code>scopes-tool-webui-launcher.exe</code> for the browser Launcher. An already
+installed Python application provides <code>scopes-tool-webui-launcher</code>.</p>
+<p>The browser Launcher starts a localhost server and opens the browser after its
+identity and readiness checks succeed. It begins at port 8025 and tries up to
+100 ports when no port was explicitly selected. If necessary, enter a manual
+port in the Launcher. An explicitly selected occupied port fails without an
+automatic fallback. The direct <code>scopes-tool-webui</code> server defaults to
+<code>127.0.0.1:8025</code>; it does not provide the Launcher window.</p>
+<p>Close the Launcher to stop its server; closing a browser tab alone does not
+stop it. Close the Desktop window to request Host shutdown. Both wait for
+active work and session cleanup. If <strong>Shutdown incomplete</strong> or a cleanup
+warning appears, leave the application available and retry closing after the
+operation finishes. Blocking VISA I/O is not forcibly interrupted. Shutdown
+does not implicitly run Safe Cleanup.</p>
+<h2 id="language-theme-and-offline-help">Language, theme, and offline Help</h2>
+<p>Use the page header to choose English or 繁體中文 and cycle System, Light,
+and Dark themes. Language is remembered in browser local storage; theme uses
+the existing local cookie. The Launcher itself is English-only. Command IDs,
+model IDs, SCPI, VISA resources, JSON keys, and raw diagnostics stay unchanged.</p>
+<p><strong>Help</strong> opens the bundled guide in the current interface language and passes
+the current theme preference. Browser WebUI opens a new tab. Desktop opens
+the same local WebUI Help in the system default browser; keep the Desktop
+running while reading it. No separate Desktop Help bundle exists. Help needs
+no Internet connection, but WebUI-served pages need the local server to remain
+running. CLI Help can also be opened independently with
+<code>scopes-tool user-guide --lang zh-TW</code>.</p>
+<h2 id="select-a-mode-and-device">Select a mode and device</h2>
+<p>Start with <strong>Simulate</strong> to practice without hardware. Choose a registered
+planning model; the Core simulator supplies its identity and capabilities.
+Simulated outputs are still files when saving is enabled. <strong>Dry-run</strong> only
+plans commands that have Core planners; many settings and workflows are
+unavailable in this mode and no instrument session is opened.</p>
+<p>For <strong>Live</strong>:</p>
+<ol>
+<li>Check probes, input ratings, DUT, acquisition, and trigger conditions.</li>
+<li>In Device / Resource settings select System VISA or PyVISA-py. System VISA
+   requires separately installed Keysight IO Libraries or NI-VISA and never
+   silently falls back to <code>@py</code>.</li>
+<li>Enter your exact VISA resource or explicitly scan for resources. A scan
+   uses live-only discovery and can open listed resources to query <code>*IDN?</code>.
+   Do not guess instrument addresses or use an example placeholder as a device.</li>
+<li>Select the intended resource and wait for identification. The detected
+   <code>*IDN?</code> model is authoritative; a planning model cannot override it.</li>
+<li>Use Supported Devices and the command availability explanation to confirm
+   the selected connection is Product-open before running operations.</li>
+</ol>
+<p>System VISA USB is Product-open for all seven registered models. System VISA
+TCPIP and <code>@py</code> TCPIP are open only for DSOX4024A, DSOX4034A, and TBS2074.
+<code>@py</code> USB is not Product-open. Bluetooth, GPIB, ASRL, and custom backends do
+not gain Product support. Identification and discovery are diagnostics and do
+not authorize other operations. WebUI cannot enable contributor Validation Mode.</p>
+<p>Changing mode, resource, or planning model changes the result context. A
+previous context's values must not be used as the current instrument state.
+An initial Live Data snapshot can run after a supported device is selected;
+Live Data does not continuously poll or stream waveforms.</p>
+<h2 id="commands-and-settings">Commands and settings</h2>
+<p>Select commands through the Command Browser; filter or show Advanced commands
+when needed. Unsupported commands remain disabled with an explanation.
+Selecting a command or navigating an editor does not perform instrument I/O.</p>
+<p>For settings, use <strong>Read current settings</strong>, edit the desired fields, then
+<strong>Apply</strong>. Review the returned readback. Unapplied edits are retained instead
+of being overwritten by later reads. Ordinary information and diagnostic
+commands use explicit Read or Run actions. Only one foreground operation can
+run at a time, including device-management actions.</p>
+<p>Basic Controls offers Run, Stop, Single, Force Trigger, and black/white
+screenshot shortcuts. Acquisition Control also offers Single + Wait with a
+5-second default timeout and optional force-on-timeout, off by default.
+Autoscale, acquisition control, setup and output settings can change instrument
+state; review the effects before applying. Autoscale may change channels,
+timebase, trigger, cursors, Math, measurements, and reference display. It has
+no automatic rollback. Setup Recall and arbitrary SCPI are not exposed in the
+Command Browser.</p>
+<p>Channel, timebase, trigger, measurements, reference memory, cursor, annotation,
+WGEN, DEMO, Serial, Search, and segmented-memory workspaces appear according
+to Core capability metadata. Readback availability does not imply every setter
+or option is supported. A profile does not prove an optional hardware license
+is installed. For TBS2074 Time Offset, Horizontal Delay Mode must already be
+ON; the tool does not change that mode automatically. TBS2074 cursor source
+selection can reset acquisition. Follow the model-specific limits in Supported
+Models.</p>
+<h2 id="output-folders-and-saved-data">Output folders and saved data</h2>
+<p>Set the shared <strong>PC output folder</strong> in Basic Controls. Blank means <code>data</code>.
+<strong>Select Folder</strong> uses the Windows folder picker; cancelling leaves the value
+unchanged. <strong>Open Folder</strong> creates the effective directory if needed and opens
+it through the Windows shell. The setting is browser-session state and is
+captured with each submitted job.</p>
+<p>Screenshot and waveform capture write host files under this root. Workflows
+use their own subdirectories. Serial Lister Export requires a filename and
+will not overwrite an existing file. Output failures are reported instead of
+silently using another folder. Jobs without host artifacts do not create or
+validate the folder; Dry-run only plans paths.</p>
+<p>Save Image, Save Waveform, and Save Setup use instrument-side storage. They
+do not create PC downloads and do not inherit the PC output folder. Image and
+waveform saves need explicit per-save filenames; setup saves use a slot or
+instrument-side file. TDS2024B and TBS1052B do not expose setup, reference
+memory, or instrument-side storage. TBS2074 supports native black PNG
+screenshots; TDS2024B BMP and TBS1052B JPEG have their own limits. Waveform
+capture on Tektronix uses displayed channels, BYTE, and at most 1000 requested
+points. It does not enable hidden channels automatically.</p>
+<h2 id="workflows-and-generic-sequence">Workflows and Generic Sequence</h2>
+<p>Choose finite counts, trigger timeouts, retention limits, and save options for
+measurement logging, condition monitoring, periodic capture, triggered
+measurement/capture, and segmented capture where supported. Capture Monitor
+displays a bounded rolling waveform window and all-session statistics;
+successive acquisitions are separate records and may have gaps. It is not
+continuous real-time waveform streaming. Saving can be disabled for supported
+workflows; standalone capture always produces files.</p>
+<p>Generic Sequence uses the same Core validation as CLI. Its seven actions are
+<code>wait</code>, <code>single</code>, <code>wait-trigger</code>, <code>measure</code>, <code>capture</code>, <code>screenshot</code>, and
+<code>cleanup</code>; model capabilities can restrict them. Set 1–255 steps and 1–255
+loops, at most 65,025 step executions, and at most 10 combined capture/screenshot
+steps per loop. Edit locally, then submit Run as one job. Validation reports
+invalid documents before execution. Sequence is not an arbitrary SCPI macro.</p>
+<h2 id="jobs-results-and-stopping">Jobs, results, and stopping</h2>
+<p>Result History shows job progress and the states <code>queued</code>, <code>running</code>,
+<code>completed</code>, <code>failed</code>, and <code>cancelled</code>. Workspace Result shows the most recent
+successful result for the exact command and execution context. A later failure
+does not erase it. Use Result Detail for complete structured payloads and raw
+diagnostics; use Open Folder to view files. The UI does not add artifact
+download links.</p>
+<p>Cancel removes queued jobs immediately. Running jobs accept a cooperative
+stop request and remain running until Core execution and cleanup finish.
+Completed work can remain in artifacts; cancellation does not automatically
+restore every setting or run Safe Cleanup. Do not mistake a stop request for
+a completed shutdown. Segmented Capture keeps the actual Core terminal result,
+including a completion that occurs before a late cancellation request.</p>
+<p>Doctor checks pre-existing status before its read-only snapshot and performs
+a final status check. Reading status may consume an error entry. Smoke performs
+measurements, waveform and screenshot transfers, and final status checks.
+Its WebUI <strong>Save diagnostic artifacts</strong> option is off by default; enabling it
+uses the shared PC output root. Run these diagnostics explicitly after
+considering their effects.</p>
+<h2 id="troubleshooting-and-limits">Troubleshooting and limits</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Launcher cannot start</td>
+<td>Check the selected local port; use the manual-port fallback when offered.</td>
+</tr>
+<tr>
+<td>Resource appears but commands are disabled</td>
+<td>Check detected identity, backend, transport, execution mode, and the support explanation.</td>
+</tr>
+<tr>
+<td>System VISA fails</td>
+<td>Install or repair the external IVI runtime. Selecting <code>@py</code> only works for its approved connections.</td>
+</tr>
+<tr>
+<td>Settings show old values</td>
+<td>Confirm the execution context, explicitly Read, and review unapplied edits before Apply.</td>
+</tr>
+<tr>
+<td>Capture or screenshot fails</td>
+<td>Check displayed channels, model format/point limits, instrument storage, and PC permissions.</td>
+</tr>
+<tr>
+<td>Help fails to load</td>
+<td>Keep the local server/Desktop running and verify the extracted installation is complete.</td>
+</tr>
+<tr>
+<td>Shutdown remains incomplete</td>
+<td>Wait for VISA I/O and cleanup, then retry closing; review the warning.</td>
+</tr>
+</tbody>
+</table>
+<p>WebUI is localhost-only and provides no remote access or authentication,
+multi-instrument sessions, WebSockets/SSE, general waveform streaming, or
+automatic Live Data polling. FFT and Advanced Math use metadata-driven forms;
+there are no dedicated editors for every Core feature. Use CLI or documented
+integration APIs for operations intentionally omitted from the UI. Before
+sharing logs or saved files, remove private resource addresses and serial numbers.</p>
+  </main>
+
+  <script>
+    (function () {
+      var isTraditionalChinese =
+        document.documentElement.lang.toLowerCase() === "zh-tw";
+
+      var strings = isTraditionalChinese
+        ? {
+            contents: "\u7ae0\u7bc0\u5c0e\u89bd",
+            copy: "\u8907\u88fd",
+            copied: "\u5df2\u8907\u88fd",
+            copyFailed: "\u8907\u88fd\u5931\u6548"
+          }
+        : {
+            contents: "Contents",
+            copy: "Copy",
+            copied: "Copied",
+            copyFailed: "Copy failed"
+          };
+
+      document.getElementById("toc-title").textContent = strings.contents;
+
+      function buildTableOfContents() {
+        var toc = document.getElementById("toc");
+        if (!toc) return;
+
+        var headings = document.querySelectorAll(
+          "#help-content h2[id], #help-content h3[id]"
+        );
+        var fragment = document.createDocumentFragment();
+
+        headings.forEach(function (heading) {
+          var link = document.createElement("a");
+          link.href = "#" + heading.id;
+          link.textContent = heading.textContent;
+          if (heading.tagName === "H3") {
+            link.className = "level-3";
+          }
+          fragment.appendChild(link);
+        });
+
+        toc.appendChild(fragment);
+      }
+
+      function wrapCodeBlocks() {
+        document.querySelectorAll("#help-content pre").forEach(
+          function (pre) {
+            if (pre.closest(".code-wrapper")) return;
+
+            var wrapper = document.createElement("div");
+            wrapper.className = "code-wrapper";
+            pre.parentNode.insertBefore(wrapper, pre);
+            wrapper.appendChild(pre);
+
+            var button = document.createElement("button");
+            button.type = "button";
+            button.className = "copy-btn";
+            button.textContent = strings.copy;
+            button.addEventListener("click", function () {
+              if (
+                !navigator.clipboard ||
+                typeof navigator.clipboard.writeText !== "function"
+              ) {
+                button.textContent = strings.copyFailed;
+                setTimeout(function () {
+                  button.textContent = strings.copy;
+                }, 1600);
+                return;
+              }
+
+              navigator.clipboard.writeText(pre.innerText).then(
+                function () {
+                  button.textContent = strings.copied;
+                  setTimeout(function () {
+                    button.textContent = strings.copy;
+                  }, 1600);
+                },
+                function () {
+                  button.textContent = strings.copyFailed;
+                  setTimeout(function () {
+                    button.textContent = strings.copy;
+                  }, 1600);
+                }
+              );
+            });
+            wrapper.appendChild(button);
+          }
+        );
+      }
+
+      function observeActiveSection() {
+        var tocLinks = document.querySelectorAll("#toc a");
+        if (!tocLinks.length) return;
+
+        var observer = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (!entry.isIntersecting) return;
+
+              tocLinks.forEach(function (link) {
+                link.classList.toggle(
+                  "active",
+                  link.getAttribute("href") === "#" + entry.target.id
+                );
+              });
+            });
+          },
+          { rootMargin: "-10% 0px -70% 0px" }
+        );
+
+        headings.forEach(function (heading) {
+          observer.observe(heading);
+        });
+      }
+
+      function preserveHelpThemeQuery() {
+        var override = null;
+        try {
+          var q = new URLSearchParams(location.search).get("theme");
+          if (q === "system" || q === "light" || q === "dark") override = q;
+        } catch (_error) {}
+        if (!override) return;
+        document.querySelectorAll('a[href]').forEach(function (anchor) {
+          var href = anchor.getAttribute("href");
+          if (!href || href.charAt(0) === "#" || href.indexOf(":") !== -1) return;
+          if (href.indexOf(".html") === -1) return;
+          if (href.indexOf("?theme=") !== -1) return;
+          var hashIndex = href.indexOf("#");
+          var base = hashIndex === -1 ? href : href.slice(0, hashIndex);
+          var hash = hashIndex === -1 ? "" : href.slice(hashIndex);
+          anchor.setAttribute("href", base + "?theme=" + override + hash);
+        });
+      }
+
+      var headings = document.querySelectorAll(
+        "#help-content h2[id], #help-content h3[id]"
+      );
+      buildTableOfContents();
+      wrapCodeBlocks();
+      observeActiveSection();
+      preserveHelpThemeQuery();
+    })();
+  </script>
+</body>
+</html>

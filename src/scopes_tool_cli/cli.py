@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import webbrowser
 from typing import Sequence
 
 from scopes_tool_core.capabilities import (
@@ -71,6 +72,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = cli_parser._build_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "user-guide":
+        return _cmd_user_guide(args)
+
     try:
         preflight.validate_pre_open_args(args)
     except OscilloscopeError as exc:
@@ -122,6 +126,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.error("missing command")
     return 2
 
+
+
+def _cmd_user_guide(args: argparse.Namespace) -> int:
+    filename = "cli.zh-TW.html" if args.lang == "zh-TW" else "cli.html"
+    guide = Path(__file__).resolve().parent / "help" / filename
+    if not guide.is_file():
+        print(f"error: bundled CLI user guide not found: {guide}", file=sys.stderr)
+        return 1
+    try:
+        if webbrowser.open_new_tab(guide.as_uri()):
+            return 0
+    except (OSError, webbrowser.Error) as exc:
+        print(f"error: could not open CLI user guide in system browser: {guide} ({exc})", file=sys.stderr)
+        return 1
+    print(f"error: could not open CLI user guide in system browser; open manually: {guide}", file=sys.stderr)
+    return 1
 
 
 def _dispatch_command(

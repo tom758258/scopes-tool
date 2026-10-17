@@ -102,11 +102,11 @@ def test_theme_cycle_cookie_system_changes_and_localization() -> None:
 
 
 @pytest.mark.frontend_node
-def test_bootstrap_applies_theme_before_css_and_help_is_disabled() -> None:
+def test_bootstrap_applies_theme_before_css_and_help_is_enabled() -> None:
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert html.index("<script>") < html.index('<link rel="stylesheet"')
     help_tag = re.search(r'<button\b[^>]*id="help-button"[^>]*>', html).group()
-    assert "disabled" in help_tag and "href" not in help_tag and "onclick" not in help_tag
+    assert "disabled" not in help_tag and "href" not in help_tag and "onclick" not in help_tag
     assert 'id="webui-version"' in html
     assert 'data-i18n="page.unofficial_tool"' in html
     run_node(r'''
@@ -261,4 +261,43 @@ def test_chart_repaints_theme_without_changing_samples_and_disposes_listener() -
         frames.shift()(); assert.equal(colors.at(-1), "#8bbcf5");
         assert.equal(JSON.stringify(chunks), before);
         chart.dispose(); assert.equal(doc.listeners.themechange.length, 0);
+    ''')
+
+
+@pytest.mark.frontend_node
+def test_help_click_uses_current_locale_and_theme_and_bootstrap_tracks_system():
+    run_node(r'''
+        const binding = read("app.js").match(/document\.querySelector\("#help-button"\)\.addEventListener\("click", \(\) => \{[\s\S]*?\n\}\);/)[0];
+        const help = new Node();
+        let language = "en", preference = "system";
+        const opened = [];
+        vm.runInNewContext(binding, {
+          document: {querySelector(selector) { assert.equal(selector, "#help-button"); return help; }},
+          locale: () => language, themeUi: {getPreference: () => preference},
+          window: {open: (...args) => opened.push(args)},
+        });
+        for (const lang of ["en", "zh-TW"]) {
+          language = lang;
+          for (const theme of ["system", "light", "dark"]) {
+            preference = theme;
+            help.emit("click");
+            const page = lang === "en" ? "webui.html" : "webui.zh-TW.html";
+            assert.deepEqual(opened.at(-1), [`/static/help/${page}?theme=${theme}`, "_blank", "noopener"]);
+          }
+        }
+        const template = fs.readFileSync(`${root}/../../../docs/help/template.html`, "utf8");
+        const bootstrap = template.match(/<script>([\s\S]*?)<\/script>/)[1];
+        for (const [search, cookie, systemDark, expected] of [
+          ["", "", true, "dark"], ["", "", false, "light"],
+          ["?theme=light", "scopes-tool.webui.theme=dark", true, "light"],
+          ["?theme=dark", "", false, "dark"], ["", "scopes-tool.webui.theme=light", true, "light"],
+          ["?theme=invalid", "scopes-tool.webui.theme=invalid", true, "dark"],
+        ]) {
+          const document = {cookie, documentElement: {dataset: {}}};
+          let change;
+          vm.runInNewContext(bootstrap, {document, location: {search}, URLSearchParams,
+            matchMedia: () => ({matches: systemDark, addEventListener: (_, handler) => { change = handler; }})});
+          assert.equal(document.documentElement.dataset.theme, expected);
+          if (change) { change({matches: !systemDark}); assert.equal(document.documentElement.dataset.theme, systemDark ? "light" : "dark"); }
+        }
     ''')

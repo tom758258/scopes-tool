@@ -28,6 +28,7 @@ async function desktop(options = {}) {
   const launches = [];
   const order = [];
   const children = [];
+  const external = [];
   const cookies = new EventEmitter();
   let saved = options.preference;
   cookies.get = async (filter) => {
@@ -99,6 +100,10 @@ async function desktop(options = {}) {
   }
   const electron = {
     app, BrowserWindow, nativeTheme,
+    shell: { openExternal(url) {
+      external.push(url);
+      return options.externalError ? Promise.reject(new Error("Browser failed")) : Promise.resolve();
+    } },
     dialog: {
       showErrorBox: (title, message) => errors.push({ title, message }),
       showMessageBox: (...args) => { warnings.push(args.at(-1)); return Promise.resolve(); },
@@ -122,7 +127,7 @@ async function desktop(options = {}) {
   vm.runInContext(source, context, { filename: mainPath });
   await flush();
   return {
-    app, nativeTheme, windows, errors, warnings, writes, launches, order, children,
+    app, nativeTheme, windows, errors, warnings, writes, launches, order, children, external,
     event(payload) { children[0].stdout.write(JSON.stringify(payload) + "\n"); },
     line(text) { children[0].stdout.write(text); },
     theme(value, name = cookieName) { saved = value; cookies.emit("changed", {}, { name }); },
@@ -450,4 +455,39 @@ test("Page load failure keeps the window hidden and requests graceful cleanup", 
   assert.deepEqual(h.writes, ['{"command":"shutdown"}\n']);
   assert.ok(!h.order.includes("app.quit"));
   h.exit();
+});
+
+test("Only same-origin bundled Help opens externally with the current theme", async () => {
+  const h = await ready({ preference: "dark" });
+  const popup = h.windows[0].popup;
+  for (const page of ["webui.html", "webui.zh-TW.html", "supported-models.html", "supported-models.zh-TW.html"]) {
+    assert.equal(popup({ url: `${readyUrl}/static/help/${page}?theme=light&untrusted=value#section` }).action, "deny");
+    assert.equal(h.external.at(-1), `${readyUrl}/static/help/${page}?theme=dark#section`);
+  }
+  const opened = h.external.length;
+  for (const url of [
+    `${readyUrl}/`, `${readyUrl}/static/help/cli.html`, `${readyUrl}/static/help/help.css`,
+    `${readyUrl}/static/help/webui.html/extra`, `${readyUrl}/static/help/webui.html.evil`,
+    `${readyUrl}/static/help/%77ebui.html`, `${readyUrl}/static/help/WEBUI.html`,
+    `${readyUrl}/static/help/../../api/health`, `${readyUrl}/api/health`,
+    "http://127.0.0.1:49322/static/help/webui.html", "http://localhost:49321/static/help/webui.html",
+    "https://127.0.0.1:49321/static/help/webui.html", "https://example.com/static/help/webui.html",
+    "http://user:secret@127.0.0.1:49321/static/help/webui.html", "file:///tmp/webui.html",
+    "javascript:alert(1)", "invalid",
+  ]) {
+    assert.equal(popup({ url }).action, "deny");
+  }
+  assert.equal(h.external.length, opened);
+  await flush();
+  assert.equal(h.errors.length, 0);
+});
+
+test("Help browser failure reports an error while Desktop remains available", async () => {
+  const h = await ready({ externalError: true });
+  assert.equal(h.windows[0].popup({ url: `${readyUrl}/static/help/webui.html` }).action, "deny");
+  await flush();
+  assert.equal(h.errors.length, 1);
+  assert.match(h.errors[0].message, /Help/);
+  assert.equal(h.windows[0].destroyed, false);
+  assert.equal(h.writes.length, 0);
 });

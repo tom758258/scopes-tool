@@ -1,5 +1,7 @@
 # Scopes Tool WebUI
 
+[繁體中文](README.zh-TW.md) | [User Guide](USER_GUIDE.md) | [使用指南](USER_GUIDE.zh-TW.md)
+
 The Scopes Tool WebUI is a localhost-only browser adapter over
 `scopes_tool_core`. It does not import or depend on the CLI adapter, and it
 does not own VISA, SCPI, instrument identity, capability, or safety behavior.
@@ -62,8 +64,8 @@ Device / Resource panel to select Live, Simulate, or Dry-run.
 - WebUI Simulate keeps a separate virtual-instrument state snapshot for each
   planning physical model for the lifetime of the WebUI server. Each job still
   opens a fresh simulated SCPI session, so session history, timeout, and close
-  state are not reused. Restarting the WebUI resets these snapshots. CLI and
-  Worker simulate execution remains one-shot and is unchanged.
+  state are not reused. Restarting the WebUI resets these snapshots. Standalone CLI simulation remains
+  one-shot; a Worker retains successful simulated state within its own runtime.
 - Core/CLI raw `list-resources` remains available as host VISA resource
   discovery. WebUI Scan Device is a separate Live-mode-only action that
   requests `live_only` discovery with bounded `*IDN?` probes.
@@ -510,8 +512,9 @@ retrieval paths that register downloadable artifacts. The Basic Controls PC
 output folder does not change `save-pwd`, `save-filename`, or any other
 instrument-side `:SAVE:*` behavior.
 
-Save Setup is an independent command targeting an instrument slot (0 through 9)
-or an instrument-side file such as `\usb\baseline.scp`. Setup files do not use
+Save Setup is an independent command targeting an instrument slot (Keysight
+0 through 9; TBS2074 1 through 9) or, on supported Keysight models, an
+instrument-side file such as `\usb\baseline.scp`. Setup files do not use
 the shared Save PWD or Filename workflow. The Save Setup UI only provides Save;
 the `setup-recall` backend command still exists but stays hidden from the Command
 Browser and is not exposed through this interface.
@@ -561,9 +564,9 @@ uses source and measurement fields, while 4000X Trend selects an existing
 measurement slot. Cascaded Math sources remain subject to Core's lower-numbered
 function rule.
 
-Dry-run is intentionally limited to host VISA discovery plus Core-planned
-acquisition **query**, measurement, measurement sweep, and waveform capture
-operations. Dry-run
+Dry-run is limited to commands with existing Core planners, including
+acquisition **query**, measurement, measurement sweep, waveform capture, and
+Generic Sequence. WebUI resource discovery is not available in Dry-run. Dry-run
 acquisition `set` is rejected before a job is queued. The additional instrument
 commands are not advertised in Dry-run because no corresponding Core planner
 exists. Dry-run does not open an instrument backend. Simulate uses Core's
@@ -713,7 +716,21 @@ interaction, capability, and result model.
 Basic FFT unit and window values remain Core-validated text until Core exposes
 public option metadata that the WebUI can project without duplicating it.
 
-## Language and current limitations
+## Language, Help, and current limitations
+
+The existing Help button opens `/static/help/webui.html` or
+`/static/help/webui.zh-TW.html` according to the current UI locale, in a new
+browser tab with `noopener`. Help assets use the existing no-store static-file
+service. System, Light, and Dark use the existing theme cookie; the current
+preference is passed in the Help URL. Electron opens only allowlisted same-origin
+local Help pages in the system browser and continues to deny other popups.
+Desktop shares WebUI Help and requires the local Host while those pages are read.
+CLI Help instead opens a bundled file directly, without a server.
+
+Browser Launcher and Electron Desktop startup, directory builds, and their
+shared `_internal` layout are documented in the [root README](../../README.md).
+Offline Help maintenance is documented in [Help Maintenance](../help/README.md).
+
 
 The browser UI supports English and Traditional Chinese (`zh-TW`). The
 selected locale is remembered locally. The Launcher itself is English-only.
@@ -722,7 +739,7 @@ remain unchanged.
 
 The WebUI does not include remote access, authentication, multi-instrument
 sessions, WebSockets/SSE, general live waveform streaming, automatic Live Data
-polling, dark mode, Electron/onedir packaging, dedicated FFT or Advanced Math
+polling, dedicated FFT or Advanced Math
 editors, or conditional editors for features not exposed by the current Core
 APIs. Dry-run remains
 limited to commands with existing Core planners; `capture-batch` and

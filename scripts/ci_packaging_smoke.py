@@ -49,6 +49,14 @@ def _check_bundle_contents(directory: Path) -> None:
     if (directory / "resources" / "backend").exists():
         raise AssertionError("Unexpected duplicate Python backend")
     _require_file(directory, "_internal/scopes_tool_webui/static/index.html")
+    for owner, guide in (("scopes_tool_cli/help", "cli"),
+                         ("scopes_tool_webui/static/help", "webui")):
+        for filename in (f"{guide}.html", f"{guide}.zh-TW.html", "supported-models.html",
+                         "supported-models.zh-TW.html", "help.css"):
+            relative = f"_internal/{owner}/{filename}"
+            _require_file(directory, relative)
+            if (directory / relative).read_bytes() != (ROOT / "src" / owner / filename).read_bytes():
+                raise AssertionError(f"Packaged Help differs from runtime source: {relative}")
     if len(list(internal.glob("scopes_tool-*.dist-info/METADATA"))) != 1:
         raise AssertionError("Missing or duplicate scopes-tool distribution metadata")
 

@@ -50,7 +50,10 @@ def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monk
     build_main.Analysis = analysis
     hooks = ModuleType("PyInstaller.utils.hooks")
     hooks.copy_metadata = Mock(side_effect=lambda name, **kwargs: [(name, "metadata")])
-    hooks.collect_data_files = Mock(return_value=[("index.html", "scopes_tool_webui/static")])
+    hooks.collect_data_files = Mock(side_effect=lambda package, **kwargs: [
+        ("cli.html", "scopes_tool_cli/help") if package == "scopes_tool_cli"
+        else ("index.html", "scopes_tool_webui/static")
+    ])
     for module in (api, build_main, hooks):
         monkeypatch.setitem(sys.modules, module.__name__, module)
     runpy.run_path(
@@ -71,7 +74,9 @@ def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monk
     hooks.copy_metadata.assert_any_call("scopes-tool", recursive=True)
     hooks.copy_metadata.assert_any_call("fastapi", recursive=True)
     hooks.copy_metadata.assert_any_call("uvicorn", recursive=True)
-    hooks.collect_data_files.assert_called_once_with("scopes_tool_webui", includes=["static/*"])
+    hooks.collect_data_files.assert_any_call("scopes_tool_cli", includes=["help/*"])
+    hooks.collect_data_files.assert_any_call("scopes_tool_webui", includes=["static/*", "static/help/*"])
+    assert ("cli.html", "scopes_tool_cli/help") in analyses[0].datas
     for item in analyses[1:]:
         assert ("index.html", "scopes_tool_webui/static") in item.datas
     icon_data = (str(ROOT / "desktop" / "assets" / "scopes-icon.ico"), "desktop/assets")

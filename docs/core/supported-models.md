@@ -1,5 +1,7 @@
 # Supported Models
 
+[繁體中文](supported-models.zh-TW.md)
+
 This document records public model support decisions for the Core runtime.
 Command-level behavior remains documented in `../cli/README.md` and
 `../contracts/`.
@@ -89,7 +91,7 @@ VISA sessions.
 
 ### Contributor Validation and Diagnostics
 
-The following `@py` USB candidates are registered for controlled CLI-only
+The following `@py` USB connections are restricted to controlled CLI-only
 Validation Mode; they are not Product-open: `keysight-dsox2004a`,
 `keysight-dsox3024a`, `keysight-dsox4024a`,
 `keysight-dsox4034a`, and `tektronix-tbs1052b`.
@@ -367,7 +369,7 @@ temporarily uses the waveform transfer source only to verify units and restores
 that transfer source in `finally`. B1 setters are X-only time or Y-only
 physical-volts; mixed-axis writes and auto-vertical remain unsupported. All
 returned positions are actual readbacks rather than echoed input. The
-source/unit rules retain manual evidence from TBS2000 pp. 64, 67-73, 77, 161,
+source/unit rules follow the documented definitions in TBS2000 pp. 64, 67-73, 77, 161,
 191-201 and B1 pp. 2-61-2-68.
 
 `measure-results` is intentionally excluded from nullable projections.

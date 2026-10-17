@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scopes Tool CLI 使用指南</title>
+  <script>
+    (function () {
+      var VALID = { system: 1, light: 1, dark: 1 };
+      var preference = "system";
+      try {
+        var query = new URLSearchParams(location.search).get("theme");
+        if (query && VALID[query]) {
+          preference = query;
+        } else {
+          var prefix = "scopes-tool.webui.theme=";
+          var saved = document.cookie
+            .split(";")
+            .map(function (part) { return part.trim(); })
+            .find(function (part) { return part.indexOf(prefix) === 0; });
+          var cookieValue = saved ? saved.slice(prefix.length) : "";
+          try { cookieValue = decodeURIComponent(cookieValue); } catch (_e) {}
+          if (VALID[cookieValue]) preference = cookieValue;
+        }
+      } catch (_error) {}
+      var effective = "light";
+      if (preference === "dark") {
+        effective = "dark";
+      } else if (preference === "light") {
+        effective = "light";
+      } else {
+        try {
+          effective = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        } catch (_error) {
+          effective = "light";
+        }
+      }
+      try {
+        document.documentElement.dataset.theme = effective;
+      } catch (_error) {}
+      if (preference === "system") {
+        try {
+          var mq = matchMedia("(prefers-color-scheme: dark)");
+          var handler = function (event) {
+            try {
+              document.documentElement.dataset.theme = event.matches ? "dark" : "light";
+            } catch (_e) {}
+          };
+          if (mq.addEventListener) mq.addEventListener("change", handler);
+          else if (mq.addListener) mq.addListener(handler);
+        } catch (_error) {}
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="help.css">
+</head>
+<body>
+  <aside class="help-sidebar">
+    <div class="help-sidebar-title" id="toc-title">Contents</div>
+    <nav id="toc" aria-labelledby="toc-title"></nav>
+  </aside>
+
+  <main class="help-content" id="help-content">
+<h1 id="scopes-tool-cli-使用指南">Scopes Tool CLI 使用指南</h1>
+<p><a href="cli.html">English</a></p>
+<p>本指南適用於已安裝的 <code>scopes-tool</code> 命令或 Windows CLI 執行檔的一般操作。
+功能取決於<a href="supported-models.zh-TW.html">支援型號</a>所列的確切型號、
+Backend、Transport 及儀器已安裝選配。個別命令的參數請使用
+<code>scopes-tool &lt;command&gt; --help</code> 查詢。</p>
+<h2 id="啟動與開啟-help">啟動與開啟 Help</h2>
+<p>在解壓縮後的應用程式目錄開啟 PowerShell。執行檔與共用 <code>_internal</code>
+目錄必須放在一起，不可只複製執行檔。</p>
+<pre><code class="language-powershell">.\scopes-tool.exe --help
+.\scopes-tool.exe user-guide
+.\scopes-tool.exe user-guide --lang en
+.\scopes-tool.exe user-guide --lang zh-TW
+</code></pre>
+<p>Python 安裝請將 <code>.\scopes-tool.exe</code> 換成 <code>scopes-tool</code>。
+<code>user-guide</code> 預設英文，使用系統瀏覽器開啟已封裝的本地 HTML；不需要網際網路或
+執行中的 WebUI，也不會開啟儀器 Session。缺少 Help 或瀏覽器啟動失敗時，
+stderr 會顯示錯誤並回傳 Exit Code <code>1</code>；無效參數回傳 <code>2</code>。
+從 CLI 開啟的 Help 跟隨系統色彩主題。</p>
+<h2 id="選擇執行模式">選擇執行模式</h2>
+<ul>
+<li><code>--simulate</code> 使用 Core 模擬器，不連接硬體；會儲存產物的命令仍會在電腦寫入模擬檔案。</li>
+<li><code>--dry-run</code> 驗證並規劃支援的操作，不開啟儀器 Session，也不建立輸出檔案。
+  是否可用依命令而定。</li>
+<li>單次 Live 命令需要明確提供 <code>--resource</code> 或 <code>SCOPES_TOOL_RESOURCE</code>。
+  <code>--model</code> 不可取代偵測到的 Live 身分；模擬及規劃時則選擇已註冊的標準 Model ID。</li>
+</ul>
+<p>先在無硬體環境操作：</p>
+<pre><code class="language-powershell">.\scopes-tool.exe identify --simulate --json
+.\scopes-tool.exe capabilities --model tektronix-tbs2074 --json
+.\scopes-tool.exe measure --channel 1 --item vpp --simulate --json
+.\scopes-tool.exe capture --channel 1 --points 1000 --csv data\waveform.csv --simulate --json
+.\scopes-tool.exe capture --channel 1 --points 1000 --dry-run --json
+</code></pre>
+<p>每次儲存請使用新的輸出檔名。模擬結果不代表實機支援。
+獨立命令的模擬設定只存在於該次呼叫；Worker 模擬會在同一個 Worker Session
+保留成功操作後的狀態。</p>
+<h2 id="連接儀器">連接儀器</h2>
+<p>System VISA 是預設 Backend，需要另外安裝 Keysight IO Libraries 或 NI-VISA。
+Scopes Tool 不封裝該 Runtime，也不會自動改用 PyVISA-py。
+內含的 <code>@py</code> Backend 可透過 <code>--visa-library @py</code> 明確選擇。</p>
+<p>七個註冊型號皆開放 System VISA USB Product Live。
+System VISA 或 <code>@py</code> 的 TCPIP/LAN 僅開放 DSOX4024A、DSOX4034A、TBS2074。
+<code>@py</code> USB、Bluetooth、GPIB、ASRL 及自訂 Backend 未開放 Product Live。
+明確指定 <code>@ivi</code> 會歸類為自訂 Backend；使用 System VISA 時請不指定選擇器。</p>
+<ol>
+<li>連接前確認探棒、輸入額定值、DUT、觸發及擷取條件。依操作不同，查詢可能消耗
+   狀態或暫時改變儀器設定。</li>
+<li>使用 <code>list-resources</code> 列出 Backend 回報的 Resource。
+   只有明確希望開啟列出的 Resource 並查詢 <code>*IDN?</code> 時，才使用
+   <code>list-resources --live-only</code>。</li>
+<li>完整複製預定使用的 Resource，不要從範例猜測。
+   <code>USB0::...::INSTR</code> 與 <code>TCPIP0::&lt;HOST&gt;::inst0::INSTR</code> 僅為格式示意。</li>
+<li>設定 Resource，先識別儀器，再執行 Product 命令：</li>
+</ol>
+<pre><code class="language-powershell">$env:SCOPES_TOOL_RESOURCE = &quot;&lt;RESOURCE&gt;&quot;
+.\scopes-tool.exe identify --resource &quot;$env:SCOPES_TOOL_RESOURCE&quot; --json
+.\scopes-tool.exe measure --resource &quot;$env:SCOPES_TOOL_RESOURCE&quot; --channel 1 --item vpp --json
+</code></pre>
+<p>使用已開放的 PyVISA-py LAN 連線時，請在各適用命令加上 <code>--visa-library @py</code>。
+搜尋結果受驅動及網路環境影響；列出 Resource 或 Identify 成功不代表允許 Product 操作。
+未知或不相符的型號會被拒絕。</p>
+<h2 id="讀取與變更設定">讀取與變更設定</h2>
+<p>變更設定前先明確查詢，例如：</p>
+<pre><code class="language-powershell">.\scopes-tool.exe acquisition --query --simulate --json
+.\scopes-tool.exe channel-scale --channel 1 --query --simulate --json
+.\scopes-tool.exe timebase-scale --query --simulate --json
+.\scopes-tool.exe trigger-edge --query --simulate --json
+</code></pre>
+<p>Run、Stop、Single、Force Trigger、Autoscale、Setup Recall、輸出控制與設定命令
+可能改變前面板狀態。Autoscale 可改變通道、時基、觸發及顯示中的分析功能。
+確認可接受影響後再操作。一般清理不會自動執行 Reset、Preset、Autoscale、
+Setup Recall 或 Return-to-local。</p>
+<p><code>single</code> 啟動單次擷取等待；<code>single-wait</code> 另外提供有界限的觸發等待。
+<code>capture</code> 預設傳輸目前波形，只有明確指定才等待觸發。
+觸發逾時不會強制觸發，除非明確啟用對應的 force-on-timeout 選項。
+不要假設每個命令都會將擷取狀態恢復為原本的執行狀態。</p>
+<h2 id="量測擷取與檔案">量測、擷取與檔案</h2>
+<p><code>measure</code> 與 <code>measure-sweep</code> 讀取支援的量測。
+<code>measure-install</code>、<code>measure-clear</code>、<code>measure-stats</code> 可變更前面板量測設定。
+請檢查無效量測 Sentinel 與儀器錯誤；原始數值看似正常並不足以證明量測有效。</p>
+<p><code>capture</code> 儲存電腦端 CSV、Metadata，並可選擇繪圖。
+Tektronix 擷取使用 BYTE、已顯示的類比通道，最多要求 1000 點；<code>all</code> 包含隱藏通道，
+可能直接失敗，不會自動開啟通道。Tektronix 截圖格式依型號而異：TBS2074 為黑底 PNG、
+TDS2024B 為 BMP、TBS1052B 為透過 USBTMC 的 JPEG。
+選擇格式或選配功能前請查閱支援型號。</p>
+<p><code>screenshot</code> 與 <code>capture</code> 將檔案取回電腦；<code>save-image</code>、<code>save-waveform</code>、
+<code>setup-save</code> 寫入儀器端儲存空間，不是電腦。
+Reference Memory、DVM、WGEN、Math、FFT、Serial、Search 與 Segmented Memory
+仍受型號及必要選配限制。</p>
+<p>有限次工作流程包括適用型號上的 <code>measure-log</code>、<code>measure-until</code>、<code>capture-batch</code>、
+<code>capture-until</code>、<code>capture-monitor</code>、<code>triggered-measure-loop</code>、
+<code>triggered-capture-series</code>、<code>segmented-capture</code>、<code>sequence</code>。
+請選擇有限次數、逾時及輸出位置。部分流程提供 <code>--no-save</code>；獨立 <code>capture</code> 一定產生檔案。</p>
+<p>Generic Sequence 支援 <code>wait</code>、<code>single</code>、<code>wait-trigger</code>、<code>measure</code>、<code>capture</code>、
+<code>screenshot</code>、<code>cleanup</code>，並受型號能力限制。
+限制為 1–255 個步驟、1–255 次迴圈、總計 65,025 次步驟執行，每個迴圈最多
+10 個 capture/screenshot 步驟合計。不接受任意 SCPI。
+取消採合作式機制，阻塞中的 VISA I/O 可能延後完成；取消不會自動執行 Safe Cleanup。</p>
+<h2 id="worker-操作">Worker 操作</h2>
+<p>Worker 提供本地佇列命令服務供自動化使用，與瀏覽器 WebUI 分開。
+在一個終端機啟動模擬 Worker：</p>
+<pre><code class="language-powershell">.\scopes-tool.exe worker --simulate --model keysight-dsox4024a --port 8765 --format jsonl
+</code></pre>
+<p>在另一個終端機操作：</p>
+<pre><code class="language-powershell">.\scopes-tool.exe wait-ready --port 8765 --json
+.\scopes-tool.exe send-command --port 8765 --command identify --json
+.\scopes-tool.exe status --port 8765 --json
+.\scopes-tool.exe stop --port 8765 --json
+</code></pre>
+<p>Live Worker 必須同時提供 <code>--live --resource &lt;RESOURCE&gt;</code> 及正確的預期標準 <code>--model</code>。
+模式、型號與 Resource 在啟動時固定。命令被接受只代表已排入佇列，不代表完成；
+請觀察 <code>job_finished</code> 或終態 <code>last_job</code>。會輸出的 Worker 工作需要明確輸出位置。
+Stop 取消佇列工作並要求執行中的工作合作式取消；請等待清理及最後 Summary，
+才視為關閉完成。不要將 Worker 或 WebUI 連接埠暴露至不受信任的網路。</p>
+<h2 id="錯誤與疑難排解">錯誤與疑難排解</h2>
+<table>
+<thead>
+<tr>
+<th>現象</th>
+<th>處理方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>System VISA 無法載入</td>
+<td>安裝或修復外部 IVI Runtime；Scopes Tool 不會自動切換 Backend。</td>
+</tr>
+<tr>
+<td>找不到 LAN Resource</td>
+<td>檢查儀器 LAN 設定與網路搜尋；使用您已知的明確 Resource。</td>
+</tr>
+<tr>
+<td>Product 操作被拒絕</td>
+<td>檢查確切型號／Backend／Transport 矩陣及命令能力；Identify 成功並不足夠。</td>
+</tr>
+<tr>
+<td>擷取或截圖失敗</td>
+<td>檢查顯示通道、點數／格式限制、儲存空間、目的地權限與原始診斷。</td>
+</tr>
+<tr>
+<td>命令選項被拒絕</td>
+<td>使用 <code>&lt;command&gt; --help</code>；支援範圍與 Dry-run 可用性依命令不同。</td>
+</tr>
+<tr>
+<td>Help 無法開啟</td>
+<td>閱讀 stderr，手動開啟回報的 HTML；缺少檔案時修復安裝。</td>
+</tr>
+<tr>
+<td>Stop 需要時間</td>
+<td>VISA I/O 不會被強制中斷；等待操作逾時及 Session 清理完成。</td>
+</tr>
+</tbody>
+</table>
+<p>支援的命令可加上 <code>--json</code>。機器模式 stdout 僅含結構化 JSON/JSONL；
+<code>--log-scpi</code> 將診斷寫到 stderr。請檢查程序回傳碼、<code>ok</code> 與命令專屬狀態。
+單次儀器錯誤通常回傳 <code>1</code>；Parser 使用錯誤回傳 <code>2</code>；單次 JSON 身分不符回傳 <code>3</code>。
+Worker Client 的驗證失敗回傳 <code>2</code>，執行、連線與受理失敗回傳 <code>3</code>。
+不要從受理結果推論工作成功。<code>user-guide</code> 是本地文字模式工具，不接受 <code>--json</code>。</p>
+<p><code>doctor</code> 在 Snapshot 前讀取狀態，可能消耗一筆錯誤；<code>smoke</code> 會進行量測、擷取、
+截圖及狀態檢查，也可能寫入產物。讀取 Error Queue 會消耗項目。
+請考量儀器狀態後明確執行診斷；分享日誌或產物前移除私人 Resource 與序號。</p>
+  </main>
+
+  <script>
+    (function () {
+      var isTraditionalChinese =
+        document.documentElement.lang.toLowerCase() === "zh-tw";
+
+      var strings = isTraditionalChinese
+        ? {
+            contents: "\u7ae0\u7bc0\u5c0e\u89bd",
+            copy: "\u8907\u88fd",
+            copied: "\u5df2\u8907\u88fd",
+            copyFailed: "\u8907\u88fd\u5931\u6548"
+          }
+        : {
+            contents: "Contents",
+            copy: "Copy",
+            copied: "Copied",
+            copyFailed: "Copy failed"
+          };
+
+      document.getElementById("toc-title").textContent = strings.contents;
+
+      function buildTableOfContents() {
+        var toc = document.getElementById("toc");
+        if (!toc) return;
+
+        var headings = document.querySelectorAll(
+          "#help-content h2[id], #help-content h3[id]"
+        );
+        var fragment = document.createDocumentFragment();
+
+        headings.forEach(function (heading) {
+          var link = document.createElement("a");
+          link.href = "#" + heading.id;
+          link.textContent = heading.textContent;
+          if (heading.tagName === "H3") {
+            link.className = "level-3";
+          }
+          fragment.appendChild(link);
+        });
+
+        toc.appendChild(fragment);
+      }
+
+      function wrapCodeBlocks() {
+        document.querySelectorAll("#help-content pre").forEach(
+          function (pre) {
+            if (pre.closest(".code-wrapper")) return;
+
+            var wrapper = document.createElement("div");
+            wrapper.className = "code-wrapper";
+            pre.parentNode.insertBefore(wrapper, pre);
+            wrapper.appendChild(pre);
+
+            var button = document.createElement("button");
+            button.type = "button";
+            button.className = "copy-btn";
+            button.textContent = strings.copy;
+            button.addEventListener("click", function () {
+              if (
+                !navigator.clipboard ||
+                typeof navigator.clipboard.writeText !== "function"
+              ) {
+                button.textContent = strings.copyFailed;
+                setTimeout(function () {
+                  button.textContent = strings.copy;
+                }, 1600);
+                return;
+              }
+
+              navigator.clipboard.writeText(pre.innerText).then(
+                function () {
+                  button.textContent = strings.copied;
+                  setTimeout(function () {
+                    button.textContent = strings.copy;
+                  }, 1600);
+                },
+                function () {
+                  button.textContent = strings.copyFailed;
+                  setTimeout(function () {
+                    button.textContent = strings.copy;
+                  }, 1600);
+                }
+              );
+            });
+            wrapper.appendChild(button);
+          }
+        );
+      }
+
+      function observeActiveSection() {
+        var tocLinks = document.querySelectorAll("#toc a");
+        if (!tocLinks.length) return;
+
+        var observer = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (!entry.isIntersecting) return;
+
+              tocLinks.forEach(function (link) {
+                link.classList.toggle(
+                  "active",
+                  link.getAttribute("href") === "#" + entry.target.id
+                );
+              });
+            });
+          },
+          { rootMargin: "-10% 0px -70% 0px" }
+        );
+
+        headings.forEach(function (heading) {
+          observer.observe(heading);
+        });
+      }
+
+      function preserveHelpThemeQuery() {
+        var override = null;
+        try {
+          var q = new URLSearchParams(location.search).get("theme");
+          if (q === "system" || q === "light" || q === "dark") override = q;
+        } catch (_error) {}
+        if (!override) return;
+        document.querySelectorAll('a[href]').forEach(function (anchor) {
+          var href = anchor.getAttribute("href");
+          if (!href || href.charAt(0) === "#" || href.indexOf(":") !== -1) return;
+          if (href.indexOf(".html") === -1) return;
+          if (href.indexOf("?theme=") !== -1) return;
+          var hashIndex = href.indexOf("#");
+          var base = hashIndex === -1 ? href : href.slice(0, hashIndex);
+          var hash = hashIndex === -1 ? "" : href.slice(hashIndex);
+          anchor.setAttribute("href", base + "?theme=" + override + hash);
+        });
+      }
+
+      var headings = document.querySelectorAll(
+        "#help-content h2[id], #help-content h3[id]"
+      );
+      buildTableOfContents();
+      wrapCodeBlocks();
+      observeActiveSection();
+      preserveHelpThemeQuery();
+    })();
+  </script>
+</body>
+</html>

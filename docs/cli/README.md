@@ -1,7 +1,10 @@
 # Scopes Tool CLI
 
-Command-line adapter for safe communication with Keysight InfiniiVision
-oscilloscopes through PyVISA.
+[繁體中文](README.zh-TW.md) | [User Guide](USER_GUIDE.md) | [使用指南](USER_GUIDE.zh-TW.md)
+
+Command-line adapter for the registered Keysight InfiniiVision and Tektronix
+oscilloscopes through Core and PyVISA. Model-specific limits are defined in
+[Supported Models](../core/supported-models.md).
 
 Distribution: `scopes-tool`
 
@@ -32,8 +35,8 @@ The module form remains supported as a development or fallback entry point:
 .\.venv\Scripts\python.exe -m scopes_tool_cli.cli identify --simulate --json
 ```
 
-Commands that accept instrument access support dry-run, simulate, and live
-modes. Agents and automation should use dry-run and simulate before requesting
+Instrument commands expose Live and supported Simulate / Dry-run modes;
+availability depends on the operation and model. Agents and automation should use dry-run and simulate before requesting
 real hardware access. JSON payloads include `schema_version: 2` and
 `timestamp_utc`.
 
@@ -46,7 +49,7 @@ Shared machine contracts remain at root:
 - `docs/contracts/common-orchestrator-workflows.md`
 - `docs/contracts/scopes-orchestrator-workflows.md`
 
-Package-local CLI integration notes remain in `docs/cli-integration.md`.
+CLI integration notes remain in [CLI Integration](cli-integration.md).
 
 ## Implemented Scope
 
@@ -60,7 +63,11 @@ Current implemented scope:
   or a model string that merely resembles a supported series is rejected.
 - Support canonical IDs `keysight-dsox2004a`, `keysight-dsox3024a`,
   `keysight-dsox4024a`, and `keysight-dsox4034a`, corresponding to physical
-  models DSOX2004A, DSOX3024A, DSOX4024A, and DSOX4034A.
+  models DSOX2004A, DSOX3024A, DSOX4024A, and DSOX4034A; also
+  `tektronix-tbs2074`, `tektronix-tds2024b`, and `tektronix-tbs1052b` for
+  TBS2074, TDS2024B, and TBS1052B. The instrument-command examples below use
+  the Keysight dialect unless explicitly identified as Tektronix. They do not
+  extend Tektronix support beyond the Supported Models matrix.
 - Read one or more entries from the system error queue with
   `:SYSTem:ERRor?`.
 - Send basic acquisition control commands: `:STOP`, `:RUN`, and `:SINGle`.
@@ -122,7 +129,7 @@ Current implemented scope:
 - Configure or query DSO analog-only OR trigger settings with
   `:TRIGger:MODE OR` and `:TRIGger:OR "<pattern>"`. Pattern width follows the
   selected registered model's analog-channel capability. The currently
-  registered models are all four-channel models, with Keysight OR trigger bit
+  registered Keysight models are all four-channel models, with OR trigger bit
   assignment CH4, CH3, CH2, CH1.
 - Enable, disable, or query display labels with `:DISPlay:LABel`; clear
   waveform display data with `:DISPlay:CLEar`; set/query display persistence,
@@ -276,14 +283,14 @@ identity before business SCPI. Model capabilities and available instrument
 options remain separately enforced. See
 [Supported Models](../core/supported-models.md) for the exact supported paths.
 
-For contributor hardware validation of a registered `@py` USB candidate
+For contributor hardware validation of a registered validation-only `@py` USB connection
 or approved `@py` TCPIP pair, the maintained `scripts/live-*.ps1` wrappers select
 `@py` and pass the hidden `--validation-allow-pending-live-support` CLI
 switch. The switch is not a general `--force`: it is restricted to `@py`,
 checks the operator-provided USB or TCPIP/LAN resource and the connected
 `*IDN?` model, and preserves existing model, capability, and cleanup guards.
 Worker and WebUI requests cannot select Validation Mode. Validation does not
-promote Product support. The registered USB candidates and Product connection
+promote Product support. The validation-only USB scopes and Product connection
 matrix are documented in [Supported Models](../core/supported-models.md).
 Direct Python calls to `Oscilloscope.open()` are not Product policy-gated.
 
@@ -354,6 +361,19 @@ checks in front of live instrument access, and use an explicit operator-selected
 resource for live commands.
 
 ## Commands
+
+Open the bundled offline CLI operator guide without VISA or a server:
+
+```powershell
+scopes-tool user-guide
+scopes-tool user-guide --lang en
+scopes-tool user-guide --lang zh-TW
+```
+
+English is the default. The system browser opens local HTML. Missing Help or
+browser failure writes an error to stderr and returns `1`; parser usage errors
+return `2`. This utility does not accept machine-output or instrument options.
+
 
 Print static tool identity and Worker protocol compatibility without touching
 hardware:
@@ -515,7 +535,7 @@ Send basic acquisition control commands:
 The library methods `stop()`, `run()`, and `single()` each send only one SCPI
 command. The CLI control commands additionally perform a transparent post-check
 by querying one `:SYSTem:ERRor?` entry and printing the result. The
-`:SYSTem:ERRor?` query removes the returned entry from the instrument error
+`:SYSTem:ERRor?` query removes the returned entry from the instrument error queue.
 
 Start one single acquisition and wait for trigger completion:
 
@@ -1614,7 +1634,7 @@ uppercase. The CLI rejects empty strings, whitespace, commas, quotes, digits
 length must match the selected registered model's analog-channel capability.
 
 For DSO analog-only mapping, string order follows Keysight OR trigger bit
-assignment. The currently registered models are all four-channel models, so
+assignment. The registered Keysight models are all four-channel models, so
 positions are CH4, CH3, CH2, CH1. CH1 rising only is `XXXR`, CH1 rising OR CH2
 falling is `XXFR`, and any analog channel either edge is `EEEE`.
 
@@ -2602,7 +2622,7 @@ clears the selected Math accumulation without querying its operation or
 waiting for completion.
 
 `math-visualization` configures or queries instrument-side visualization
-waveforms. All registered series support `magnify` and `trend`; 4000X also
+waveforms. All registered Keysight series support `magnify` and `trend`; 4000X also
 supports `maximum`, `minimum`, `peak`, `max-hold`, and `min-hold`. Non-Trend
 operations require one source and reuse the single-source rules: analog
 channels on all series, `composite` on 2000X/3000X, and a lower-numbered Math

@@ -208,6 +208,10 @@ const supportedDevices = initializeSupportedDevices({
 initializeI18n();
 renderLocaleToggle();
 elements.localeToggle.addEventListener("click", () => setLocale(locale() === "en" ? "zh-TW" : "en"));
+document.querySelector("#help-button").addEventListener("click", () => {
+  const page = locale() === "zh-TW" ? "webui.zh-TW.html" : "webui.html";
+  window.open(`/static/help/${page}?theme=${themeUi.getPreference()}`, "_blank", "noopener");
+});
 
 async function initialize() {
   renderAdvancedToggle();

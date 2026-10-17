@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
 
-const { app, BrowserWindow, dialog, nativeTheme, screen, session } = require("electron");
+const { app, BrowserWindow, dialog, nativeTheme, screen, session, shell } = require("electron");
 
 const SHUTDOWN_COMMAND = `${JSON.stringify({ command: "shutdown" })}\n`;
 const THEME_COOKIE_NAME = "scopes-tool.webui.theme";
@@ -185,7 +185,28 @@ async function createMainWindow(readyUrl) {
   };
   window.webContents.on("will-navigate", guardNavigation);
   window.webContents.on("will-redirect", guardNavigation);
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const target = new URL(url);
+      const helpPages = new Set([
+        "/static/help/webui.html", "/static/help/webui.zh-TW.html",
+        "/static/help/supported-models.html", "/static/help/supported-models.zh-TW.html",
+      ]);
+      if (target.origin === allowedOrigin && !target.username && !target.password &&
+          helpPages.has(target.pathname)) {
+        const preference = THEME_PREFERENCES.has(nativeTheme.themeSource)
+          ? nativeTheme.themeSource : "system";
+        target.search = "";
+        target.searchParams.set("theme", preference);
+        void shell.openExternal(target.href).catch((error) => {
+          dialog.showErrorBox("Scopes Tool", `Could not open Help: ${error.message}`);
+        });
+      }
+    } catch {
+      // Only validated same-origin Help pages may open in the system browser.
+    }
+    return { action: "deny" };
+  });
 
   window.on("close", (event) => {
     if (allowAppExit || !backendIsRunning()) {

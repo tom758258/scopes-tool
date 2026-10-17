@@ -33,7 +33,7 @@ Simulation and Core-planned dry-run operations require no instrument session.
 - Control supported Keysight InfiniiVision and Tektronix oscilloscopes over VISA
 - Use Live, Simulate, or Dry-run execution as supported by each command
 - Operate through the CLI or localhost-only browser WebUI
-- Use the browser WebUI in English or Traditional Chinese
+- Use the browser WebUI and offline Help in English or Traditional Chinese
 - Configure acquisition, analog channels, timebase, and display behavior
 - Capture waveform data and screenshots as host-side artifacts
 - Query measurements and statistics, and manage reference waveforms
@@ -308,10 +308,6 @@ CI tests perform a hardware-free real Windows Desktop packaging smoke when
 packaging inputs change. These checks do not verify a running graphical Desktop
 session or live instrument behavior.
 
-Formal release packaging and release acceptance scripts are not currently
-provided for Scopes Tool. Release instructions will be added after the
-release workflow has been validated.
-
 ## Test
 
 Run the hardware-free test suite with a repository-local pytest temporary
@@ -337,6 +333,18 @@ expectations. Real-instrument validation is explicit, opt-in, and requires a
 user-supplied VISA resource.
 
 ## Documentation
+
+Operator guides are available offline with `scopes-tool user-guide` (English),
+`scopes-tool user-guide --lang zh-TW`, and the WebUI/Desktop **Help** button.
+See [Help Maintenance](docs/help/README.md) for generation and synchronization
+before building packages.
+
+- CLI User Guide: [English](docs/cli/USER_GUIDE.md) / [繁體中文](docs/cli/USER_GUIDE.zh-TW.md)
+- WebUI / Desktop User Guide: [English](docs/webui/USER_GUIDE.md) / [繁體中文](docs/webui/USER_GUIDE.zh-TW.md)
+- Core README: [繁體中文](docs/core/README.zh-TW.md)
+- CLI README: [繁體中文](docs/cli/README.zh-TW.md)
+- WebUI README: [繁體中文](docs/webui/README.zh-TW.md)
+- Supported Models: [繁體中文](docs/core/supported-models.zh-TW.md)
 
 - [Core README](docs/core/README.md)
 - [Core Integration](docs/core/integration.md)

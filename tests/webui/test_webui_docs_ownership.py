@@ -13,6 +13,9 @@ def read_doc(*parts: str) -> str:
 
 def test_webui_docs_are_root_level():
     assert (DOC_ROOT / "README.md").exists()
+    assert (DOC_ROOT / "README.zh-TW.md").exists()
+    for guide in ("USER_GUIDE.md", "USER_GUIDE.zh-TW.md"):
+        assert (DOC_ROOT / guide).is_file()
     assert (DOC_ROOT / "web-ui-change-rules.md").exists()
     assert (REPO_ROOT / "CHANGELOG.md").exists()
     assert (REPO_ROOT / "AGENTS.md").exists()

@@ -16,9 +16,11 @@ def read_doc(*parts: str) -> str:
 
 def test_core_docs_are_root_level():
     assert (DOC_ROOT / "README.md").exists()
+    assert (DOC_ROOT / "README.zh-TW.md").exists()
     assert (REPO_ROOT / "CHANGELOG.md").exists()
     assert (DOC_ROOT / "integration.md").exists()
     assert (DOC_ROOT / "supported-models.md").exists()
+    assert (DOC_ROOT / "supported-models.zh-TW.md").exists()
     assert (REPO_ROOT / "AGENTS.md").exists()
     assert (REPO_ROOT / "README.md").exists()
     assert (REPO_ROOT / "docs" / "architecture" / "monorepo-layout.md").exists()

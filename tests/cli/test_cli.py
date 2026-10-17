@@ -4126,3 +4126,52 @@ def test_measure_cli_rejects_channel_above_detected_capabilities(monkeypatch, ca
     assert scope.calls == ["query_idn"]
     err = capsys.readouterr().err
     assert "channel 5 is not available" in err
+
+@pytest.mark.parametrize(("args", "filename"), [
+    (["user-guide"], "cli.html"),
+    (["user-guide", "--lang", "en"], "cli.html"),
+    (["user-guide", "--lang", "zh-TW"], "cli.zh-TW.html"),
+])
+def test_user_guide_opens_bundled_file_without_instrument_preflight(monkeypatch, capsys, args, filename):
+    from unittest.mock import Mock
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("user-guide must not enter instrument preflight")
+
+    monkeypatch.setattr(cli.preflight, "validate_pre_open_args", forbidden)
+    browser = Mock(return_value=True)
+    monkeypatch.setattr(cli.webbrowser, "open_new_tab", browser)
+    assert cli.main(args) == 0
+    path = Path(cli.__file__).resolve().parent / "help" / filename
+    assert path.is_file()
+    browser.assert_called_once_with(path.as_uri())
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("failure", [False, OSError("Browser unavailable"), cli.webbrowser.Error("Browser failed")])
+def test_user_guide_browser_failure_is_nonzero_on_stderr(monkeypatch, capsys, failure):
+    from unittest.mock import Mock
+
+    browser = Mock(side_effect=failure) if isinstance(failure, Exception) else Mock(return_value=False)
+    monkeypatch.setattr(cli.webbrowser, "open_new_tab", browser)
+    assert cli.main(["user-guide"]) == 1
+    output = capsys.readouterr()
+    assert not output.out
+    assert "error:" in output.err
+    assert "browser" in output.err.lower()
+
+
+def test_user_guide_missing_file_and_invalid_options(monkeypatch, tmp_path, capsys):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(cli, "__file__", str(tmp_path / "cli.py"))
+    browser = Mock()
+    monkeypatch.setattr(cli.webbrowser, "open_new_tab", browser)
+    assert cli.main(["user-guide"]) == 1
+    browser.assert_not_called()
+    output = capsys.readouterr()
+    assert not output.out and "not found" in output.err
+    for args in (["--lang", "fr"], ["--json"], ["--resource", "<RESOURCE>"], ["--lan", "en"]):
+        with pytest.raises(SystemExit) as error:
+            cli.main(["user-guide", *args])
+        assert error.value.code == 2
