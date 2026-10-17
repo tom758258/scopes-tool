@@ -180,7 +180,7 @@ def test_command_editor_and_result_presentation_contract() -> None:
     assert 'if (changed && rerender && commandForm) syncCommandSelection(draft);' in app_source
     assert 'if (lockEditor) commandForm.setDisabled(true);' in app_source
     assert 'commandForm.setDisabled(false);' in app_source
-    assert "}, () => syncCommandSelection());" in app_source
+    assert "}, () => syncCommandSelection(), liveProductSupportReason);" in app_source
     assert "renderWorkspaceResult" in results_source
     assert 'job.command === "identify"' in results_source
     assert "appendWorkspaceFields(container, fields);" in results_source
