@@ -12,24 +12,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize(
-    ("entry", "module"),
-    [
-        ("cli", "scopes_tool_cli.cli"),
-        ("launcher", "scopes_tool_webui.launcher"),
-        ("host", "scopes_tool_webui._desktop_host"),
-    ],
-)
-def test_frozen_entry_calls_existing_main_and_preserves_exit_code(monkeypatch, entry, module):
-    stub = ModuleType(module)
-    stub.main = Mock(return_value=7)
-    monkeypatch.setitem(sys.modules, module, stub)
-    with pytest.raises(SystemExit) as result:
-        runpy.run_path(str(ROOT / "scripts" / f"windows_{entry}_entry.py"), run_name="__main__")
-    assert result.value.code == 7
-    stub.main.assert_called_once_with()
-
-
 def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monkeypatch):
     analyses = []
 
@@ -61,8 +43,10 @@ def test_spec_collects_three_onedir_entries_with_static_assets_and_metadata(monk
         init_globals={"SPECPATH": str(ROOT / "scripts")},
     )
     assert len(analyses) == api.EXE.call_count == 3
-    assert [Path(item.scripts[0]).name for item in analyses] == [
-        "windows_cli_entry.py", "windows_launcher_entry.py", "windows_host_entry.py",
+    assert [item.scripts for item in analyses] == [
+        [str(ROOT / "src" / "scopes_tool_cli" / "cli.py")],
+        [str(ROOT / "src" / "scopes_tool_webui" / "launcher.py")],
+        [str(ROOT / "src" / "scopes_tool_webui" / "_desktop_host.py")],
     ]
     assert [call.kwargs["name"] for call in api.EXE.call_args_list] == [
         "scopes-tool", "scopes-tool-webui-launcher", "scopes-tool-webui-host",

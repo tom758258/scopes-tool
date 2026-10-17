@@ -21,19 +21,19 @@ CLI_HELP = collect_data_files("scopes_tool_cli", includes=["help/*"])
 WEBUI_STATIC = collect_data_files("scopes_tool_webui", includes=["static/*", "static/help/*"])
 
 cli_analysis = Analysis(
-    [str(REPO_ROOT / "scripts" / "windows_cli_entry.py")],
+    [str(SRC_ROOT / "scopes_tool_cli" / "cli.py")],
     pathex=[str(SRC_ROOT)],
     hiddenimports=BACKEND_IMPORTS,
     datas=[*METADATA, *CLI_HELP],
 )
 launcher_analysis = Analysis(
-    [str(REPO_ROOT / "scripts" / "windows_launcher_entry.py")],
+    [str(SRC_ROOT / "scopes_tool_webui" / "launcher.py")],
     pathex=[str(SRC_ROOT)],
     hiddenimports=BACKEND_IMPORTS,
     datas=[*METADATA, *WEBUI_STATIC, (str(SCOPES_ICON), "desktop/assets")],
 )
 host_analysis = Analysis(
-    [str(REPO_ROOT / "scripts" / "windows_host_entry.py")],
+    [str(SRC_ROOT / "scopes_tool_webui" / "_desktop_host.py")],
     pathex=[str(SRC_ROOT)],
     hiddenimports=BACKEND_IMPORTS,
     datas=[*METADATA, *WEBUI_STATIC],

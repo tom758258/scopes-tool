@@ -19,8 +19,8 @@ from urllib.error import URLError
 from urllib.request import urlopen
 import webbrowser
 
-from . import __version__ as WEBUI_VERSION
-from .jobs import job_manager
+from scopes_tool_webui import __version__ as WEBUI_VERSION
+from scopes_tool_webui.jobs import job_manager
 
 
 PACKAGE_NAME = "scopes-tool-webui"
@@ -86,7 +86,7 @@ def _is_retryable_bind_error(exc: OSError) -> bool:
 def create_uvicorn_server(port: int) -> Any:
     try:
         import uvicorn
-        from .app import app
+        from scopes_tool_webui.app import app
     except ModuleNotFoundError as exc:
         missing = exc.name or "WebUI runtime dependency"
         raise RuntimeError(

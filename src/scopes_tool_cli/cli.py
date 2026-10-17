@@ -49,15 +49,15 @@ from scopes_tool_core.visa_backend import (
 )
 from scopes_tool_core.workflow import StopRequested
 
-from . import dispatch as cli_dispatch
-from . import parser as cli_parser
-from . import preflight, runtime
-from ._dry_run_acquisition_math import _plan_acquisition_math
-from ._dry_run_channel_analysis import _plan_channel_analysis
-from ._dry_run_serial_search import _plan_serial_search
-from ._dry_run_trigger import _plan_trigger
-from ._dry_run_workflows import _plan_workflows
-from .commands import (
+from scopes_tool_cli import dispatch as cli_dispatch
+from scopes_tool_cli import parser as cli_parser
+from scopes_tool_cli import preflight, runtime
+from scopes_tool_cli._dry_run_acquisition_math import _plan_acquisition_math
+from scopes_tool_cli._dry_run_channel_analysis import _plan_channel_analysis
+from scopes_tool_cli._dry_run_serial_search import _plan_serial_search
+from scopes_tool_cli._dry_run_trigger import _plan_trigger
+from scopes_tool_cli._dry_run_workflows import _plan_workflows
+from scopes_tool_cli.commands import (
     introspection,
     system,
     workflows,
@@ -88,7 +88,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if getattr(args, "lifecycle_command", False):
         try:
-            from .worker import dispatch_lifecycle_command
+            from scopes_tool_cli.worker import dispatch_lifecycle_command
 
             return dispatch_lifecycle_command(args)
         except OscilloscopeError as exc:

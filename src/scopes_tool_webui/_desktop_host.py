@@ -12,7 +12,7 @@ from typing import Any, Callable, TextIO
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from .jobs import job_manager
+from scopes_tool_webui.jobs import job_manager
 
 
 PACKAGE_NAME = "scopes-tool-webui"
@@ -38,7 +38,7 @@ def create_uvicorn_server(port: int) -> Any:
     except ModuleNotFoundError as exc:
         raise _missing_webui_dependency_error(exc) from exc
     try:
-        from .app import app
+        from scopes_tool_webui.app import app
     except ModuleNotFoundError as exc:
         raise _missing_webui_dependency_error(exc) from exc
 
