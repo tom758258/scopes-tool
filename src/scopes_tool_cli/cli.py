@@ -49,6 +49,7 @@ from scopes_tool_core.visa_backend import (
 )
 from scopes_tool_core.workflow import StopRequested
 
+import scopes_tool_cli
 from scopes_tool_cli import dispatch as cli_dispatch
 from scopes_tool_cli import parser as cli_parser
 from scopes_tool_cli import preflight, runtime
@@ -130,7 +131,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _cmd_user_guide(args: argparse.Namespace) -> int:
     filename = "cli.zh-TW.html" if args.lang == "zh-TW" else "cli.html"
-    guide = Path(__file__).resolve().parent / "help" / filename
+    guide = Path(scopes_tool_cli.__file__).resolve().parent / "help" / filename
     if not guide.is_file():
         print(f"error: bundled CLI user guide not found: {guide}", file=sys.stderr)
         return 1

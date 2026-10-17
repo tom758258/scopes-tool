@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import scopes_tool_cli
 from scopes_tool_cli import cli, runtime
 from scopes_tool_cli.commands import workflows
 from scopes_tool_core.acquisition import validate_acquisition_count
@@ -4132,17 +4133,20 @@ def test_measure_cli_rejects_channel_above_detected_capabilities(monkeypatch, ca
     (["user-guide", "--lang", "en"], "cli.html"),
     (["user-guide", "--lang", "zh-TW"], "cli.zh-TW.html"),
 ])
-def test_user_guide_opens_bundled_file_without_instrument_preflight(monkeypatch, capsys, args, filename):
+def test_user_guide_opens_bundled_file_without_instrument_preflight(
+    monkeypatch, tmp_path, capsys, args, filename,
+):
     from unittest.mock import Mock
 
     def forbidden(*args, **kwargs):
         pytest.fail("user-guide must not enter instrument preflight")
 
     monkeypatch.setattr(cli.preflight, "validate_pre_open_args", forbidden)
+    monkeypatch.setattr(cli, "__file__", str(tmp_path / "cli.py"))
     browser = Mock(return_value=True)
     monkeypatch.setattr(cli.webbrowser, "open_new_tab", browser)
     assert cli.main(args) == 0
-    path = Path(cli.__file__).resolve().parent / "help" / filename
+    path = Path(scopes_tool_cli.__file__).resolve().parent / "help" / filename
     assert path.is_file()
     browser.assert_called_once_with(path.as_uri())
     assert capsys.readouterr().out == ""
@@ -4164,7 +4168,7 @@ def test_user_guide_browser_failure_is_nonzero_on_stderr(monkeypatch, capsys, fa
 def test_user_guide_missing_file_and_invalid_options(monkeypatch, tmp_path, capsys):
     from unittest.mock import Mock
 
-    monkeypatch.setattr(cli, "__file__", str(tmp_path / "cli.py"))
+    monkeypatch.setattr(scopes_tool_cli, "__file__", str(tmp_path / "__init__.py"))
     browser = Mock()
     monkeypatch.setattr(cli.webbrowser, "open_new_tab", browser)
     assert cli.main(["user-guide"]) == 1

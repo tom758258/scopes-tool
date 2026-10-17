@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -23,9 +24,9 @@ def _require_file(root: Path, relative: str) -> None:
         raise AssertionError(f"Missing packaged file: {path}")
 
 
-def _run(*command: str) -> str:
+def _run(*command: str, env: dict[str, str] | None = None) -> str:
     result = subprocess.run(
-        command, cwd=ROOT, capture_output=True, text=True,
+        command, cwd=ROOT, env=env, capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=90, check=False,
     )
     if result.returncode:
@@ -64,6 +65,14 @@ def _check_bundle_contents(directory: Path) -> None:
 def _smoke_commands(directory: Path) -> None:
     cli = str(directory / "scopes-tool.exe")
     _run(cli, "--help")
+    # Echo the browser URI from a child process instead of opening a GUI.
+    browser = f'"{Path(sys.executable).as_posix()}" -c "print(__import__(\'sys\').argv[1])" %s'
+    browser_env = {**os.environ, "BROWSER": browser}
+    for options, filename in (((), "cli.html"), (("--lang", "zh-TW"), "cli.zh-TW.html")):
+        uri = _run(cli, "user-guide", *options, env=browser_env).strip()
+        expected = (directory / "_internal" / "scopes_tool_cli" / "help" / filename).as_uri()
+        if uri != expected:
+            raise AssertionError(f"Packaged User Guide URI differs: {uri!r} != {expected!r}")
     result = json.loads(_run(cli, "identify", "--simulate", "--json"))
     if result.get("ok") is not True:
         raise AssertionError(f"Packaged simulator identify did not succeed: {result!r}")
