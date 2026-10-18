@@ -78,7 +78,16 @@ examples, and internal structure require a clear maintenance benefit.
   that a real PyInstaller bundle builds or runs.
 - **Windows packaging smoke** runs after packaging-related changes on Windows x64,
   builds the actual Desktop onedir output, and executes a packaged CLI simulator
-  smoke test. It does not establish real-instrument support or GUI interaction.
+  smoke test. Release-layout changes select `build_release.ps1` instead of a
+  separate Desktop build, then verify the versioned artifacts, SHA-256 checksums,
+  distribution metadata, extracted shared `_internal`, and packaged CLI/Help.
+  Each job builds the Electron onedir only once. It does not establish
+  real-instrument support or GUI interaction.
+- **Windows Python 3.13** also runs focused release-script contracts when their
+  inputs change. These use synthetic artifacts and mocked build/install commands;
+  they do not execute full release acceptance. The manual
+  `scripts/release-acceptance.ps1` gate requires committed, clean HEAD and writes
+  its no-hardware reports and final artifacts under `.tmp_tests/`.
 - **Build Windows** is a separate, manual-only workflow for Bundle/Desktop ZIP
   artifacts. It runs the same hardware-free packaged CLI smoke before uploading.
 

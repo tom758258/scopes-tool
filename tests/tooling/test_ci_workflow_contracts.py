@@ -19,6 +19,8 @@ FILTERS = (
     "validation_tektronix",
     "validation_cross_vendor",
     "packaging",
+    "release_layout",
+    "release_contracts",
 )
 
 
@@ -82,6 +84,9 @@ def _jobs(*paths: str) -> set[str]:
         (("src/scopes_tool_webui/static/app.js",), {"packaging"}),
         (("desktop/main.cjs",), {"packaging"}),
         (("scripts/build_desktop.ps1",), {"packaging"}),
+        (("scripts/build_release.ps1",), {"packaging"}),
+        (("scripts/release-acceptance.ps1",), set()),
+        (("tests/packaging/test_release_acceptance.py",), set()),
         (("scripts/ci_packaging_smoke.py",), {"packaging"}),
         (("tests/packaging/test_windows_bundle.py",), {"packaging"}),
         ((".github/workflows/build-windows.yml",), {"packaging"}),
@@ -151,6 +156,18 @@ def test_filters_and_conditional_gate_remain_safe():
     assert "DETECT_RESULT" in workflow
     assert "scripts/ci_validation_partition.py" in workflow
     assert "scripts/ci_packaging_smoke.py --mode desktop" in workflow
+
+
+def test_release_changes_select_contracts_and_a_single_packaging_build():
+    assert _changed_categories("scripts/release-acceptance.ps1") == {"release_contracts"}
+    assert _changed_categories("scripts/build_release.ps1") == {
+        "packaging", "release_layout", "release_contracts",
+    }
+    workflow = TESTS_WORKFLOW.read_text(encoding="utf-8")
+    assert "tests/packaging/test_release_acceptance.py" in workflow
+    assert "outputs.release_layout == 'true'" in workflow
+    assert "outputs.release_layout != 'true'" in workflow
+    assert "--release-dir" in workflow
 
 
 def test_manual_build_only_offers_non_release_outputs():

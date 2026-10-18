@@ -1,80 +1,24 @@
-# Scopes Tool Changelog
+# Changelog
 
 ## Unreleased
 
-- Enables hardware-free simulation for the three registered Tektronix models
-  across Core, CLI, Worker, and WebUI using their supported command dialect.
-- Refines WebUI acquisition, measurement, serial-search, segmented-memory,
-  workflow, and sequence guidance and form layout for clearer advanced actions,
-  full-row boolean policies, and responsive half-width fields.
-- Makes WebUI Simulate stateful across command jobs per planning model while
-  keeping each simulated SCPI session isolated, and makes FFT/Math editor
-  readback report a different active Math operation family as valid state
-  instead of a parse failure.
-- Adds the localhost-only WebUI with a Core-backed command workbench, Basic
-  Controls, Live/Simulate/Dry-run execution where Dry-run plans supported
-  operations without opening an instrument, result and artifact retrieval,
-  English/Traditional Chinese UI text, and an English Launcher with automatic
-  local port fallback and graceful shutdown of running jobs.
-- Expands the WebUI command workbench with Core-backed channel, display,
-  measurement, system/status, DVM, basic FFT/Math, Reference, Save/Export,
-  Trigger, Search, Serial, Segmented Memory, and finite Workflow operations
-  behind model-aware capability gating and metadata-driven read-edit-Apply
-  forms.
-- Adds a dedicated mode-aware WebUI Serial editor for UART/I2C/SPI/CAN
-  configuration and triggering with bus/display controls and a Serial Lister
-  section for display/reference settings and host-side CSV export.
-- Adds a dedicated WebUI Trigger editor over the existing Trigger commands:
-  the Command Browser groups remain the only navigation, readback is scoped to
-  the active group, each command keeps its own independent Apply, and applies
-  are followed by an active-group readback.
-- Adds a dedicated WebUI Search editor over the existing Search commands with
-  Basic state/mode/count, capability-gated event navigation, and Serial Search
-  Bus/Protocol selection where each Apply stays a single existing
-  `serial-search-*` command followed by query-only reconciliation.
-- Adds a dedicated WebUI Save / Export editor with Setup, Path / Filename, Image, and
-  Waveform groups, visible readback progress and failure guidance, independent
-  setting applies, instrument-side setup save/recall with recall confirmation,
-  and explicit instrument-side Save Image and Save Waveform
-  actions that do not create download artifacts.
-- Adds collapsible command groups to the WebUI Command Browser for dense
-  categories while keeping the flat command list for ungrouped categories.
-- Adds the finite `measure-until`, `triggered-measure-loop`, and
-  `triggered-capture-series` workflows with Core, CLI, and Common v2 Worker
-  adapters, artifacts, and dry-run planning.
-- Adds finite `capture-until` and `capture-monitor` workflows across Core,
-  CLI, Common v2 Worker, and WebUI. Capture Until saves exact matching
-  acquisitions; Capture Monitor keeps a bounded per-channel retained window,
-  all-session metrics, a retained-window artifact, and polling-based WebUI
-  waveform updates.
-- Names the existing batch capture workflow Periodic Capture (`capture-batch`)
-  and supports cooperative Worker stopping for finite measurement and capture
-  jobs.
-- Adds Generic Sequence Workflow v1 in Core and the direct CLI with strict
-  JSON documents, finite ordered loops over `wait`, `single`, `wait-trigger`,
-  `measure`, `capture`, `screenshot`, and `cleanup` actions, dry-run planning,
-  deterministic artifacts, and cooperative cancellation.
-- Adds segmented-memory configuration and the finite `segmented-capture`
-  workflow for registered Keysight 2000X, 3000X, and 4000X profiles,
-  including Worker support.
-- Makes waveform artifacts vertical-unit aware with `V`/`A` metadata and
-  unit-specific CSV columns for capture-related outputs.
-- Adds common UART, I2C, SPI, and CAN serial trigger criteria to Core without
-  changing Serial decode configuration or acquisition behavior.
-- Requires Common schema version 2 for Worker lifecycle JSON, Worker
-  artifacts, and one-shot CLI machine JSON.
-
-## 0.1.0
-
-- Publishes the `scopes-tool` distribution containing the `scopes_tool_core`,
-  `scopes_tool_cli`, and `scopes_tool_webui` import packages with the
-  `scopes-tool` console script and `python -m scopes_tool_cli.cli` module
-  entry point.
-- Exposes the vendor-neutral `Oscilloscope` facade and `OscilloscopeError`
-  base exception over the Core runtime for Keysight InfiniiVision
-  oscilloscope automation.
-- Includes the WebUI package skeleton without adding a WebUI runtime
-  dependency or console command.
-- Provides public documentation covering the Core API surface, CLI command
-  usage, integration notes, JSON behavior, automation safety, and WebUI
-  ownership.
+- Provides the vendor-neutral Core API, CLI, Common v2 Worker, and localhost-only
+  WebUI through one `scopes-tool` distribution with independent Core, CLI, and
+  WebUI import packages.
+- Supports registered Keysight InfiniiVision DSOX2004A, DSOX3024A, DSOX4024A,
+  and DSOX4034A, and Tektronix TBS2074, TDS2024B, and TBS1052B models with
+  detected identity, model-aware capabilities, and guarded live connections.
+- Supports acquisition, channels, timebase, waveform and screenshot capture,
+  measurements and statistics, and model-dependent DVM, Math, FFT, WGEN,
+  Reference, Trigger, Search, Serial, and segmented-memory operations.
+- Runs finite measurement, logging, periodic and triggered capture workflows,
+  capture-until and capture-monitor workflows, and Generic Sequence v1 with
+  structured results, artifacts, progress, and cooperative cancellation.
+- Provides hardware-free simulation for registered Keysight and Tektronix models
+  and Core-backed dry-run planning for supported operations.
+- Includes an Electron Desktop shell and Windows onedir packaging with the
+  Desktop, CLI, WebUI Launcher, and private Host sharing one `_internal`, plus
+  versioned release archives, SHA-256 checksums, and no-hardware acceptance checks.
+- Provides English and Traditional Chinese WebUI text, documentation, and offline
+  CLI/WebUI Help, with System, Light, and Dark themes and a local Launcher with
+  automatic port fallback and graceful shutdown.

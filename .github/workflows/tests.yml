@@ -22,6 +22,8 @@ jobs:
       validation_tektronix: ${{ steps.filter.outputs.validation_tektronix }}
       validation_cross_vendor: ${{ steps.filter.outputs.validation_cross_vendor }}
       packaging: ${{ steps.filter.outputs.packaging }}
+      release_layout: ${{ steps.filter.outputs.release_layout }}
+      release_contracts: ${{ steps.filter.outputs.release_contracts }}
 
     steps:
       - name: Check out repository
@@ -90,11 +92,28 @@ jobs:
               - 'scripts/scopes-tool-windows.spec'
               - 'scripts/windows_*_entry.py'
               - 'scripts/ci_packaging_smoke.py'
-              - 'tests/packaging/**'
+              - 'tests/packaging/test_windows_bundle.py'
+              - 'scripts/_validation_helpers.ps1'
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/tests.yml'
               - '.github/workflows/build-windows.yml'
+            release_layout:
+              - 'scripts/build_release.ps1'
+              - 'scripts/ci_packaging_smoke.py'
+              - 'desktop/package.json'
+              - 'desktop/package-lock.json'
+              - 'pyproject.toml'
+              - '.github/workflows/tests.yml'
+            release_contracts:
+              - 'scripts/build_release.ps1'
+              - 'scripts/release-acceptance.ps1'
+              - 'scripts/ci_packaging_smoke.py'
+              - 'scripts/_validation_helpers.ps1'
+              - 'tests/packaging/**'
+              - 'pyproject.toml'
+              - 'desktop/package.json'
+              - '.github/workflows/tests.yml'
   quality-webui:
     name: Code quality & WebUI
     runs-on: ubuntu-latest
@@ -232,6 +251,7 @@ jobs:
           tests/cli/test_worker_cli.py::test_direct_json_envelope_has_schema_and_timestamp
 
   pytest-windows:
+    needs: detect-windows-validation-changes
     name: Windows Python ${{ matrix.python-version }}
     runs-on: windows-latest
 
@@ -292,6 +312,12 @@ jobs:
         run: >-
           .\.venv\Scripts\python.exe -m pytest -q -m "not hardware and windows_boundary_smoke"
           --basetemp .tmp_tests/ci-windows-boundary-py${{ matrix.python-version }}
+
+      - name: Release script contracts (mock builds, no hardware)
+        if: matrix.python-version == '3.13' && needs.detect-windows-validation-changes.outputs.release_contracts == 'true'
+        run: >-
+          .\.venv\Scripts\python.exe -m pytest -q -rs
+          --basetemp .tmp_tests/ci-release-contracts tests/packaging/test_release_acceptance.py
 
   windows-validation-shared:
     name: Windows validation shared Python 3.13
@@ -421,6 +447,18 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
       - name: Build Desktop onedir (includes shared Python bundle)
+        if: needs.detect-windows-validation-changes.outputs.release_layout != 'true'
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_desktop.ps1
+      - name: Build versioned release layout once
+        if: needs.detect-windows-validation-changes.outputs.release_layout == 'true'
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_release.ps1 -ReleaseRoot .tmp_tests/ci-release
       - name: Smoke packaged executable outputs (no hardware)
+        if: needs.detect-windows-validation-changes.outputs.release_layout != 'true'
         run: .\.venv\Scripts\python.exe scripts/ci_packaging_smoke.py --mode desktop
+      - name: Inspect release artifacts and extracted executables (no hardware)
+        if: needs.detect-windows-validation-changes.outputs.release_layout == 'true'
+        run: |
+          . ./scripts/_validation_helpers.ps1
+          $version = Get-PackageVersion -ProjectRoot $PWD.Path
+          & .\.venv\Scripts\python.exe scripts/ci_packaging_smoke.py --release-dir ".tmp_tests/ci-release/$version" --expected-version $version --extract-dir .tmp_tests/ci-release-extracted
+          if ($LASTEXITCODE -ne 0) { throw "Release smoke failed ($LASTEXITCODE)" }

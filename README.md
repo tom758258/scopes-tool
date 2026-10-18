@@ -1,81 +1,62 @@
+[繁體中文](README.zh-TW.md)
+
 # Scopes Tool
 
-Scopes Tool is vendor-neutral oscilloscope tooling with current hardware
-support for the registered Keysight InfiniiVision and Tektronix models documented in
-[Supported Models](docs/core/supported-models.md). It provides one installable
-Python distribution, `scopes-tool`, while preserving three independent import
-packages: `scopes_tool_core`, `scopes_tool_cli`, and `scopes_tool_webui`.
+Scopes Tool is vendor-neutral oscilloscope tooling for the registered Keysight
+InfiniiVision and Tektronix models in [Supported Models](docs/core/supported-models.md).
+It provides one installable Python distribution, `scopes-tool`, with independent
+`scopes_tool_core`, `scopes_tool_cli`, and `scopes_tool_webui` import packages.
+The CLI, Worker, browser WebUI, and Electron Desktop use the same Core behavior.
 
-Live hardware identity comes from the instrument's actual `*IDN?` response.
-Unknown, unregistered, or mismatched live vendors, models, profiles, or drivers
-fail closed; selecting a planning model does not override the detected identity.
+Live identity comes from the instrument's actual `*IDN?` response. Unknown,
+unregistered, or mismatched vendors, models, profiles, or drivers fail closed;
+a planning model does not override detected identity.
 
-**Live hardware prerequisite:** System VISA remains the default and explicitly
-requires a separately installed IVI runtime, such as Keysight IO Libraries or
-NI-VISA. Scopes Tool does not bundle these external runtimes or fall back to
-`@py`. Ordinary installations, development environments, and Windows Bundle /
-Desktop packages include PyVISA, `pyvisa-py` (`@py`), `psutil`, and `zeroconf`;
-no separate installation of these Python packages is needed.
+**VISA backend:** System VISA is the default and requires a separately installed
+IVI runtime, such as Keysight IO Libraries or NI-VISA. Scopes Tool does not bundle
+these runtimes or fall back to `@py`. Python installations and Windows packages
+include PyVISA, `pyvisa-py`, `psutil`, and `zeroconf`. The latter two support
+TCPIP/VXI-11 interface discovery and HiSLIP mDNS discovery; discovery depends on
+the instrument and network.
 
-`psutil` enables TCPIP/VXI-11 discovery across network interfaces, and
-`zeroconf` enables HiSLIP mDNS discovery. Discovery is not guaranteed for every
-instrument or network. Product Live support is limited to exact detected model, connection transport,
-and VISA backend combinations in [Supported Models](docs/core/supported-models.md).
-PyVISA-py (`@py`) Product operation is open only for DSOX4024A, DSOX4034A,
-and TBS2074 over TCPIP/LAN. USB through `@py` is not Product-open and has
-separate PyUSB, libusb, and driver requirements that are not bundled.
-Bluetooth (`@bt`) and explicit custom VISA backends are not Product-open.
-Connection diagnostics do not imply Product authorization.
-Simulation and Core-planned dry-run operations require no instrument session.
+Product Live support is limited to the exact model, transport, and backend
+combinations in [Supported Models](docs/core/supported-models.md). PyVISA-py (`@py`)
+Product operation is open only for DSOX4024A, DSOX4034A, and TBS2074 over TCPIP/LAN.
+USB through `@py` is not Product-open; its separate PyUSB, libusb, and driver
+requirements are not bundled. Bluetooth (`@bt`) and explicit custom backends are
+not Product-open. Connection diagnostics do not imply Product authorization.
+Simulation and supported dry-run operations do not open real instrument sessions.
 
 ## Features
 
-- Control supported Keysight InfiniiVision and Tektronix oscilloscopes over VISA
-- Use Live, Simulate, or Dry-run execution as supported by each command
-- Operate through the CLI or localhost-only browser WebUI
-- Use the browser WebUI and offline Help in English or Traditional Chinese
-- Configure acquisition, analog channels, timebase, and display behavior
-- Capture waveform data and screenshots as host-side artifacts
-- Query measurements and statistics, and manage reference waveforms
-- Use supported DVM, Math, FFT, and WGEN paths
-- Configure supported trigger, Search, and Serial workflows
-- Query and configure segmented memory and run finite segmented captures
-- Run finite measurement, logging, batch capture, and triggered-capture
-  workflows
-- Compose supported Core operations with Generic Sequence v1 from the CLI or
-  WebUI
-- Produce JSON, JSONL, CSV, screenshot, and related artifacts for automation
+- Operate through the CLI, Common v2 Worker, localhost-only browser WebUI, or
+  Electron Desktop.
+- Use registered Keysight DSOX2004A, DSOX3024A, DSOX4024A, DSOX4034A and Tektronix
+  TBS2074, TDS2024B, TBS1052B models within their documented support scope.
+- Configure acquisition, analog channels, timebase, and display settings; capture
+  waveforms and screenshots; query measurements and statistics.
+- Use model-dependent DVM, Math, FFT, WGEN, Reference, Trigger, Search, Serial,
+  and segmented-memory operations.
+- Run finite measurement, logging, periodic and triggered capture workflows,
+  capture-until, capture-monitor, and Generic Sequence v1.
+- Use hardware-free simulation and Core-planned dry-run where supported, with
+  JSON, JSONL, CSV, and host-side capture artifacts for automation.
+- Switch the WebUI/Desktop language between English and Traditional Chinese and
+  choose System, Light, or Dark appearance; open bundled offline Help.
+- Use the Windows onedir Desktop, CLI, Launcher, and private Host with one shared
+  Python runtime directory.
 
-Feature availability remains model- and capability-dependent. See
-[Supported Models](docs/core/supported-models.md) for the exact support scope
-and the [CLI README](docs/cli/README.md) for command details.
-
-## Generic Sequence v1
-
-The CLI and WebUI are adapters over the same Core Generic Sequence validation,
-planning, execution, progress, and cancellation path. Sequence v1 supports the
-seven actions `wait`, `single`, `wait-trigger`, `measure`, `capture`,
-`screenshot`, and `cleanup`.
-
-Each document must contain `1..255` steps and use a `loop_count` of `1..255`,
-with at most 65,025 total step executions. A document may contain at most 10
-combined `capture` and `screenshot` steps per loop. At the maximum loop count,
-those limits naturally allow at most 2,550 capture/screenshot executions.
-These are Scopes Tool product limits, not oscilloscope hardware limits.
-
-Generic Sequence composes supported Core operations. It is not an arbitrary
-SCPI macro facility; instrument settings remain available through their
-existing command surfaces.
+Availability depends on the model, capability profile, and installed instrument
+options. See [Supported Models](docs/core/supported-models.md) and the
+[CLI README](docs/cli/README.md) for command and workflow limits.
+Generic Sequence composes supported Core operations; it is not an arbitrary SCPI
+macro facility.
 
 ## Project Structure
 
-The repository has one distribution and one version number. In examples,
-`<version>` means `[project].version` from the root `pyproject.toml`:
-
-- Distribution: `scopes-tool` `<version>`
-- Core import: `scopes_tool_core`
-- CLI import: `scopes_tool_cli`
-- WebUI import: `scopes_tool_webui`
+The root `pyproject.toml` defines the single distribution and Python version;
+`desktop/package.json` must carry the same application version. In build examples,
+`<version>` means `[project].version`.
 
 ```text
 src/
@@ -96,119 +77,62 @@ docs/
   webui/
   contracts/
   architecture/
+  help/
 scripts/
 ```
 
 ## Install
 
-Open PowerShell and enter the project root:
+Python source development requires Python `>=3.10`. In PowerShell, enter the
+repository root and prepare the environment:
 
 ```powershell
 cd path\to\scopes-tool
-```
-
-Install uv if it is not already available:
-
-```powershell
 py -m pip install --user uv
-```
-
-Verify uv:
-
-```powershell
-uv --version
-```
-
-Create the project virtual environment:
-
-```powershell
 uv venv .venv
-```
-
-Sync the standard development environment from the committed `uv.lock`:
-
-```powershell
-uv sync --all-extras --link-mode=copy
-```
-
-For CI or strict local checks, require the committed lock file to stay
-unchanged:
-
-```powershell
 uv sync --all-extras --locked --link-mode=copy
 ```
 
-Scopes Tool supports Python `>=3.10`. To request a specific compatible Python
-version when creating the environment:
+To select a particular compatible interpreter, use `uv venv .venv --python 3.12`
+when creating the environment. The committed `uv.lock` defines development and
+CI dependencies. For only the browser WebUI dependencies, use
+`uv sync --extra webui --link-mode=copy` instead of the all-extras sync.
 
-```powershell
-uv venv .venv --python 3.12
-```
-
-On Windows, the project install creates these virtualenv console wrappers:
-
-```text
-.\.venv\Scripts\scopes-tool.exe
-.\.venv\Scripts\scopes-tool-webui.exe
-.\.venv\Scripts\scopes-tool-webui-launcher.exe
-```
-
-A new environment normally needs only the standard `uv sync` command. If an
-existing `.venv` has synchronized successfully but a project console wrapper
-is missing, outdated, or needs to be recreated, ask uv to reinstall only the
-`scopes-tool` distribution:
+Installation creates `scopes-tool`, `scopes-tool-webui`, and
+`scopes-tool-webui-launcher` console commands. If an existing synchronized
+Windows environment has missing or outdated wrappers, repair just the project:
 
 ```powershell
 uv sync --all-extras --link-mode=copy --reinstall-package scopes-tool
 ```
 
-This repair does not require a pip reinstall and is not a normal per-install
-step.
-
-If only the local browser WebUI dependencies are needed, use the smaller
-`webui` extra instead:
-
-```powershell
-uv sync --extra webui --link-mode=copy
-```
-
-The standard development workflow remains `uv sync --all-extras
---link-mode=copy`; the two sync commands are alternatives, not consecutive
-steps.
+For a prebuilt Windows x64 ZIP, extract the entire application directory and
+keep its files together. Start `Scopes Tool.exe` for Desktop or
+`scopes-tool-webui-launcher.exe` for the browser UI. The onedir package includes
+Python, Electron, and Python dependencies; it does not require a separate Python
+or Node.js installation. Live System VISA still needs an external VISA runtime.
 
 ## Quick Start
 
-Run a safe simulator CLI smoke without hardware:
+Run a safe CLI simulator smoke without hardware:
 
 ```powershell
 .\.venv\Scripts\scopes-tool.exe identify --simulate --json
 ```
 
-Start the recommended local WebUI Launcher:
+Start the local browser WebUI:
 
 ```powershell
 .\.venv\Scripts\scopes-tool-webui-launcher.exe
 ```
 
 The WebUI is localhost-only. The direct server defaults to `127.0.0.1:8025`.
-Without an explicit port, the Launcher starts at port 8025 and automatically
-tries up to 100 ports for port-in-use and permission-denied conflicts before
-offering a manual-port fallback. The direct server can also be started with:
+Without an explicit port, the Launcher tries up to 100 ports for port-in-use or
+permission-denied conflicts before offering manual port selection. The direct
+server is also available as `.\.venv\Scripts\scopes-tool-webui.exe`.
 
-```powershell
-.\.venv\Scripts\scopes-tool-webui.exe
-```
-
-See the [CLI README](docs/cli/README.md) for detailed CLI behavior and the
-[WebUI README](docs/webui/README.md) for Device / Resource, port, command,
-language, job, and artifact behavior.
-
-## Electron Desktop
-
-The source-mode Electron Desktop loads the existing FastAPI WebUI through the
-private Python Desktop Host. It requires Node.js 22.12 or newer and the configured
-Scopes Python `.venv` described above. No real instrument is needed to start it.
-From the repository root:
+For source-mode Electron Desktop, install Node.js 22.12 or newer and npm, prepare
+the Python environment above, then run:
 
 ```powershell
 Set-Location .\desktop
@@ -216,156 +140,159 @@ npm ci
 npm start
 ```
 
-The window supports System, Light, and Dark themes and waits for Host cleanup
-before exiting. This setup covers source development only; Windows packaging is described in
-the [Build](#build) section.
+Desktop presents the existing WebUI and waits for Host cleanup before exiting.
+Use the language and appearance controls for English/Traditional Chinese and
+System/Light/Dark themes. See the [WebUI README](docs/webui/README.md) for device,
+resource, job, and artifact behavior.
+
+Real hardware access is explicit: one-shot live commands require `--resource`
+or `SCOPES_TOOL_RESOURCE`; live Workers require both `--live` and `--resource`.
+Do not infer a VISA resource from these simulator examples.
+
+## Built-in Help
+
+Open the bundled offline CLI User Guide:
+
+```powershell
+.\.venv\Scripts\scopes-tool.exe user-guide
+.\.venv\Scripts\scopes-tool.exe user-guide --lang zh-TW
+```
+
+The WebUI/Desktop **Help** button opens its offline User Guide in the selected
+language. Guides include the supported-model reference and require no internet
+connection. See [Help Maintenance](docs/help/README.md) before building packages.
 
 ## Build
 
-Build the wheel and source distribution with the `build` package included in
-the `dev` extra:
+Build the wheel and sdist with the development environment:
 
 ```powershell
 .\.venv\Scripts\python.exe -m build
 ```
 
-This produces one Python distribution:
-
-```text
-dist\
-  scopes_tool-<version>-py3-none-any.whl
-  scopes_tool-<version>.tar.gz
-```
-
-On Windows x64, prepare the locked development environment for a shared
-PyInstaller onedir build. It needs Windows x64 Python in the project `.venv`,
-PyInstaller, and a working Tkinter / Tcl/Tk runtime for the WebUI Launcher.
-From the repository root:
+Windows packaging requires Windows x64 Python in `.venv`, PyInstaller, working
+Tkinter/Tcl/Tk, and, for Desktop, Node.js 22.12 or newer with npm. Build either the
+Python bundle or the complete Electron directory:
 
 ```powershell
-uv sync --all-extras --locked --link-mode=copy
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_bundle.ps1
-```
-
-The Windows bundle contains the CLI, WebUI Launcher, and private Desktop Host
-using a shared `_internal` directory:
-
-```text
-dist\scopes-tool\
-  scopes-tool.exe
-  scopes-tool-webui-launcher.exe
-  scopes-tool-webui-host.exe
-  _internal\
-```
-
-The build script replaces the existing `dist\scopes-tool` directory when
-rerun. This is a Windows onedir bundle, not the Electron Desktop or a release
-ZIP. The private Host is for the Desktop application, not a public CLI command.
-
-After building, run a hardware-free CLI simulator smoke check:
-
-```powershell
-.\dist\scopes-tool\scopes-tool.exe identify --simulate --json
-```
-
-Confirm the command succeeds and produces a JSON response. Then start the
-bundled WebUI Launcher:
-
-```powershell
-.\dist\scopes-tool\scopes-tool-webui-launcher.exe
-```
-
-Use the Launcher to start the local WebUI and confirm it opens in a browser.
-The default address is `http://127.0.0.1:8025`; the Launcher can try another
-local port if it is in use. Close the Launcher after checking. Neither smoke
-check requires a physical oscilloscope.
-
-To package the Electron Desktop, use Windows x64 with Node.js 22.12 or newer
-and npm. Run from the repository root:
-
-```powershell
+# Alternatively, build Desktop (includes the Python bundle build):
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_desktop.ps1
 ```
 
-This script runs the shared Windows Bundle build itself, then builds Electron
-and combines the artifacts. There is no need to run
-`build_windows_bundle.ps1` separately first. The resulting directory is:
+The bundle is `dist\scopes-tool\`; the complete Desktop is
+`dist\desktop\win-unpacked\`:
 
 ```text
-dist\desktop\win-unpacked\
-  Scopes Tool.exe
-  scopes-tool.exe
-  scopes-tool-webui-launcher.exe
-  scopes-tool-webui-host.exe
-  _internal\
-  resources\
-  ... Electron runtime files
+Scopes Tool.exe
+scopes-tool.exe
+scopes-tool-webui-launcher.exe
+scopes-tool-webui-host.exe
+_internal\
+resources\
+... Electron runtime files
 ```
 
-The GitHub Actions **Build Windows** workflow can also build a Bundle or Desktop
-onedir ZIP on demand and upload it as a 30-day Actions artifact. The automatic
-CI tests perform a hardware-free real Windows Desktop packaging smoke when
-packaging inputs change. These checks do not verify a running graphical Desktop
-session or live instrument behavior.
+All four executables share one root `_internal`. The private Host serves Desktop
+and is not a public CLI entry point. Builds replace their existing bundle/Desktop
+output directories. Check the packaged CLI without hardware using
+`.\dist\scopes-tool\scopes-tool.exe identify --simulate --json`.
+
+Build the versioned release artifacts:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_release.ps1
+```
+
+```text
+release/<version>/
+  scopes-tool-<version>-windows-x64.zip
+  scopes_tool-<version>-py3-none-any.whl
+  scopes_tool-<version>.tar.gz
+  checksums.txt
+```
+
+The script reads the project version, requires the Electron version to match,
+builds Python distributions and Desktop once, and wraps the merged Desktop in a
+single `scopes-tool-<version>/` ZIP root. SHA-256 checksums cover the three
+distributables. An existing version directory is rejected; use a fresh
+`-ReleaseRoot` inside the repository for another build. The script does not
+publish artifacts.
+
+From a clean, fully committed HEAD, run the no-hardware acceptance gate:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\release-acceptance.ps1
+```
+
+Acceptance checks tools, lock consistency and application versions, invokes the
+release build once, verifies artifact names, metadata, checksums and extracted
+Desktop layout, installs wheel and sdist into separate clean environments,
+checks imports, CLI help, simulation and bilingual offline Help, runs the existing
+no-hardware CLI preflight, and verifies unchanged HEAD and source worktree.
+It writes step results, failures, exit codes, timings, and captured command output
+to a unique run under `.tmp_tests/release_acceptance/`. A custom `-OutputRoot`
+must remain under repository `.tmp_tests`. Build intermediates use the existing
+`build/` and `dist/` locations. Acceptance never discovers or opens live resources
+and does not commit, tag, or publish.
+
+The manual **Build Windows** Actions workflow offers Bundle/Desktop ZIPs as
+30-day Actions artifacts. Conditional packaging CI builds Desktop or the release
+layout once per job and runs packaged CLI smoke; it does not validate GUI
+interaction or real instruments. Full acceptance remains a manual release gate.
 
 ## Test
 
-Run the hardware-free test suite with a repository-local pytest temporary
-directory to avoid Windows shared-temp permission conflicts. On a fresh
-checkout, create the `.tmp_tests` parent first:
+Run focused checks from the repository root, with intentional artifacts in
+`.tmp_tests/`:
 
 ```powershell
 New-Item -ItemType Directory -Force .tmp_tests | Out-Null
-.\.venv\Scripts\python.exe -m pytest -q --basetemp .tmp_tests\full
+.\.venv\Scripts\python.exe -m pytest tests\packaging -q --basetemp .tmp_tests\packaging
+.\.venv\Scripts\python.exe -m ruff check src tests
 ```
 
-Focused runs target one area:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests\core -q --basetemp .tmp_tests\core
-.\.venv\Scripts\python.exe -m pytest tests\cli -q --basetemp .tmp_tests\cli
-.\.venv\Scripts\python.exe -m pytest tests\webui -q --basetemp .tmp_tests\webui
-.\.venv\Scripts\python.exe -m pytest tests\tooling -q --basetemp .tmp_tests\tooling
-```
-
-See [Testing Guidelines](docs/testing-guidelines.md) for repository testing
-expectations. Real-instrument validation is explicit, opt-in, and requires a
+Select the relevant Core, CLI, WebUI, or tooling tests for other changes. See
+[Testing Guidelines](docs/testing-guidelines.md) for CI responsibilities and
+hardware-free validation. Mock, simulator, and packaging tests do not establish
+real-instrument support; live validation requires explicit opt-in and a
 user-supplied VISA resource.
 
 ## Documentation
 
-Operator guides are available offline with `scopes-tool user-guide` (English),
-`scopes-tool user-guide --lang zh-TW`, and the WebUI/Desktop **Help** button.
-See [Help Maintenance](docs/help/README.md) for generation and synchronization
-before building packages.
-
 - CLI User Guide: [English](docs/cli/USER_GUIDE.md) / [繁體中文](docs/cli/USER_GUIDE.zh-TW.md)
-- WebUI / Desktop User Guide: [English](docs/webui/USER_GUIDE.md) / [繁體中文](docs/webui/USER_GUIDE.zh-TW.md)
-- Core README: [繁體中文](docs/core/README.zh-TW.md)
-- CLI README: [繁體中文](docs/cli/README.zh-TW.md)
-- WebUI README: [繁體中文](docs/webui/README.zh-TW.md)
-- Supported Models: [繁體中文](docs/core/supported-models.zh-TW.md)
+- WebUI/Desktop User Guide: [English](docs/webui/USER_GUIDE.md) / [繁體中文](docs/webui/USER_GUIDE.zh-TW.md)
+- Core README: [English](docs/core/README.md) / [繁體中文](docs/core/README.zh-TW.md)
+- CLI README: [English](docs/cli/README.md) / [繁體中文](docs/cli/README.zh-TW.md)
+- WebUI README: [English](docs/webui/README.md) / [繁體中文](docs/webui/README.zh-TW.md)
+- Supported Models: [English](docs/core/supported-models.md) / [繁體中文](docs/core/supported-models.zh-TW.md)
+- [Core Integration](docs/core/integration.md) and [CLI Integration](docs/cli/cli-integration.md)
+- [Public Contracts](docs/contracts/), including [CLI JSONL](docs/contracts/scopes-cli-jsonl-contract.md),
+  [Worker](docs/contracts/scopes-worker-contract.md), and [Workflow orchestration](docs/contracts/scopes-orchestrator-workflows.md)
+- [Repository Layout](docs/architecture/monorepo-layout.md),
+  [WebUI Change Rules](docs/webui/web-ui-change-rules.md), and [Help Maintenance](docs/help/README.md)
 
-- [Core README](docs/core/README.md)
-- [Core Integration](docs/core/integration.md)
-- [Supported Models](docs/core/supported-models.md)
-- [CLI README](docs/cli/README.md)
-- [CLI Integration](docs/cli/cli-integration.md)
-- [WebUI README](docs/webui/README.md)
-- [WebUI Change Rules](docs/webui/web-ui-change-rules.md)
-- [Repository / Monorepo Layout](docs/architecture/monorepo-layout.md)
-- [Agent Instructions](AGENTS.md)
-- [Testing Guidelines](docs/testing-guidelines.md)
-- [Public Contracts](docs/contracts/)
-- [Scopes CLI JSONL Contract](docs/contracts/scopes-cli-jsonl-contract.md)
-- [Scopes Worker Contract](docs/contracts/scopes-worker-contract.md)
+## Contributing
+
+Read [Agent Instructions](AGENTS.md) and [Testing Guidelines](docs/testing-guidelines.md)
+before changing behavior. Keep Core independent of CLI/WebUI, preserve public
+contracts, and use simulator or fake-instrument checks by default. Changes to
+instrument operations and live support require the applicable safety review and
+explicitly authorized validation. Keep temporary validation artifacts out of
+tracked public documentation.
 
 ## License and Disclaimer
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
-This project is an independent, unofficial project and is not affiliated with,
-endorsed by, or sponsored by any supported instrument manufacturer.
+The Scopes Tool application icon was generated with OpenAI image generation in
+ChatGPT, then reviewed and selected by the project maintainer.
 
-Users are responsible for complying with all applicable vendor software,
-driver, instrument, and documentation license terms.
+This project is independent and unofficial. It is not affiliated with, endorsed
+by, sponsored by, or officially recognized by instrument manufacturers.
+
+All manufacturer names, model names, product names, and trademarks remain the
+property of their respective owners.
+
+Users are responsible for complying with applicable vendor software, driver,
+instrument, and documentation license terms.
