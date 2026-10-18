@@ -50,7 +50,7 @@ def run_script(*arguments: str, env: dict[str, str] | None = None, script: Path 
 
 
 def fake_workflow_run(
-    tmp_path: Path, target: str, scenario: str,
+    tmp_path: Path, target: str, scenario: str, *, debug: bool = True,
 ) -> tuple[subprocess.CompletedProcess[str], dict]:
     output_root = (
         ROOT / ".tmp_tests" / "tektronix_workflow_pytest" /
@@ -59,9 +59,11 @@ def fake_workflow_run(
     result = run_script(
         "-ScriptPath", str(WORKFLOW_SCRIPT), "-Target", target,
         "-Scenario", scenario, "-PythonPath", r".\.venv\Scripts\python.exe",
-        "-OutputRoot", str(output_root), script=WORKFLOW_HARNESS,
+        "-OutputRoot", str(output_root), *(["-MinimalArtifacts"] if not debug else []),
+        script=WORKFLOW_HARNESS,
     )
-    reports = list(output_root.glob("run_*/private/report.json"))
+    report_dir = "private" if debug else "shareable"
+    reports = list(output_root.glob(f"run_*/{report_dir}/report.json"))
     assert len(reports) == 1, result.stdout + result.stderr
     return result, json.loads(reports[0].read_text(encoding="utf-8"))
 

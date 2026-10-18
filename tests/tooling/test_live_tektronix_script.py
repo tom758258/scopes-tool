@@ -22,7 +22,7 @@ def baseline_tektronix_run(request: pytest.FixtureRequest, tmp_path_factory: pyt
     """Reuse identical, immutable happy-path reports across independent contract assertions."""
     target = request.param
     root = tmp_path_factory.mktemp(f"tektronix-baseline-{target.removeprefix('tektronix-')}")
-    result, report = fake_run(root, target)
+    result, report = fake_run(root, target, debug=False)
     return target, result, report
 
 
@@ -159,7 +159,7 @@ def test_backend_and_output_root_are_bounded() -> None:
 @requires_windows
 def test_identity_mismatch_stops_before_other_cases(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], live_model=TARGETS[1],
+        tmp_path, TARGETS[0], debug=False, live_model=TARGETS[1],
     )
     assert result.returncode != 0, result.stdout + result.stderr
     assert report["hardware_touched"] is True
@@ -178,7 +178,7 @@ def test_physical_model_spacing_passes_identity_gate(tmp_path: Path) -> None:
     # Real Tektronix instruments report "TBS 1052B" while the target profile
     # declares "TBS1052B"; the normalized token match must accept it.
     result, report = fake_run(
-        tmp_path, TARGETS[2], live_model_name="TBS 1052B",
+        tmp_path, TARGETS[2], debug=False, live_model_name="TBS 1052B",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
@@ -224,7 +224,7 @@ def printed_case_details(result: subprocess.CompletedProcess[str]) -> dict[str, 
 @requires_windows
 def test_fail_detail_is_printed_and_carries_cli_error_fields(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], cursor_error=("OscilloscopeError", "Cursor X setter failed"),
+        tmp_path, TARGETS[0], debug=False, cursor_error=("OscilloscopeError", "Cursor X setter failed"),
     )
     assert result.returncode != 0
     assert report["status"] == "failed"
@@ -249,7 +249,7 @@ def test_fail_detail_is_printed_and_carries_cli_error_fields(tmp_path: Path) -> 
 @requires_windows
 def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], math_error=("OscilloscopeError", "Unsupported Tek Math expression: 'FFT'"),
+        tmp_path, TARGETS[0], debug=False, math_error=("OscilloscopeError", "Unsupported Tek Math expression: 'FFT'"),
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
@@ -264,7 +264,7 @@ def test_math_state_outside_public_subset_is_na(tmp_path: Path) -> None:
 @pytest.mark.windows_powershell
 @requires_windows
 def test_tbs2074_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Path) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0])
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["cursor-set"]["status"] == "PASS"
@@ -286,7 +286,7 @@ def test_tbs2074_cursor_configuration_actions_cover_x_y_and_screen(tmp_path: Pat
 def test_tbs2074_cursor_failure_stops_later_cursor_mutations(tmp_path: Path) -> None:
     result, report = fake_run(
         tmp_path,
-        TARGETS[0],
+        TARGETS[0], debug=False,
         cursor_error=("OscilloscopeError", "Cursor X setter failed"),
     )
     assert result.returncode != 0
@@ -308,7 +308,7 @@ def test_tbs2074_cursor_failure_stops_later_cursor_mutations(tmp_path: Path) -> 
 def test_live_runner_rejects_stale_unsupported_operation_policy(tmp_path: Path) -> None:
     result, report = fake_run(
         tmp_path,
-        TARGETS[1],
+        TARGETS[1], debug=False,
         core_supported_operations=("sample-rate",),
     )
     assert result.returncode != 0
@@ -323,7 +323,7 @@ def test_live_runner_rejects_stale_unsupported_operation_policy(tmp_path: Path) 
 @pytest.mark.parametrize("target", TARGETS[1:2])
 def test_cursor_seconds_prerequisite_is_na(tmp_path: Path, target: str) -> None:
     result, report = fake_run(
-        tmp_path, target, cursor_error=("ParameterValidationError", "X cursors require existing seconds units"),
+        tmp_path, target, debug=False, cursor_error=("ParameterValidationError", "X cursors require existing seconds units"),
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
@@ -353,7 +353,7 @@ def test_unrelated_math_or_cursor_errors_remain_fail(
 ) -> None:
     errors = {"math_error" if command == "math-operator" else "cursor_error": error}
     result, report = fake_run(
-        tmp_path, TARGETS[1], subprocess_cli=command == "math-operator", **errors,
+        tmp_path, TARGETS[1], debug=False, subprocess_cli=command == "math-operator", **errors,
     )
     assert result.returncode != 0
     assert report["status"] == "failed"
@@ -367,7 +367,7 @@ def test_unrelated_math_or_cursor_errors_remain_fail(
 @pytest.mark.parametrize("target", TARGETS[1:2])
 @pytest.mark.parametrize("mismatch", (False, True))
 def test_vectors_on_requires_readback(tmp_path: Path, target: str, mismatch: bool) -> None:
-    result, report = fake_run(tmp_path, target, vectors_on=True, vectors_mismatch=mismatch)
+    result, report = fake_run(tmp_path, target, debug=False, vectors_on=True, vectors_mismatch=mismatch)
     assert (result.returncode != 0) == mismatch, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["display-vectors-query"]["status"] == "PASS"
@@ -497,7 +497,7 @@ def test_acquisition_rejects_dirty_native_status_and_attempts_stop(
     tmp_path: Path, status_command: str, expected_failure: str,
 ) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], native_status_command=status_command, native_status_value=4, native_status_raw="4",
+        tmp_path, TARGETS[0], debug=False, native_status_command=status_command, native_status_value=4, native_status_raw="4",
     )
     assert result.returncode != 0
     assert report["status"] == "failed"
@@ -594,7 +594,7 @@ def test_workflow_simulator_happy_path_uses_core_identity(tmp_path: Path, target
 def test_workflow_measurement_settings_conflict_is_actionable(
     tmp_path: Path, target: str,
 ) -> None:
-    result, report = fake_workflow_run(tmp_path, target, "measurement-settings-conflict")
+    result, report = fake_workflow_run(tmp_path, target, "measurement-settings-conflict", debug=False)
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["measure-sweep"]["status"] == "FAIL"
@@ -612,7 +612,7 @@ def test_workflow_measurement_settings_conflict_is_actionable(
 @pytest.mark.windows_powershell
 @requires_windows
 def test_workflow_run_failure_still_stops_acquisition(tmp_path: Path) -> None:
-    result, report = fake_workflow_run(tmp_path, TARGETS[0], "dirty-run")
+    result, report = fake_workflow_run(tmp_path, TARGETS[0], "dirty-run", debug=False)
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["acquisition-precondition"]["status"] == "FAIL"
@@ -625,7 +625,7 @@ def test_workflow_run_failure_still_stops_acquisition(tmp_path: Path) -> None:
 @pytest.mark.windows_powershell
 @requires_windows
 def test_expected_timeout_still_rejects_dirty_native_status(tmp_path: Path) -> None:
-    result, report = fake_workflow_run(tmp_path, TARGETS[0], "dirty-timeout")
+    result, report = fake_workflow_run(tmp_path, TARGETS[0], "dirty-timeout", debug=False)
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["measure-until-timeout"]["status"] == "FAIL"
@@ -637,7 +637,9 @@ def test_expected_timeout_still_rejects_dirty_native_status(tmp_path: Path) -> N
 @requires_windows
 @pytest.mark.parametrize("rows,points,status", [(("0,0.5",), None, "PASS"), (("0,0.5",), 2, "FAIL"), (("NaN,0.5",), None, "FAIL")])
 def test_capture_artifact_validity(tmp_path: Path, rows, points, status) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0], waveform_rows=rows, actual_points=points)
+    result, report = fake_run(
+        tmp_path, TARGETS[0], waveform_rows=rows, actual_points=points, debug=False,
+    )
     cases = {case["name"]: case for case in report["cases"]}
     if status == "PASS":
         assert result.returncode == 0, result.stdout + result.stderr
@@ -672,7 +674,7 @@ def test_hidden_capture_rejection_and_display_readback(tmp_path: Path, outcome, 
 @requires_windows
 def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[1], connection="tcpip",
+        tmp_path, TARGETS[1], debug=False, connection="tcpip",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
@@ -686,7 +688,7 @@ def test_screenshot_transport_and_storage_filename_preconditions(tmp_path: Path)
 @pytest.mark.parametrize("failure", ("mode", "bmp"))
 def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[1], bad_bmp=failure == "bmp",
+        tmp_path, TARGETS[1], debug=False, bad_bmp=failure == "bmp",
         stage_responses={"trigger-mode-after": {"ResultOverrides": {"mode": "glitch"}}}
         if failure == "mode" else {},
     )
@@ -705,7 +707,7 @@ def test_failed_readback_or_artifact_reports_fail(tmp_path: Path, failure: str) 
 @pytest.mark.parametrize("target", TARGETS)
 @pytest.mark.parametrize("stage,response", [("fixture-display", {"ExitCode": 1, "Payload": {"ok": False}}), ("fixture-trigger-query", {"ExitCode": 0, "Payload": {"ok": True, "result": {"source_channel": 1, "level_volts": 2.48, "slope": "positive"}}})])
 def test_fixed_fixture_failure_stops_functional_cases(tmp_path, target, stage, response):
-    result, report = fake_run(tmp_path, target, focused=True, stage_responses={stage: response})
+    result, report = fake_run(tmp_path, target, debug=False, focused=True, stage_responses={stage: response})
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["fixture-baseline"]["status"] == "FAIL"
@@ -723,7 +725,7 @@ def test_measurement_warning_is_retained_in_cli_report(tmp_path):
     response = {"ExitCode": 0, "Payload": {"ok": True, "result": {
         "valid": True, "value": 0.75, "unit": "s", "post_command_status": status,
     }}}
-    result, report = fake_run(tmp_path, TARGETS[2], stage_responses={"measure-rise_time": response})
+    result, report = fake_run(tmp_path, TARGETS[2], debug=False, stage_responses={"measure-rise_time": response})
     assert result.returncode == 0, result.stdout + result.stderr
     case = next(case for case in report["cases"] if case["name"] == "measure-rise_time")
     assert case["status"] == "PASS" and '"code":540' in case["detail"]
@@ -782,7 +784,7 @@ NOT_REQUESTED = "Not requested."
 @requires_windows
 def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: Path) -> None:
     # An explicit empty Enter is the only input that may continue.
-    result, report = fake_run(tmp_path, TARGETS[2], live_model_name="TBS 1052B")
+    result, report = fake_run(tmp_path, TARGETS[2], debug=False, live_model_name="TBS 1052B")
     assert result.returncode == 0, result.stdout + result.stderr
     assert report["status"] == "passed"
 
@@ -849,7 +851,7 @@ def test_operator_confirmation_enter_runs_every_case_and_reports_pass(tmp_path: 
 def test_operator_confirmation_blocks_all_later_commands(
     tmp_path: Path, confirmation: str, reason: str,
 ) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0], confirmation=confirmation)
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, confirmation=confirmation)
     assert result.returncode != 0
     assert report["status"] == "failed"
     # Live identify already ran, so hardware access must not be denied.
@@ -887,7 +889,7 @@ def test_cli_clean_baseline_preserves_history(tmp_path: Path, initial: int, veri
         stage: {"ExitCode": 0, "Payload": {"ok": True, "result": {"value": value, "raw": str(value)}}}
         for stage, value in (("pre-run-standard-event", initial), ("pre-run-standard-event-verify", verified))
     }
-    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses=responses)
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, focused=True, stage_responses=responses)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["pre-run-clean-baseline"]["status"] == "PASS"
@@ -908,7 +910,7 @@ def test_cli_clean_baseline_preserves_history(tmp_path: Path, initial: int, veri
 @requires_windows
 @pytest.mark.parametrize("stage,response", [("pre-run-standard-event", VISA_FAILURE), ("pre-run-standard-event-verify", {"ExitCode": 0, "Payload": {"ok": True, "result": {"value": 4}}})])
 def test_cli_clean_baseline_failure_blocks_setters(tmp_path: Path, stage: str, response: dict) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses={stage: response})
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, focused=True, stage_responses={stage: response})
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["pre-run-clean-baseline"]["status"] == "FAIL"
@@ -925,7 +927,7 @@ def test_cli_clean_baseline_failure_blocks_setters(tmp_path: Path, stage: str, r
 @pytest.mark.parametrize("gate", ["identify", "model", "confirmation"])
 def test_cli_clean_baseline_respects_safety_gates(tmp_path: Path, gate: str) -> None:
     result, report = fake_run(
-        tmp_path, TARGETS[0], focused=True,
+        tmp_path, TARGETS[0], debug=False, focused=True,
         stage_responses={"identify": VISA_FAILURE} if gate == "identify" else {},
         live_model=TARGETS[1] if gate == "model" else None,
         confirmation="decline" if gate == "confirmation" else "enter",
@@ -947,7 +949,7 @@ def test_save_pwd_restores_only_after_failure(tmp_path: Path, failure: str) -> N
         responses["save-pwd-restore"] = {
             "ExitCode": 1, "Payload": {"ok": False, "error": {"type": "VisaIOError", "message": "Restore I/O failure"}},
         }
-    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses=responses, save_pwd_path="/usb0/")
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, focused=True, stage_responses=responses, save_pwd_path="/usb0/")
     case = next(case for case in report["cases"] if case["name"] == "save-pwd")
     assert case["status"] == ("PASS" if failure == "none" else "FAIL")
     assert (result.returncode == 0) == (failure == "none")
@@ -978,7 +980,7 @@ def test_save_pwd_restores_only_after_failure(tmp_path: Path, failure: str) -> N
 @requires_windows
 @pytest.mark.parametrize("path", ["", "bad;path"])
 def test_save_pwd_unsafe_original_does_not_write(tmp_path: Path, path: str) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0], focused=True, save_pwd_path=path)
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, focused=True, save_pwd_path=path)
     assert result.returncode == 0, result.stdout + result.stderr
     case = next(case for case in report["cases"] if case["name"] == "save-pwd")
     assert case["status"] == "N/A"
@@ -988,7 +990,7 @@ def test_save_pwd_unsafe_original_does_not_write(tmp_path: Path, path: str) -> N
 @pytest.mark.windows_powershell
 @requires_windows
 def test_save_pwd_failed_query_does_not_restore(tmp_path: Path) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses={"save-pwd-before": VISA_FAILURE})
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, focused=True, stage_responses={"save-pwd-before": VISA_FAILURE})
     assert result.returncode != 0
     case = next(case for case in report["cases"] if case["name"] == "save-pwd")
     assert case["status"] == "FAIL"
@@ -1001,7 +1003,7 @@ def test_save_pwd_failed_query_does_not_restore(tmp_path: Path) -> None:
 @pytest.mark.parametrize("value", [0, 65, 4, None])
 def test_cli_final_native_status(tmp_path: Path, value: int | None) -> None:
     response = {"ExitCode": 0, "Payload": {"ok": True, "result": {"value": value}}}
-    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses={"final-standard-event": response})
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, focused=True, stage_responses={"final-standard-event": response})
     case = next(case for case in report["cases"] if case["name"] == "final-standard-event")
     clean = value in (0, 65)
     assert case["status"] == ("PASS" if clean else "FAIL")
@@ -1012,7 +1014,7 @@ def test_cli_final_native_status(tmp_path: Path, value: int | None) -> None:
 @pytest.mark.windows_powershell
 @requires_windows
 def test_cli_final_io_failure_preserves_case_failure(tmp_path: Path) -> None:
-    result, report = fake_run(tmp_path, TARGETS[0], focused=True, stage_responses={
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, focused=True, stage_responses={
         "save-pwd-same-value": VISA_FAILURE, "final-standard-event": VISA_FAILURE,
     })
     assert result.returncode != 0
@@ -1028,7 +1030,7 @@ def test_cli_final_io_failure_preserves_case_failure(tmp_path: Path) -> None:
 @pytest.mark.parametrize("target", TARGETS[1:2])
 @pytest.mark.parametrize("actual,passed", [(1.04, True), (1.06, False)])
 def test_fixture_trigger_level_readback_tolerance(tmp_path, target, actual, passed):
-    result, report = fake_run(tmp_path, target, focused=True, stage_responses={
+    result, report = fake_run(tmp_path, target, debug=False, focused=True, stage_responses={
         "fixture-trigger-query": {"ResultOverrides": {"level_volts": actual}},
     })
     cases = {case["name"]: case for case in report["cases"]}
@@ -1053,7 +1055,7 @@ def test_fixture_trigger_level_readback_tolerance(tmp_path, target, actual, pass
 def test_invalid_measurement_fails_and_remaining_items_execute(tmp_path, response):
     from scopes_tool_core.capabilities import capabilities_for_model_id
     items = capabilities_for_model_id(TARGETS[2]).measurement_items
-    result, report = fake_run(tmp_path, TARGETS[2], stage_responses={f"measure-{items[0]}": response})
+    result, report = fake_run(tmp_path, TARGETS[2], debug=False, stage_responses={f"measure-{items[0]}": response})
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases[f"measure-{items[0]}"]["status"] == "FAIL"
@@ -1074,7 +1076,7 @@ def test_invalid_measurement_fails_and_remaining_items_execute(tmp_path, respons
     ("primitive-source-display", "capture-byte"), ("trigger-mode-before", "trigger-edge"),
 ])
 def test_failed_prerequisite_is_fail_and_unexecuted_case_not_tested(tmp_path, stage, dependent):
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={stage: VISA_FAILURE})
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses={stage: VISA_FAILURE})
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["trigger-mode" if stage == "trigger-mode-before" else stage]["status"] == "FAIL"
@@ -1099,7 +1101,7 @@ def test_removed_optional_switches_are_rejected_before_invocation(option):
 @requires_windows
 @pytest.mark.parametrize("format_name", ["csv", "internal"])
 def test_tbs2074_waveform_save_uses_supported_current_format(tmp_path, format_name):
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses={
         "save-waveform-format-for-file": {"ExitCode": 0, "Payload": {"ok": True, "result": {"format": format_name}}},
         "save-image-format-for-file": {"ExitCode": 0, "Payload": {"ok": True, "result": {"format": "bmp"}}},
     })
@@ -1124,7 +1126,7 @@ def test_legacy_cursor_y_executes_setter_and_checks_readback(tmp_path, target, m
     responses = {"cursor-y-offset": {"ResultOverrides": {"volts": 0.25}}}
     if mismatch:
         responses["cursor-set-y-after"] = {"ResultOverrides": {"y2_volts": 0.5}}
-    result, report = fake_run(tmp_path, target, stage_responses=responses)
+    result, report = fake_run(tmp_path, target, debug=False, stage_responses=responses)
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["cursor-set-y"]["status"] == ("FAIL" if mismatch else "PASS")
     assert (result.returncode != 0) is mismatch
@@ -1152,7 +1154,7 @@ def test_legacy_cursor_y_preconditions_are_precise(tmp_path, scenario, status, e
         }}}}
     else:
         responses = {"cursor-y-units" if scenario == "query-error" else "cursor-set-y": VISA_FAILURE}
-    result, report = fake_run(tmp_path, TARGETS[1], stage_responses=responses)
+    result, report = fake_run(tmp_path, TARGETS[1], debug=False, stage_responses=responses)
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["cursor-set-y"]["status"] == status
     stages = [inv["stage"] for inv in report["invocations"]]
@@ -1166,7 +1168,7 @@ def test_legacy_cursor_y_preconditions_are_precise(tmp_path, scenario, status, e
 @requires_windows
 @pytest.mark.parametrize("label", ["", "slot edit"])
 def test_setup_lifecycle_restores_empty_or_matching_marker_label(tmp_path, label):
-    result, report = fake_run(tmp_path, TARGETS[0], channel_label=label)
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, channel_label=label)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["setup-slot-lifecycle"]["status"] == "PASS"
@@ -1188,7 +1190,7 @@ def test_setup_lifecycle_failure_retains_error_and_checks_cleanup(tmp_path, scen
         responses["setup-slot-label-cleanup"] = VISA_FAILURE
     elif scenario == "cleanup-readback":
         responses["setup-slot-label-cleanup-query"] = {"ResultOverrides": {"text": "not restored"}}
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses=responses)
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses=responses)
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["setup-save"]["status"] == "PASS"
@@ -1204,7 +1206,7 @@ def test_setup_lifecycle_failure_retains_error_and_checks_cleanup(tmp_path, scen
 @pytest.mark.windows_powershell
 @requires_windows
 def test_reference_lifecycle_restores_original_display_off(tmp_path):
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses={
         "reference-display-before": {"ResultOverrides": {"displayed": False}},
     })
     assert result.returncode == 0, result.stdout + result.stderr
@@ -1224,7 +1226,7 @@ def test_reference_lifecycle_rejects_inconsistent_readback_or_cleanup(tmp_path, 
     stage = {"display-readback": "reference-display-after", "post-save-query": "reference-query-after-save",
              "cleanup-error": "reference-display-cleanup", "cleanup-readback": "reference-display-cleanup-query"}[scenario]
     response = VISA_FAILURE if scenario == "cleanup-error" else {"ResultOverrides": {"displayed": False}}
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={stage: response})
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses={stage: response})
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["reference-query"]["status"] == "PASS"  # Independent earlier query cannot prove the lifecycle.
@@ -1244,7 +1246,7 @@ def test_instrument_save_rejects_inconsistent_result_or_scpi(tmp_path, command, 
     else:
         value = False if fault in {"instrument_side", "operation_complete"} else "0" if fault == "raw_operation_complete" else "wrong.bmp"
         response = {"ResultOverrides": {fault: value}}
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={command: response})
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses={command: response})
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases[command]["status"] == "FAIL"
@@ -1256,7 +1258,7 @@ def test_instrument_save_rejects_inconsistent_result_or_scpi(tmp_path, command, 
 @requires_windows
 @pytest.mark.parametrize("stage,response", [("single", {"SentOverrides": ["ACQuire:STATE ON"]}), ("force-trigger", {"ResultOverrides": {"forced": False}})])
 def test_acquisition_checks_sent_commands_and_results(tmp_path, stage, response):
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={stage: response})
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses={stage: response})
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     assert cases[stage]["status"] == "FAIL"
@@ -1276,7 +1278,7 @@ def test_acquisition_checks_sent_commands_and_results(tmp_path, stage, response)
     ("single-wait-force", "forced", "PASS", "timeout-force branch executed"),
 ])
 def test_single_wait_reports_actual_natural_or_force_outcome(tmp_path, stage, outcome, status, detail):
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses={
         stage: {"ResultOverrides": {"outcome": outcome}},
     })
     cases = {case["name"]: case for case in report["cases"]}
@@ -1317,7 +1319,7 @@ def test_failure_hints_reference_only_retained_artifacts(tmp_path, debug, exit_c
 @requires_windows
 @pytest.mark.parametrize("display,status", [(False, "N/A"), ("invalid", "FAIL")])
 def test_reference_lifecycle_source_precondition_blocks_writes(tmp_path, display, status):
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses={
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses={
         "reference-source-display": {"ResultOverrides": {"display": display}},
     })
     cases = {case["name"]: case for case in report["cases"]}

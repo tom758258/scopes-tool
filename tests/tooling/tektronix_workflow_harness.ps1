@@ -3,7 +3,8 @@ param(
     [string]$Target = 'tektronix-tbs2074',
     [string]$Scenario,
     [string]$PythonPath,
-    [string]$OutputRoot
+    [string]$OutputRoot,
+    [switch]$MinimalArtifacts
 )
 
 Set-StrictMode -Version Latest
@@ -231,4 +232,4 @@ $workflow = [scriptblock]::Create($source)
     -Connection 'usb' `
     -Resource 'USB0::FAKE::INSTR' `
     -Python $PythonPath `
-    -OutputRoot $OutputRoot -DebugArtifacts
+    -OutputRoot $OutputRoot -DebugArtifacts:(-not $MinimalArtifacts)

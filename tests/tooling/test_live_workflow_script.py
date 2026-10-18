@@ -12,7 +12,7 @@ from tests.tooling._tektronix_live_test_support import (
 @requires_windows
 @pytest.mark.parametrize("scenario", ["clean", "stale", "nonerror-events"])
 def test_workflow_clean_baseline_preserves_history(tmp_path: Path, scenario: str) -> None:
-    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-{scenario}")
+    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-{scenario}", debug=False)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     for name in ("operator-confirmation", "pre-run-clean-baseline", "measure-sweep", "cleanup", "final-standard-event"):
@@ -42,7 +42,7 @@ def test_workflow_clean_baseline_preserves_history(tmp_path: Path, scenario: str
     ("post-event", "pre-run-standard-event-verify"),
 ])
 def test_workflow_clean_baseline_failure_blocks_workflows(tmp_path: Path, scenario: str, failed_stage: str) -> None:
-    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-{scenario}")
+    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-{scenario}", debug=False)
     assert result.returncode != 0
     assert report["status"] == "failed"
     cases = {case["name"]: case for case in report["cases"]}
@@ -58,7 +58,7 @@ def test_workflow_clean_baseline_failure_blocks_workflows(tmp_path: Path, scenar
 @requires_windows
 @pytest.mark.parametrize("scenario", ["identify-io", "model-mismatch"])
 def test_workflow_clean_baseline_respects_identity_gate(tmp_path: Path, scenario: str) -> None:
-    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-{scenario}")
+    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-{scenario}", debug=False)
     assert result.returncode != 0
     assert [inv["stage"] for inv in report["invocations"]] == ["preflight-identify", "identity"]
 
@@ -74,7 +74,7 @@ def test_workflow_clean_baseline_respects_identity_gate(tmp_path: Path, scenario
     ("unavailable", "Operator console unavailable"),
 ])
 def test_workflow_clean_baseline_respects_confirmation_gate(tmp_path: Path, scenario: str, reason: str) -> None:
-    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-confirmation-{scenario}")
+    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-confirmation-{scenario}", debug=False)
     assert result.returncode != 0
     assert report["status"] == "failed"
     cases = {case["name"]: case for case in report["cases"]}
@@ -104,7 +104,7 @@ def test_workflow_clean_baseline_respects_confirmation_gate(tmp_path: Path, scen
     ("dirty-case", "PASS"),
 ])
 def test_workflow_final_native_status_after_cleanup(tmp_path: Path, scenario: str, final_status: str) -> None:
-    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-{scenario}")
+    result, report = fake_workflow_run(tmp_path, TARGETS[2], f"focused-{scenario}", debug=False)
     cases = {case["name"]: case for case in report["cases"]}
     assert cases["final-standard-event"]["status"] == final_status
     assert (result.returncode == 0) == (scenario == "clean")

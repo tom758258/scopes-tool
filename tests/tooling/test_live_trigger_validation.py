@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.windows_powershell, requires_windows]
 
 @pytest.mark.parametrize("target", TARGETS)
 def test_tektronix_special_triggers_execute_from_edge_and_restore(tmp_path, target):
-    result, report = fake_run(tmp_path, target)
+    result, report = fake_run(tmp_path, target, debug=False)
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {case["name"]: case for case in report["cases"]}
     special = "trigger-runt" if target == TARGETS[0] else "trigger-tv"
@@ -45,7 +45,7 @@ def test_tektronix_special_triggers_execute_from_edge_and_restore(tmp_path, targ
      ("trigger-runt-query failed", "Edge fixture restoration failed")),
 ])
 def test_tektronix_failure_preserves_errors_and_resets_edge(tmp_path, responses, details):
-    result, report = fake_run(tmp_path, TARGETS[0], stage_responses=responses)
+    result, report = fake_run(tmp_path, TARGETS[0], debug=False, stage_responses=responses)
     assert result.returncode != 0
     cases = {case["name"]: case for case in report["cases"]}
     case = cases["trigger-runt"]
