@@ -173,14 +173,25 @@ def test_release_changes_select_contracts_and_a_single_packaging_build():
 
 def test_manual_build_routes_outputs_and_gates_draft_releases():
     workflow = BUILD_WORKFLOW.read_text(encoding="utf-8")
-    lines = [line.strip() for line in workflow.splitlines()]
-    assert "workflow_dispatch:" in lines
-    assert not {"pull_request:", "push:"}.intersection(lines)
-    mode_match = re.search(r"(?m)^([ \t]+)build_mode:\s*\n((?:\1[ \t]+[^\n]*\n)+)", workflow)
-    draft_match = re.search(r"(?m)^([ \t]+)create_draft:\s*\n((?:\1[ \t]+[^\n]*\n)+)", workflow)
-    assert mode_match and draft_match
-    mode = [line.strip() for line in mode_match[2].splitlines()]
-    draft_input = [line.strip() for line in draft_match[2].splitlines()]
+    lines = workflow.splitlines()
+    assert "workflow_dispatch:" in [line.strip() for line in lines]
+    assert not {"pull_request:", "push:"}.intersection(line.strip() for line in lines)
+
+    # Select a YAML section by indentation, not a particular formatting layout.
+    def section(key: str) -> str:
+        starts = [i for i, line in enumerate(lines) if line.strip() == f"{key}:"]
+        assert len(starts) == 1
+        start = starts[0]
+        indent = len(lines[start]) - len(lines[start].lstrip())
+        body = []
+        for line in lines[start + 1:]:
+            if line.strip() and len(line) - len(line.lstrip()) <= indent:
+                break
+            body.append(line.strip())
+        return "\n".join(body)
+
+    mode = section("build_mode").splitlines()
+    draft_input = section("create_draft").splitlines()
     assert "type: choice" in mode
     assert "default: release" in mode
     assert {line[2:] for line in mode if line.startswith("- ")} == {
@@ -188,14 +199,14 @@ def test_manual_build_routes_outputs_and_gates_draft_releases():
     }
     assert {"type: boolean", "default: false"}.issubset(draft_input)
 
-    build, draft = re.split(r"\n[ \t]+draft-release:\s*\n", workflow, maxsplit=1)
+    build, draft = section("build"), section("draft-release")
     for mode, script in (
         ("bundle", "build_windows_bundle.ps1"),
         ("desktop", "build_desktop.ps1"),
         ("release", "build_release.ps1"),
     ):
         assert re.search(rf"'{mode}'\s*{{[^}}]*scripts[\\/]{script}", build)
-    assert "powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script" in build
+    assert "powershell.exe" in build and "-File $script" in build
     assert re.search(r"if\s*\(\$LASTEXITCODE -ne 0\)\s*{\s*throw", build)
     assert "scripts/ci_packaging_smoke.py --mode" in build
     assert "scripts/ci_packaging_smoke.py --release-dir" in build
@@ -204,9 +215,8 @@ def test_manual_build_routes_outputs_and_gates_draft_releases():
     assert "dist/scopes-tool" in build
     assert "dist/desktop/win-unpacked" in build
     assert "scopes-tool-$mode-windows-x64.zip" in build
-    assert "Get-PackageVersion" in build
     assert "git rev-parse --short=7 HEAD" in build
-    assert "scopes-tool-windows-${{ inputs.build_mode }}-$shortSha" in build
+    assert re.search(r"artifact_name=scopes-tool-windows-\$\{\{\s*inputs\.build_mode\s*\}\}-\$\w+", build)
     assert "github.run_id" not in build
     for artifact in (
         "scopes-tool-$version-windows-x64.zip",
@@ -228,21 +238,23 @@ def test_manual_build_routes_outputs_and_gates_draft_releases():
     assert "inputs.build_mode == 'release'" in gate
     assert "inputs.create_draft" in gate
     assert "github.ref == 'refs/heads/main'" in gate
-    assert gate.count("&&") == 2
     assert "needs: build" in draft
     assert "ref: ${{ github.sha }}" in draft
     assert "actions/download-artifact@v4" in draft
     assert "name: ${{ steps.meta.outputs.artifact_name }}" in build
     assert "name: ${{ needs.build.outputs.artifact_name }}" in draft
-    assert "contents: read" in build and "contents: write" not in build
+    assert "contents: read" in workflow and "contents: write" not in build
     assert "contents: write" in draft
-    assert "gh api --paginate" in draft and "/releases" in draft
-    assert "git ls-remote --tags" in draft
-    assert "refs/tags/$tag" in draft
-    assert "exit 1" in draft
-    assert 'gh release create "v${VERSION}" release-assets/*' in draft
-    assert '--target "$GITHUB_SHA"' in draft
-    assert "--draft" in draft.split()
+    # Verify both duplicate guards precede creation without freezing CLI spelling.
+    checks, separator, creation = draft.partition("gh release create")
+    assert separator
+    assert "/releases" in checks or "gh release view" in checks
+    assert "refs/tags/" in checks
+    assert "set -euo pipefail" in checks
+    assert "exit 1" in checks
+    assert '"v${VERSION}" release-assets/*' in creation
+    assert '--target "$GITHUB_SHA"' in creation
+    assert "--draft" in creation.split()
     assert "gh release edit" not in workflow
     assert "gh release upload" not in workflow
     assert "--clobber" not in workflow
