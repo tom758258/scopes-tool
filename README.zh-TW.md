@@ -38,8 +38,8 @@ Simulation 與支援的 dry-run 操作不會開啟真實儀器連線。
   JSON、JSONL、CSV 與主機端擷取產物。
 - WebUI/Desktop 可切換英文與繁體中文、選擇 System、Light 或 Dark 外觀，
   並開啟內建離線說明。
-- Windows onedir 套件中的 Desktop、CLI、Launcher 與私有 Host 共用一份
-  Python 執行環境目錄。
+- Windows onedir 套件中的 CLI、Launcher 與私有 Host 共用一份 Python 執行環境目錄，
+  並與具備獨立 Electron/Chromium 執行環境的 Electron Desktop 一起提供。
 
 功能是否可用取決於型號、能力設定檔及儀器已安裝的選配。
 命令與工作流程限制請參閱[支援型號](docs/core/supported-models.zh-TW.md)及
@@ -181,8 +181,10 @@ resources\
 ... Electron runtime files
 ```
 
-四個執行檔共用根目錄唯一的 `_internal`。私有 Host 供 Desktop 使用，並非公開 CLI
-入口。建置會取代既有的 Bundle/Desktop 輸出目錄。可使用
+三個 Python 執行檔共用根目錄唯一的 `_internal`。Electron Desktop 與這些執行檔
+位於同一個應用程式目錄，具有自己的 Electron/Chromium 執行環境，並透過私有
+Desktop Host 使用共用的 Python Backend。私有 Host 並非公開 CLI 入口。
+建置會取代既有的 Bundle/Desktop 輸出目錄。可使用
 `.\dist\scopes-tool\scopes-tool.exe identify --simulate --json` 進行無硬體 CLI 檢查。
 
 建置版本化發行產物：

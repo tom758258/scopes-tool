@@ -188,7 +188,9 @@ def test_acceptance_rejects_output_escape_before_creating_directory(tmp_path):
 
 
 @WINDOWS
-@pytest.mark.parametrize("fault", ["version", "outside"])
+@pytest.mark.parametrize("fault", [
+    "version", "outside", ".", ".git", ".GIT/unused/../releases", ".venv", ".VeNv/releases",
+])
 def test_release_build_rejects_unsafe_inputs_before_building(tmp_path, fault):
     repo = _repository(tmp_path)
     python = repo / ".venv/Scripts/python.exe"
@@ -196,19 +198,32 @@ def test_release_build_rejects_unsafe_inputs_before_building(tmp_path, fault):
     python.touch()
     if fault == "version":
         (repo / "desktop/package.json").write_text('{"version":"9.9.9"}')
+    (repo / ".git").mkdir()
+    (repo / ".git/keep.txt").write_bytes(b"preserve git data")
+    (repo / ".venv/keep.txt").write_bytes(b"preserve environment data")
+    original = {path.relative_to(repo): path.read_bytes() if path.is_file() else None
+                for path in repo.rglob("*")}
+    if fault == "version":
         result = _run_script(repo, "build_release.ps1")
         assert "must match" in result.stderr
-    else:
+    elif fault == "outside":
         result = _run_script(repo, "build_release.ps1", "-ReleaseRoot", tmp_path / "outside")
         assert "must stay under" in result.stderr
         assert not (tmp_path / "outside").exists()
+    else:
+        result = _run_script(repo, "build_release.ps1", "-ReleaseRoot", fault)
+        assert "ReleaseRoot cannot be" in result.stderr
     assert result.returncode != 0
+    assert original == {path.relative_to(repo): path.read_bytes() if path.is_file() else None
+                        for path in repo.rglob("*")}
     assert not (repo / "release").exists()
     assert not (repo / "dist").exists()
 
 
 @WINDOWS
-def test_release_build_uses_existing_builds_and_preserves_existing_output(tmp_path):
+@pytest.mark.parametrize("release_root", [None, ".tmp_tests/releases", ".github/releases",
+                                          "artifacts/releases"])
+def test_release_build_uses_existing_builds_and_preserves_existing_output(tmp_path, release_root):
     repo = _repository(tmp_path)
     # A minimal Python module and Desktop producer stand in for the heavyweight builds.
     subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(repo / ".venv")], check=True)
@@ -230,9 +245,10 @@ Get-ChildItem -LiteralPath (Join-Path $root "fixture-desktop") -Force | ForEach-
 }
 ''', encoding="utf-8")
     (repo / "scripts/ci_packaging_smoke.py").write_text("# Layout checked separately with real inspector.\n")
-    result = _run_script(repo, "build_release.ps1")
+    arguments = ("-ReleaseRoot", release_root) if release_root else ()
+    result = _run_script(repo, "build_release.ps1", *arguments)
     assert result.returncode == 0, result.stdout + result.stderr
-    artifacts = repo / "release/0.1.0"
+    artifacts = repo / (release_root or "release") / "0.1.0"
     assert len(list(artifacts.iterdir())) == 4
     for line in (artifacts / "checksums.txt").read_text().splitlines():
         digest, name = line.split("  ")
@@ -242,7 +258,7 @@ Get-ChildItem -LiteralPath (Join-Path $root "fixture-desktop") -Force | ForEach-
         assert all(f"scopes-tool-0.1.0/{name}" in archive.namelist()
                    for name in (*SMOKE["BUNDLE_EXECUTABLES"], "Scopes Tool.exe"))
     original = {path.name: path.read_bytes() for path in artifacts.iterdir()}
-    rerun = _run_script(repo, "build_release.ps1")
+    rerun = _run_script(repo, "build_release.ps1", *arguments)
     assert rerun.returncode != 0
     assert original == {path.name: path.read_bytes() for path in artifacts.iterdir()}
     assert not list((repo / ".tmp_tests").glob("release-build-*"))

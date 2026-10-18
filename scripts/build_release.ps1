@@ -21,9 +21,20 @@ if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
     throw "Project Python executable not found: $Python"
 }
 
-$releaseRootFull = Get-FullPath -Path $ReleaseRoot -BaseRoot $RepoRoot
+$releaseRootFull = (Get-FullPath -Path $ReleaseRoot -BaseRoot $RepoRoot).TrimEnd('\', '/')
 Assert-PathUnderRoot -RootPath $RepoRoot -Path $releaseRootFull `
     -Message "ReleaseRoot must stay under the repository: {0}"
+$comparison = [System.StringComparison]::OrdinalIgnoreCase
+if ($releaseRootFull.Equals($RepoRoot, $comparison)) {
+    throw "ReleaseRoot cannot be the repository root: $releaseRootFull"
+}
+foreach ($name in @(".git", ".venv")) {
+    $reservedRoot = Join-Path $RepoRoot $name
+    if ($releaseRootFull.Equals($reservedRoot, $comparison) -or
+        $releaseRootFull.StartsWith($reservedRoot + [IO.Path]::DirectorySeparatorChar, $comparison)) {
+        throw "ReleaseRoot cannot be inside ${name}: $releaseRootFull"
+    }
+}
 # Reject linked ancestors before creating or copying any output.
 $staging = Join-Path (Join-Path $RepoRoot ".tmp_tests") ("release-build-" + [guid]::NewGuid().ToString("N"))
 foreach ($path in @($releaseRootFull, $staging)) {

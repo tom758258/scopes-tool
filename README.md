@@ -43,8 +43,8 @@ Simulation and supported dry-run operations do not open real instrument sessions
   JSON, JSONL, CSV, and host-side capture artifacts for automation.
 - Switch the WebUI/Desktop language between English and Traditional Chinese and
   choose System, Light, or Dark appearance; open bundled offline Help.
-- Use the Windows onedir Desktop, CLI, Launcher, and private Host with one shared
-  Python runtime directory.
+- Use the Windows onedir CLI, Launcher, and private Host with one shared Python
+  runtime directory, alongside Electron Desktop with its own Electron/Chromium runtime.
 
 Availability depends on the model, capability profile, and installed instrument
 options. See [Supported Models](docs/core/supported-models.md) and the
@@ -193,9 +193,12 @@ resources\
 ... Electron runtime files
 ```
 
-All four executables share one root `_internal`. The private Host serves Desktop
-and is not a public CLI entry point. Builds replace their existing bundle/Desktop
-output directories. Check the packaged CLI without hardware using
+The three Python executables share a single root `_internal` directory. The
+Electron Desktop resides in the same application directory, has its own
+Electron/Chromium runtime, and uses the shared Python backend through the private
+Desktop Host. The private Host is not a public CLI entry point. Builds replace
+their existing bundle/Desktop output directories. Check the packaged CLI without
+hardware using
 `.\dist\scopes-tool\scopes-tool.exe identify --simulate --json`.
 
 Build the versioned release artifacts:
