@@ -220,8 +220,7 @@ metadata、校驗碼及解壓後的 Desktop 配置，再將 wheel 與 sdist 分�
 自訂 `-OutputRoot` 必須位於專案 `.tmp_tests` 內；建置中間產物沿用既有的
 `build/` 與 `dist/`。驗收不會探索或開啟真實 Resource，也不會提交、標記或發布。
 
-手動 **Build Windows** Actions 工作流程提供 Bundle/Desktop ZIP，Actions 產物保留
-30 天。條件式打包 CI 在每個 job 中僅建置一次 Desktop 或 Release 配置，並執行打包後
+條件式打包 CI 在每個 job 中僅建置一次 Desktop 或 Release 配置，並執行打包後
 CLI 檢查；這不代表已驗證 GUI 互動或真實儀器。完整驗收仍是手動發行關卡。
 
 ## 測試

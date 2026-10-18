@@ -6,6 +6,7 @@ with predicate-quantifier=some-with-excludes, without binding tests to YAML layo
 
 from fnmatch import fnmatchcase
 from pathlib import Path
+import re
 
 import pytest
 
@@ -170,16 +171,78 @@ def test_release_changes_select_contracts_and_a_single_packaging_build():
     assert "--release-dir" in workflow
 
 
-def test_manual_build_only_offers_non_release_outputs():
+def test_manual_build_routes_outputs_and_gates_draft_releases():
     workflow = BUILD_WORKFLOW.read_text(encoding="utf-8")
-    assert "  workflow_dispatch:\n" in workflow
-    assert "  pull_request:" not in workflow
-    assert "  push:" not in workflow
-    assert "          - bundle\n" in workflow
-    assert "          - desktop\n" in workflow
-    assert "          - release\n" not in workflow
-    assert "build_windows_bundle.ps1" in workflow
-    assert "build_desktop.ps1" in workflow
-    assert "scripts/ci_packaging_smoke.py" in workflow
-    assert "actions/upload-artifact@v4" in workflow
-    assert "gh release" not in workflow
+    lines = [line.strip() for line in workflow.splitlines()]
+    assert "workflow_dispatch:" in lines
+    assert not {"pull_request:", "push:"}.intersection(lines)
+    mode_match = re.search(r"(?m)^([ \t]+)build_mode:\s*\n((?:\1[ \t]+[^\n]*\n)+)", workflow)
+    draft_match = re.search(r"(?m)^([ \t]+)create_draft:\s*\n((?:\1[ \t]+[^\n]*\n)+)", workflow)
+    assert mode_match and draft_match
+    mode = [line.strip() for line in mode_match[2].splitlines()]
+    draft_input = [line.strip() for line in draft_match[2].splitlines()]
+    assert "type: choice" in mode
+    assert "default: release" in mode
+    assert {line[2:] for line in mode if line.startswith("- ")} == {
+        "bundle", "desktop", "release",
+    }
+    assert {"type: boolean", "default: false"}.issubset(draft_input)
+
+    build, draft = re.split(r"\n[ \t]+draft-release:\s*\n", workflow, maxsplit=1)
+    for mode, script in (
+        ("bundle", "build_windows_bundle.ps1"),
+        ("desktop", "build_desktop.ps1"),
+        ("release", "build_release.ps1"),
+    ):
+        assert re.search(rf"'{mode}'\s*{{[^}}]*scripts[\\/]{script}", build)
+    assert "powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script" in build
+    assert re.search(r"if\s*\(\$LASTEXITCODE -ne 0\)\s*{\s*throw", build)
+    assert "scripts/ci_packaging_smoke.py --mode" in build
+    assert "scripts/ci_packaging_smoke.py --release-dir" in build
+    assert {"--expected-version", "--extract-dir"}.issubset(build.split())
+    assert "--layout-only" not in build
+    assert "dist/scopes-tool" in build
+    assert "dist/desktop/win-unpacked" in build
+    assert "scopes-tool-$mode-windows-x64.zip" in build
+    assert "Get-PackageVersion" in build
+    assert "git rev-parse --short=7 HEAD" in build
+    assert "scopes-tool-windows-${{ inputs.build_mode }}-$shortSha" in build
+    assert "github.run_id" not in build
+    for artifact in (
+        "scopes-tool-$version-windows-x64.zip",
+        "scopes_tool-$version-py3-none-any.whl",
+        "scopes_tool-$version.tar.gz",
+        "checksums.txt",
+    ):
+        assert artifact in build
+    assert "release/$version/$name" in build
+    assert "actions/upload-artifact@v4" in build
+    assert "path: .tmp_tests/actions-artifacts/*" in build
+    assert "if-no-files-found: error" in build
+    assert "continue-on-error:" not in workflow
+
+    assert "'${{ inputs.create_draft }}' -eq 'true'" in build
+    assert "'${{ inputs.build_mode }}' -ne 'release'" in build
+    assert "'${{ github.ref }}' -ne 'refs/heads/main'" in build
+    gate = next(line.strip() for line in draft.splitlines() if line.strip().startswith("if:"))
+    assert "inputs.build_mode == 'release'" in gate
+    assert "inputs.create_draft" in gate
+    assert "github.ref == 'refs/heads/main'" in gate
+    assert gate.count("&&") == 2
+    assert "needs: build" in draft
+    assert "ref: ${{ github.sha }}" in draft
+    assert "actions/download-artifact@v4" in draft
+    assert "name: ${{ steps.meta.outputs.artifact_name }}" in build
+    assert "name: ${{ needs.build.outputs.artifact_name }}" in draft
+    assert "contents: read" in build and "contents: write" not in build
+    assert "contents: write" in draft
+    assert "gh api --paginate" in draft and "/releases" in draft
+    assert "git ls-remote --tags" in draft
+    assert "refs/tags/$tag" in draft
+    assert "exit 1" in draft
+    assert 'gh release create "v${VERSION}" release-assets/*' in draft
+    assert '--target "$GITHUB_SHA"' in draft
+    assert "--draft" in draft.split()
+    assert "gh release edit" not in workflow
+    assert "gh release upload" not in workflow
+    assert "--clobber" not in workflow

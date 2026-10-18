@@ -88,8 +88,11 @@ examples, and internal structure require a clear maintenance benefit.
   they do not execute full release acceptance. The manual
   `scripts/release-acceptance.ps1` gate requires committed, clean HEAD and writes
   its no-hardware reports and final artifacts under `.tmp_tests/`.
-- **Build Windows** is a separate, manual-only workflow for Bundle/Desktop ZIP
-  artifacts. It runs the same hardware-free packaged CLI smoke before uploading.
+- **Build Windows** is a separate, manual-only workflow for Bundle/Desktop ZIPs
+  or versioned Release artifacts. It runs the corresponding hardware-free packaging
+  smoke before uploading; Release mode checks distributions, checksums, and the
+  extracted Desktop/CLI. Optional Draft Releases require Release mode and `main`
+  and are never published automatically.
 
 The operation matrix validates adapter admission for every registered model.
 Dry-run and simulator execution uses one representative per driver/capability

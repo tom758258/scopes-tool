@@ -239,8 +239,7 @@ must remain under repository `.tmp_tests`. Build intermediates use the existing
 `build/` and `dist/` locations. Acceptance never discovers or opens live resources
 and does not commit, tag, or publish.
 
-The manual **Build Windows** Actions workflow offers Bundle/Desktop ZIPs as
-30-day Actions artifacts. Conditional packaging CI builds Desktop or the release
+Conditional packaging CI builds Desktop or the release
 layout once per job and runs packaged CLI smoke; it does not validate GUI
 interaction or real instruments. Full acceptance remains a manual release gate.
 
