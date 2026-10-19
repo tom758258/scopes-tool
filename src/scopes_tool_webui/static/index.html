@@ -73,10 +73,10 @@
                 <p id="supported-devices-status" class="compact-note" aria-live="polite" hidden></p>
                 <div class="supported-devices-tabs" role="tablist" data-i18n-aria-label="device.visaBackend" aria-label="VISA backend">
                   <button id="supported-system-tab" type="button" role="tab" aria-selected="true" aria-controls="supported-devices-content" data-backend="system_visa">System VISA</button>
-                  <button id="supported-py-tab" type="button" role="tab" aria-selected="false" aria-controls="supported-devices-content" tabindex="-1" data-backend="@py">@py</button>
+                  <button id="supported-py-tab" type="button" role="tab" aria-selected="false" aria-controls="supported-devices-content" tabindex="-1" data-backend="@py">PyVISA-py</button>
                 </div>
                 <div id="supported-devices-content" role="tabpanel" aria-labelledby="supported-system-tab">
-                  <p id="supported-devices-pending" class="compact-note pending-note" data-i18n="supported_devices.pending" hidden>Only the listed @py connections are Product-open; other @py connections remain unavailable.</p>
+                  <p id="supported-devices-pending" class="compact-note pending-note" data-i18n="supported_devices.pending" hidden>Only the listed PyVISA-py connections are Product-open; other PyVISA-py connections remain unavailable.</p>
                   <div id="supported-devices-body" class="supported-devices-groups"></div>
                 </div>
               </div>
@@ -97,10 +97,10 @@
                   <span data-i18n="device.visaBackend">VISA backend</span>
                   <select id="visa-library">
                     <option value="" selected>System VISA</option>
-                    <option value="@py">pyvisa-py (@py)</option>
+                    <option value="@py">PyVISA-py</option>
                   </select>
                 </label>
-                <p class="compact-note" data-i18n="device.visaBackendHelp">Live only. @py Product control is available only for listed TCPIP models; USB @py is not open.</p>
+                <p class="compact-note" data-i18n="device.visaBackendHelp">Live only. PyVISA-py Product control is available only for listed TCPIP models; PyVISA-py USB is not open.</p>
                 <label id="planning-model-field" class="field">
                   <span data-i18n="device.model">Planning model</span>
                   <select id="model-select"></select>
