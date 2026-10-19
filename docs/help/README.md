@@ -34,8 +34,9 @@ foreach ($name in @("webui.html", "webui.zh-TW.html", "supported-models.html", "
 Commit the regenerated runtime files together with their Markdown/template/CSS
 changes. Never edit generated HTML directly. The generation test checks all
 local links and byte-for-byte synchronization with staging. Links between
-canonical documents become local HTML links; links to engineering documents
-outside Help become repository path references rather than broken offline links.
+canonical documents become local HTML links. Links to local documents outside
+the bundled Help set fail generation; keep maintainer references in engineering
+documents rather than showing repository paths to installed users.
 
 CLI opens its bundled file directly and needs no VISA or server. WebUI serves
 its existing `/static/help/` assets with `Cache-Control: no-store`. Desktop

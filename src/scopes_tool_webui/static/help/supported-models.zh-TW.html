@@ -64,35 +64,29 @@
 <p><a id="supported-models"></a></p>
 <h1 id="支援型號">支援型號</h1>
 <p><a href="supported-models.html">English</a></p>
-<p>本文件記載 Core Runtime 的正式型號支援政策。命令層級行為仍記載於
-<code>../cli/README.md</code> 與 <code>../contracts/</code>。</p>
-<p>Capability Profile 描述 Runtime 支援且受保護的功能範圍，並不偵測儀器選配或授權。
-硬體或選配不可用時，仍以實機錯誤為準。</p>
+<p>本指南說明 Scopes Tool 使用者可操作的型號、連線、功能及限制。
+Capability Profile 僅描述可用功能，不代表儀器已安裝對應選配或授權；
+實際不可用時仍以儀器回報的錯誤為準。</p>
 <p><a id="contents"></a></p>
 <h2 id="目錄">目錄</h2>
 <ul>
 <li><a href="#canonical-physical-model-identity">標準實體型號身分</a></li>
 <li><a href="#visa-backend-boundary">VISA Backend 邊界</a></li>
-<li><a href="#runtime-profiles">Runtime Profile</a></li>
 <li><a href="#capability-summary">能力摘要</a></li>
 <li><a href="#tektronix-model-support">Tektronix 型號支援</a></li>
 <li><a href="#acquisition-timebase-and-channels">擷取、時基與通道</a></li>
 <li><a href="#display-cursors-math-and-measurements">顯示、游標、Math 與量測</a></li>
 <li><a href="#trigger-operations">觸發操作</a></li>
 <li><a href="#waveforms-screenshots-reference-memory-and-storage">波形、截圖、Reference Memory 與儲存</a></li>
-<li><a href="#aggregate-projections">彙總投影</a></li>
 <li><a href="#system-diagnostics-workflows-and-host-functions">系統、診斷、工作流程與主機功能</a></li>
 <li><a href="#other-unsupported-feature-families">其他不支援的功能</a></li>
-<li><a href="#tek-post-command-status-boundary">Tek 命令後狀態邊界</a></li>
-<li><a href="#native-workflow-status">原生工作流程狀態</a></li>
-<li><a href="#manual-ambiguities-and-excluded-interpretations">手冊歧義與排除的解讀</a></li>
 <li><a href="#keysight-infiniivision-model-support">Keysight InfiniiVision 型號支援</a></li>
 <li><a href="#instrument-side-math-matrix">儀器端 Math 矩陣</a></li>
 </ul>
 <p><a id="canonical-physical-model-identity"></a></p>
 <h2 id="標準實體型號身分">標準實體型號身分</h2>
-<p>Scopes Tool 為已註冊的 Keysight InfiniiVision 與 Tektronix 型號提供廠商中立的
-Product API。標準實體型號 Registry 包含：</p>
+<p>Scopes Tool 支援以下已註冊的示波器型號。Simulate／Dry-run 可使用表列 Model ID；
+Live 操作以連接儀器的識別結果為準。</p>
 <table>
 <thead>
 <tr>
@@ -100,8 +94,6 @@ Product API。標準實體型號 Registry 包含：</p>
 <th>製造商</th>
 <th>Model</th>
 <th>Series</th>
-<th>Capability Profile ID</th>
-<th>Driver ID</th>
 </tr>
 </thead>
 <tbody>
@@ -110,65 +102,46 @@ Product API。標準實體型號 Registry 包含：</p>
 <td>Keysight Technologies</td>
 <td>DSOX2004A</td>
 <td>2000X</td>
-<td><code>keysight-infiniivision-2000x</code></td>
-<td><code>keysight-infiniivision</code></td>
 </tr>
 <tr>
 <td><code>keysight-dsox3024a</code></td>
 <td>Keysight Technologies</td>
 <td>DSOX3024A</td>
 <td>3000X</td>
-<td><code>keysight-infiniivision-3000x</code></td>
-<td><code>keysight-infiniivision</code></td>
 </tr>
 <tr>
 <td><code>keysight-dsox4024a</code></td>
 <td>Keysight Technologies</td>
 <td>DSOX4024A</td>
 <td>4000X</td>
-<td><code>keysight-infiniivision-4000x</code></td>
-<td><code>keysight-infiniivision</code></td>
 </tr>
 <tr>
 <td><code>keysight-dsox4034a</code></td>
 <td>Keysight Technologies</td>
 <td>DSOX4034A</td>
 <td>4000X</td>
-<td><code>keysight-infiniivision-4000x</code></td>
-<td><code>keysight-infiniivision</code></td>
 </tr>
 <tr>
 <td><code>tektronix-tbs2074</code></td>
 <td>Tektronix</td>
 <td>TBS2074</td>
 <td>TBS2000</td>
-<td><code>tektronix-tbs2074</code></td>
-<td><code>tektronix</code></td>
 </tr>
 <tr>
 <td><code>tektronix-tds2024b</code></td>
 <td>Tektronix</td>
 <td>TDS2024B</td>
 <td>TDS2000B</td>
-<td><code>tektronix-tds2024b</code></td>
-<td><code>tektronix</code></td>
 </tr>
 <tr>
 <td><code>tektronix-tbs1052b</code></td>
 <td>Tektronix</td>
 <td>TBS1052B</td>
 <td>TBS1000B</td>
-<td><code>tektronix-tbs1052b</code></td>
-<td><code>tektronix</code></td>
 </tr>
 </tbody>
 </table>
-<p>標準註冊識別實體型號；每個已註冊型號明確選擇其 Runtime Capability Profile。</p>
-<p>每個已註冊實體型號都有無硬體的一致性檢查，涵蓋廠商身分、能力查找與驅動選擇。
-啟用模擬器的型號亦使用模擬器身分解析。</p>
-<p>Core 依各實體型號註冊的 Driver ID 明確選擇驅動。已註冊的 Runtime Driver 為
-<code>keysight-infiniivision</code> 與 <code>tektronix</code>。Live 選擇依偵測 <code>*IDN?</code> 解析出的標準實體型號，
-規劃與預期身分不得覆蓋。未知廠商、實體型號，以及缺少或未註冊的 Driver ID 一律拒絕。</p>
+<p>預期型號不可覆蓋實際連接儀器的識別結果；未知或不相符的型號會被拒絕。</p>
 <p><a id="visa-backend-boundary"></a></p>
 <h2 id="visa-backend-邊界">VISA Backend 邊界</h2>
 <p>Product Live 支援精確取決於偵測到的實體型號、VISA Transport 與 Backend。
@@ -234,74 +207,6 @@ Product API。標準實體型號 Registry 包含：</p>
 明確指定 <code>@ivi</code> 歸類為自訂 Backend，請改用預設 System VISA 選擇器。</p>
 <p>能力、參數限制、已安裝選配與儀器原生狀態仍決定已開放連線內可用的操作。
 連線開放不會自動啟用依賴選配或其他不支援的命令。模擬與 Dry-run 不開啟實際 VISA Session。</p>
-<p><a id="contributor-validation-and-diagnostics"></a></p>
-<h3 id="貢獻者驗證與診斷">貢獻者驗證與診斷</h3>
-<p>下列 <code>@py</code> USB 連線僅限受控的 CLI Validation Mode，未開放 Product Live：
-<code>keysight-dsox2004a</code>、<code>keysight-dsox3024a</code>、<code>keysight-dsox4024a</code>、
-<code>keysight-dsox4034a</code>、<code>tektronix-tbs1052b</code>。
-Validation Mode 也允許三個已開放的 <code>@py</code> TCPIP 組合，但絕不覆蓋偵測型號、能力或安全要求。
-WebUI 與 Worker 不可啟用此模式。<code>identify</code> 與 <code>list-resources</code> 是連線診斷，並非 Product 授權。</p>
-<p>直接呼叫 Python <code>Oscilloscope.open()</code> 仍是低階 Session 介面，而非 Product 政策入口。
-Product CLI 與 Core 執行路徑在改變儀器的操作前執行此矩陣限制。</p>
-<p><a id="runtime-profiles"></a></p>
-<h2 id="runtime-profile">Runtime Profile</h2>
-<p>Core 將 Live <code>*IDN?</code> 的廠商與型號欄位解析為標準實體 Model ID，再使用註冊的
-Capability Profile ID。Dry-run 的 <code>--model</code> 使用標準實體 Model ID。
-已註冊的 Keysight 與 Tektronix 型號皆可模擬；模擬器的廠商／型號 IDN 欄位與能力
-來自相同 Registry 項目。</p>
-<table>
-<thead>
-<tr>
-<th>Profile ID</th>
-<th>Series</th>
-<th style="text-align: right;">註冊型號</th>
-<th>類比 Channel</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>keysight-infiniivision-2000x</code></td>
-<td>2000X</td>
-<td style="text-align: right;">DSOX2004A</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>keysight-infiniivision-3000x</code></td>
-<td>3000X</td>
-<td style="text-align: right;">DSOX3024A</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>keysight-infiniivision-4000x</code></td>
-<td>4000X</td>
-<td style="text-align: right;">DSOX4024A, DSOX4034A</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>tektronix-tbs2074</code></td>
-<td>TBS2000</td>
-<td style="text-align: right;">TBS2074</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>tektronix-tds2024b</code></td>
-<td>TDS2000B</td>
-<td style="text-align: right;">TDS2024B</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>tektronix-tbs1052b</code></td>
-<td>TBS1000B</td>
-<td style="text-align: right;">TBS1052B</td>
-<td>2</td>
-</tr>
-</tbody>
-</table>
-<p>僅與 DSO-X 或 MSO-X 系列相似的型號字串不足以選擇能力。
-未註冊名稱如 <code>DSOX4054A</code>，以及原始型號如 <code>DSOX4024A</code>，皆不可作為 <code>--model</code> 值。</p>
-<p>Live 執行的能力只來自實際 <code>*IDN?</code> 廠商與型號解析的標準實體身分，規劃身分不可覆蓋。
-Live Worker 將 <code>--model</code> 視為預期標準實體 Model ID；若與偵測身分不符，
-在命令專屬 SCPI 前即失敗。</p>
 <p><a id="capability-summary"></a></p>
 <h2 id="能力摘要">能力摘要</h2>
 <p>Tektronix Profile 僅允許下方型號支援章節記載的既有操作子集。三者皆支援 BYTE 波形擷取、
@@ -311,9 +216,7 @@ Setup／Reference／檔案儲存；TDS2024B 支援明確 BMP 截圖，TBS1052B �
 USBTMC 的明確 JPEG 截圖。TDS2024B 與 TBS1052B 不提供 Setup、Reference Memory
 或儀器端儲存公開操作。三者均不支援正規化的 <code>check-error</code>。
 Tek 工作流程狀態與 Keysight 正規化 System Error Queue 分開。</p>
-<p>Core 擴充邊界請見新增型號 (<code>docs/core/adding-a-model.md</code>)。Tektronix Dry-run 與有狀態模擬器
-對允許的操作使用 Tektronix 命令語法，但模擬不代表實機支援。
-這些 Profile 不提供訊號 Preset 或 System Error Queue 注入。</p>
+<p>模擬不能證明實機支援；這些型號也不提供訊號 Preset 或 System Error Queue 注入。</p>
 <p><a id="tektronix-model-support"></a></p>
 <h2 id="tektronix-型號支援">Tektronix 型號支援</h2>
 <p>已註冊的 Tektronix 型號使用既有 Scopes Tool 公開契約；本節記載個別型號的硬體邊界。
@@ -952,67 +855,6 @@ CH3+CH4、CH3-CH4、CH4-CH3、CH3</em>CH4；TBS1052B 僅 CH1/CH2。
 在 <code>finally</code> 還原圖片格式與暫時 10 秒逾時，並嘗試刪除暫存檔。不改工作目錄或擷取狀態。
 16-bit 傳輸中填補的 8-bit 資料，以及較大的原生 Record Length，均不授權 WORD 擷取或
 要求 5000/10000 點擷取。</p>
-<p><a id="aggregate-projections"></a></p>
-<h3 id="彙總投影">彙總投影</h3>
-<p>彙總跳過不支援的原子查詢，絕不只為探索支援就改變 Source/Display、Measurement Slot、
-Trigger Mode 或 Cursor Units。</p>
-<table>
-<thead>
-<tr>
-<th>彙總</th>
-<th>TBS2074 投影</th>
-<th>TDS2024B 投影</th>
-<th>TBS1052B 投影</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>channel-summary</code></td>
-<td>CH1–CH4 的 display、scale、offset、coupling、probe ratio、bandwidth limit、invert、label、probe skew、V/A units；range、impedance、vernier 不可用。</td>
-<td>display、scale、offset、coupling、probe ratio、bandwidth limit、invert、units；label、probe skew、range、impedance、vernier 不可用。</td>
-<td>同 TDS2024B，僅 CH1/CH2。</td>
-</tr>
-<tr>
-<td><code>live-data-snapshot</code> / <code>query_instrument_summary</code></td>
-<td>CH1–CH4 的 display/scale/offset/units、同上述 Delay Mode ON 前提的 timebase scale/position、trigger type/sweep、edge source/slope、依通道 Level 與已確認來源單位。</td>
-<td>通道 display/scale/offset/units、timebase scale/position、trigger type/sweep/source/slope；目前類比 Edge Source 的 MAIN:LEVEL 可作 Snapshot 資料，即使獨立指定通道 Level 不支援。</td>
-<td>同 TDS2024B，限兩通道。</td>
-</tr>
-<tr>
-<td><code>system-information-snapshot</code> / <code>query_acquisition_readouts</code></td>
-<td>Identity、sample rate、acquisition points、record length 可用：SUPPORTED。</td>
-<td>Identity、acquisition points、record length 可用；sample rate 不可用：PARTIAL AGGREGATE。</td>
-<td>同 TDS2024B：PARTIAL AGGREGATE。</td>
-</tr>
-<tr>
-<td><code>cursor-query</code></td>
-<td>僅時間來源的 Time 回讀投影原生 X 位置／差值；只有確認實體伏特的 SCREEN 回讀投影 Y 位置／差值。歧義軸為 null。百分比／Hz／dB／格／安培不是秒／伏特。非啟用或未確認軸與 dydx 不可用。</td>
-<td>啟用 VBARS 的秒位置／差值，或啟用 HBARS 的伏特位置／差值；另一軸／dydx 與 FFT／amp／未知單位欄位不可用。</td>
-<td>同 TDS2024B。</td>
-</tr>
-</tbody>
-</table>
-<p>三者的 <code>live-data-snapshot</code> 均為 PARTIAL AGGREGATE。每個註冊 Profile 明確宣告固定
-Realtime 擷取架構，不能僅從不支援 Segmented Memory 推論。
-擷取處理類型仍另以 <code>ACQuire:MODe</code> 回讀。未知欄位各自回退；Line 或 External 的
-Source-channel/Units/Analog-level 保持不可用，不填入虛構值。</p>
-<p>Cursor OFF 投影 null 位置／差值／dydx。TBS2074 使用 <code>CURSor:FUNCtion</code> 選擇第一代五值：
-<code>OFF</code>、<code>SCREEN</code>、<code>WAVEform</code>、<code>VBArs</code>、<code>HBArs</code>。操作者可明確要求 Function；
-未明確指定時保留依軸對應：僅 X 用 VBArs，僅 Y 用 HBArs，X 加 Y 用 SCREEN。
-<code>OFF</code> 與 <code>WAVEform</code> 只切換功能，不要求來源通道或位置；此介面的 <code>WAVEform</code> 無位置 Setter。
-<code>VBArs</code> 只接受 X，<code>HBArs</code> 只接受 Y，其餘組合在儀器寫入前拒絕。
-<code>CURSor:FUNCtion?</code> 在 WAVEform 或 VBArs 後可回傳 <code>TIME</code>，在 SCREEN 或 HBArs 後可回傳
-<code>SCREEN</code>。Query 回報原生值，不能由此確認的軸為 null；Configure 結果保留要求的 Function。
-不支援 <code>AMPLitude</code>。</p>
-<p>TBS2074 Setter 使用所選／顯示波形語義；來源選擇可啟用顯示並重設擷取，刻意不還原，
-否則會將游標改指其他來源。CH3/CH4 實體伏特 Y 驗證暫用波形傳輸來源檢查單位，
-在 <code>finally</code> 還原傳輸來源。B1 Setter 僅 X-only 時間或 Y-only 實體伏特，
-不支援混合軸或 auto-vertical。所有位置結果來自實際回讀，而非回傳輸入。
-Source/Units 規則依 TBS2000 第 64、67–73、77、161、191–201 頁及 B1 第 2-61 至 2-68 頁。</p>
-<p><code>measure-results</code> 刻意不納入 Nullable 投影。<code>MEASUrement?</code> 與逐槽位彙總查詢描述設定，
-不是公開 Result/Raw 契約要求的單一原生結果回應。Doctor 重用允許投影；Reference Label
-如上維持 Nullable。Hardcopy State 或 DVM/WGEN/Demo Query 等必要狀態結果，
-不會僅因外層允許 null 就變成部分彙總。</p>
 <p><a id="system-diagnostics-workflows-and-host-functions"></a></p>
 <h3 id="系統診斷工作流程與主機功能">系統、診斷、工作流程與主機功能</h3>
 <table>
@@ -1031,14 +873,14 @@ Source/Units 規則依 TBS2000 第 64、67–73、77、161、191–201 頁及 B1
 <td>PARTIAL AGGREGATE</td>
 <td>PARTIAL AGGREGATE</td>
 <td>PARTIAL AGGREGATE</td>
-<td>投影如上。</td>
+<td>部分欄位不可用，且不會修改不支援的設定。</td>
 </tr>
 <tr>
 <td><code>system-information-snapshot</code></td>
 <td>SUPPORTED</td>
 <td>PARTIAL AGGREGATE</td>
 <td>PARTIAL AGGREGATE</td>
-<td>擷取回讀投影如上。</td>
+<td>TBS2074 含 Sample Rate；其餘兩款可能不提供此欄位。</td>
 </tr>
 <tr>
 <td><code>system-status-byte</code>, <code>system-clear-status</code>, <code>system-opc</code>, <code>system-standard-event</code></td>
@@ -1190,64 +1032,6 @@ Dry-run 與模擬器輸出不代表 Live 支援。</p>
 </tr>
 </tbody>
 </table>
-<p><a id="tek-post-command-status-boundary"></a></p>
-<h3 id="tek-命令後狀態邊界">Tek 命令後狀態邊界</h3>
-<p>使用透明命令後狀態介面的普通 Tek 操作，會在業務回應完成後執行一次內部 <code>*ESR?</code>。
-只有 SESR 位元 5–2（CME、EXE、DDE、QYE）屬於操作錯誤；
-單獨 PON、URQ、RQC、OPC 不表示失敗。</p>
-<p>一般非量測後檢查不執行 <code>EVENT?</code>、<code>EVMsg?</code>、<code>ALLEv?</code>、<code>EVQty?</code>，不模擬正規化
-System Error Queue，也不填入頂層 <code>system_error</code>。非零 Error Mask 使用既有結構化錯誤路徑，
-保留 Raw SESR。因 <code>*ESR?</code> 為消耗式讀取，<code>system-standard-event</code> 恰好只讀要求的一次；
-<code>system-clear-status</code>、<code>system-status-byte</code>、<code>system-opc</code> 不額外隱含讀取 SESR。
-後檢查不是完成等待，也不會讓不支援操作變成支援。<code>capture</code> 原子操作使用此介面；
-<code>measure</code> 與組合流程使用下方原生工作流程檢查點，不再重複讀取原子 SESR。</p>
-<p><a id="native-workflow-status"></a></p>
-<h3 id="原生工作流程狀態">原生工作流程狀態</h3>
-<p>工作流程檢查點先讀 <code>DESE?</code>，要求啟用 Error Bits 2–5，再讀一次 <code>*ESR?</code>，
-並在下次 SESR 讀取前消耗 <code>ALLEv?</code>。不改 DESE、ESE、SRE。
-順序遵循手冊的消耗式 SESR/Event Cohort：後續 SESR 讀取可能丟棄前一批尚未讀取事件。
-見 TBS2000 第 206–209 頁及 B1 第 3 章。</p>
-<p>工作流程結果保留 <code>system_error: null</code>，以 <code>post_command_status</code> 呈現
-<code>tektronix-sesr</code> 來源、原始 SESR／事件回應、解碼事件／類別、完整性與消耗式讀取旗標。
-Sample 與 Sequence／Acquisition Step 使用相同表示法。Command、Execution、Device、Query
-Error Bits 會使檢查點失敗；僅資訊事件不會。設有 Error Bit 的警告，除下方量測例外外仍失敗。
-格式錯誤、Queue Overflow（350）及不完整狀態一律拒絕並阻止後續流程步驟。
-不可透過重試讀第二次 SESR 隱藏未讀或格式錯誤的事件批次。</p>
-<p>Immediate Measurement 只有在值有效且有限、SESR 除 Execution Bit 4 外無其他錯誤位元，
-且事件批次完整、僅含帶訊息的 540–549 量測警告時，才允許這些事件。
-值、Raw SESR、事件碼與警告訊息保留在既有量測狀態欄位。
-TYPE/SOURCE 與單位設定後的嚴格檢查點將先前工作與值查詢分開；還原另做嚴格檢查。
-規則適用於 measure、sweep、log、until、觸發量測迴圈、Sequence 量測步驟及 Smoke 量測。
-無效值、其他事件、混合錯誤及通訊失敗仍失敗。Tektronix Smoke 遇無效量測 Sentinel 也失敗；
-Keysight Smoke 將此列為警告的政策不變。Capture、Acquisition、Trigger、Cleanup
-檢查點保留其錯誤規則。</p>
-<p>Doctor 遇既存錯誤停止；其他流程依既有前置政策回報舊事件後繼續，不完整前置檢查一定失敗。
-Cleanup 在明確要求下清除狀態，再驗證完成與原生狀態。
-公開 <code>check-error</code>、<code>query_system_error</code>、<code>drain_system_errors</code>、
-<code>system-operation-status</code> 仍不支援。</p>
-<p><code>wait_for_current_trigger_completion</code> 觀察目前擷取，絕不 Arm；<code>single_wait</code> Arm 一次後
-委派等待。Triggered Workflow 組合一次 <code>single</code> 與目前擷取等待；
-Sequence <code>wait-trigger</code> 也不會默默再執行一次 <code>single</code>。</p>
-<p><a id="manual-ambiguities-and-excluded-interpretations"></a></p>
-<h3 id="手冊歧義與排除的解讀">手冊歧義與排除的解讀</h3>
-<p>保留下列參考，避免歧義錯誤擴張支援：</p>
-<ul>
-<li>TDS2000B/TBS1000B 手冊第 2-98 頁將 BMP 列入 TBS1000B <code>HARDCopy:FORMat</code> 語法並適用
-  USB-file/USBTMC；第 2-99 頁卻稱 BMP 非 TBS1000B。因此 TBS1052B BMP 截圖仍不支援，
-  需權威釐清。另一方面，第 2-98 至 2-99 頁明確記載 TBS1000B JPEG，
-  第 2-96 至 2-102 頁記載 <code>HARDCopy START</code> 與 USB Device Port 路由，
-  因此支援獨立 JPEG 路徑但不開放 BMP。<code>HARDCopy:FORMat?</code> 不是
-  <code>SAVE:IMAGE:FILEFORMAT</code> 回讀；舊型號儀器端儲存仍不在公開操作內。</li>
-<li>TBS2000 FFT 文件未建立公開原子結果所需 Full-span 換算或頻率參考（第 93–97 頁）。</li>
-<li>TBS2000 Cursor 文件提及 Source 但無對應命令項目，因此 Selected-waveform Adapter
-  使用手冊 <code>SELect:CONTROl</code> 語義，包含選擇／顯示／擷取影響（第 67–73、161 頁）。</li>
-<li>部分 TBS2000 Trigger 範例與語法矛盾；僅允許獨立記載控制及明確 Runt 子集
-  （第 172、174、177–180 頁）。Pulse-width 只公開所選 less-than/greater-than Threshold，
-  不公開保留的獨立 Threshold 或 Range。</li>
-<li>TBS2000 量測彙總範例顯示 Statistics/Indicator 欄位但未定義對應控制，
-  不構成公開 Measurement-statistics 或 Marker 顯示功能。</li>
-</ul>
-<p>本節歧義不授權新增公開操作、Enum、波形換算、檔案系統 Helper 或支援政策。</p>
 <p><a id="keysight-infiniivision-model-support"></a></p>
 <h2 id="keysight-infiniivision-型號支援">Keysight InfiniiVision 型號支援</h2>
 <p><a id="acquisition"></a></p>

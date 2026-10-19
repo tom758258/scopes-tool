@@ -38,9 +38,8 @@ def rewrite_links(content: str, source: Path) -> str:
             if link.fragment:
                 href += "#" + link.fragment
             return f'<a href="{html.escape(href, quote=True)}">{label}</a>'
-        # Engineering documents remain in the repository, outside offline Help.
-        relative = target.relative_to(REPO_ROOT).as_posix()
-        return f'{label} (<code>{html.escape(relative)}</code>)'
+        # Do not expose repository-only paths to installed Help readers.
+        raise ValueError(f"Offline Help link is not bundled: {source.relative_to(REPO_ROOT)} -> {link.path}")
 
     return re.sub(r'<a href="([^"]+)">(.*?)</a>', replace, content, flags=re.DOTALL)
 

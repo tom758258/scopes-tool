@@ -290,8 +290,10 @@ switch. The switch is not a general `--force`: it is restricted to `@py`,
 checks the operator-provided USB or TCPIP/LAN resource and the connected
 `*IDN?` model, and preserves existing model, capability, and cleanup guards.
 Worker and WebUI requests cannot select Validation Mode. Validation does not
-promote Product support. The validation-only USB scopes and Product connection
-matrix are documented in [Supported Models](../core/supported-models.md).
+promote Product support. The validation-only `@py` USB targets are
+`keysight-dsox2004a`, `keysight-dsox3024a`, `keysight-dsox4024a`,
+`keysight-dsox4034a`, and `tektronix-tbs1052b`. The Product connection
+matrix remains in [Supported Models](../core/supported-models.md).
 Direct Python calls to `Oscilloscope.open()` are not Product policy-gated.
 
 ## Agent-safe Automation

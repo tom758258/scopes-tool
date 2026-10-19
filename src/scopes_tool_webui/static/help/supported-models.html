@@ -63,35 +63,28 @@
   <main class="help-content" id="help-content">
 <h1 id="supported-models">Supported Models</h1>
 <p><a href="supported-models.zh-TW.html">繁體中文</a></p>
-<p>This document records public model support decisions for the Core runtime.
-Command-level behavior remains documented in <code>../cli/README.md</code> and
-<code>../contracts/</code>.</p>
-<p>Capability profiles describe the runtime-supported and guarded feature surface.
-They do not detect instrument options or licenses, and live instrument errors
-remain authoritative for unavailable hardware or options.</p>
+<p>This guide lists the models, connections, operations, and limits available to
+Scopes Tool users. Capability profiles describe possible operations but do not
+confirm installed instrument options or licenses; instrument errors remain
+authoritative for unavailable features.</p>
 <h2 id="contents">Contents</h2>
 <ul>
 <li><a href="#canonical-physical-model-identity">Canonical Physical Model Identity</a></li>
 <li><a href="#visa-backend-boundary">VISA Backend Boundary</a></li>
-<li><a href="#runtime-profiles">Runtime Profiles</a></li>
 <li><a href="#capability-summary">Capability Summary</a></li>
 <li><a href="#tektronix-model-support">Tektronix Model Support</a></li>
 <li><a href="#acquisition-timebase-and-channels">Acquisition, timebase, and channels</a></li>
 <li><a href="#display-cursors-math-and-measurements">Display, cursors, Math, and measurements</a></li>
 <li><a href="#trigger-operations">Trigger operations</a></li>
 <li><a href="#waveforms-screenshots-reference-memory-and-storage">Waveforms, screenshots, reference memory, and storage</a></li>
-<li><a href="#aggregate-projections">Aggregate projections</a></li>
 <li><a href="#system-diagnostics-workflows-and-host-functions">System, diagnostics, workflows, and host functions</a></li>
 <li><a href="#other-unsupported-feature-families">Other unsupported feature families</a></li>
-<li><a href="#tek-post-command-status-boundary">Tek post-command status boundary</a></li>
-<li><a href="#native-workflow-status">Native workflow status</a></li>
-<li><a href="#manual-ambiguities-and-excluded-interpretations">Manual ambiguities and excluded interpretations</a></li>
 <li><a href="#keysight-infiniivision-model-support">Keysight InfiniiVision Model Support</a></li>
 <li><a href="#instrument-side-math-matrix">Instrument-Side Math Matrix</a></li>
 </ul>
 <h2 id="canonical-physical-model-identity">Canonical Physical Model Identity</h2>
-<p>Scopes Tool exposes a vendor-neutral product API for the registered Keysight
-InfiniiVision and Tektronix models. The canonical physical model registry contains:</p>
+<p>Scopes Tool supports these registered oscilloscope models. Use the model ID
+in Simulate or Dry-run; Live operation follows the connected instrument identity.</p>
 <table>
 <thead>
 <tr>
@@ -99,8 +92,6 @@ InfiniiVision and Tektronix models. The canonical physical model registry contai
 <th>Manufacturer</th>
 <th>Model</th>
 <th>Series</th>
-<th>Capability profile ID</th>
-<th>Driver ID</th>
 </tr>
 </thead>
 <tbody>
@@ -109,70 +100,47 @@ InfiniiVision and Tektronix models. The canonical physical model registry contai
 <td>Keysight Technologies</td>
 <td>DSOX2004A</td>
 <td>2000X</td>
-<td><code>keysight-infiniivision-2000x</code></td>
-<td><code>keysight-infiniivision</code></td>
 </tr>
 <tr>
 <td><code>keysight-dsox3024a</code></td>
 <td>Keysight Technologies</td>
 <td>DSOX3024A</td>
 <td>3000X</td>
-<td><code>keysight-infiniivision-3000x</code></td>
-<td><code>keysight-infiniivision</code></td>
 </tr>
 <tr>
 <td><code>keysight-dsox4024a</code></td>
 <td>Keysight Technologies</td>
 <td>DSOX4024A</td>
 <td>4000X</td>
-<td><code>keysight-infiniivision-4000x</code></td>
-<td><code>keysight-infiniivision</code></td>
 </tr>
 <tr>
 <td><code>keysight-dsox4034a</code></td>
 <td>Keysight Technologies</td>
 <td>DSOX4034A</td>
 <td>4000X</td>
-<td><code>keysight-infiniivision-4000x</code></td>
-<td><code>keysight-infiniivision</code></td>
 </tr>
 <tr>
 <td><code>tektronix-tbs2074</code></td>
 <td>Tektronix</td>
 <td>TBS2074</td>
 <td>TBS2000</td>
-<td><code>tektronix-tbs2074</code></td>
-<td><code>tektronix</code></td>
 </tr>
 <tr>
 <td><code>tektronix-tds2024b</code></td>
 <td>Tektronix</td>
 <td>TDS2024B</td>
 <td>TDS2000B</td>
-<td><code>tektronix-tds2024b</code></td>
-<td><code>tektronix</code></td>
 </tr>
 <tr>
 <td><code>tektronix-tbs1052b</code></td>
 <td>Tektronix</td>
 <td>TBS1052B</td>
 <td>TBS1000B</td>
-<td><code>tektronix-tbs1052b</code></td>
-<td><code>tektronix</code></td>
 </tr>
 </tbody>
 </table>
-<p>Canonical registration identifies a physical model. Each registered model
-explicitly selects its runtime capability profile.</p>
-<p>Every registered physical model is protected by a hardware-free consistency
-gate covering vendor identity, capability lookup, and driver selection.
-Simulator identity resolution applies to simulator-enabled models.</p>
-<p>Core has an explicit driver-selection boundary keyed by each physical model's
-registered driver ID. The registered runtime drivers are
-<code>keysight-infiniivision</code> and <code>tektronix</code>. Live selection follows the canonical
-physical model resolved from the detected <code>*IDN?</code> identity; planning and
-expected identities cannot override it. Unknown vendors, physical models,
-or missing or unregistered driver IDs fail closed.</p>
+<p>An expected model never overrides the model identified from the connected
+instrument. Unknown or mismatched models are rejected.</p>
 <h2 id="visa-backend-boundary">VISA Backend Boundary</h2>
 <p>Product Live support is exact by detected physical model, VISA transport, and
 backend. The connected instrument's <code>*IDN?</code> identity is authoritative; neither
@@ -243,81 +211,6 @@ continue to determine which operations are available inside an approved
 connection. An open connection does not automatically enable an option-dependent
 or otherwise unsupported command. Simulation and dry-run do not open real
 VISA sessions.</p>
-<h3 id="contributor-validation-and-diagnostics">Contributor Validation and Diagnostics</h3>
-<p>The following <code>@py</code> USB connections are restricted to controlled CLI-only
-Validation Mode; they are not Product-open: <code>keysight-dsox2004a</code>,
-<code>keysight-dsox3024a</code>, <code>keysight-dsox4024a</code>,
-<code>keysight-dsox4034a</code>, and <code>tektronix-tbs1052b</code>.
-Validation Mode also permits the three already-open <code>@py</code> TCPIP pairs, but
-never overrides the detected model, capabilities, or safety requirements.
-WebUI and Worker cannot enable this mode. <code>identify</code> and <code>list-resources</code>
-are connection diagnostics, not Product authorization.</p>
-<p>Direct Python calls to <code>Oscilloscope.open()</code> remain a low-level session
-interface rather than a Product-policy entry point. Product CLI and Core-run
-paths enforce the matrix before instrument-changing operations.</p>
-<h2 id="runtime-profiles">Runtime Profiles</h2>
-<p>Core resolves live <code>*IDN?</code> manufacturer and model fields to a canonical
-physical model ID, then follows the registered capability profile ID. Dry-run
-<code>--model</code> values are canonical physical model IDs. Simulation is available for
-the registered Keysight and Tektronix models. The simulator's
-manufacturer/model IDN fields and capabilities are derived from that same
-registry entry.</p>
-<table>
-<thead>
-<tr>
-<th>Profile ID</th>
-<th>Series</th>
-<th style="text-align: right;">Registered models</th>
-<th>Analog channels</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>keysight-infiniivision-2000x</code></td>
-<td>2000X</td>
-<td style="text-align: right;">DSOX2004A</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>keysight-infiniivision-3000x</code></td>
-<td>3000X</td>
-<td style="text-align: right;">DSOX3024A</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>keysight-infiniivision-4000x</code></td>
-<td>4000X</td>
-<td style="text-align: right;">DSOX4024A, DSOX4034A</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>tektronix-tbs2074</code></td>
-<td>TBS2000</td>
-<td style="text-align: right;">TBS2074</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>tektronix-tds2024b</code></td>
-<td>TDS2000B</td>
-<td style="text-align: right;">TDS2024B</td>
-<td>4</td>
-</tr>
-<tr>
-<td><code>tektronix-tbs1052b</code></td>
-<td>TBS1000B</td>
-<td style="text-align: right;">TBS1052B</td>
-<td>2</td>
-</tr>
-</tbody>
-</table>
-<p>A model string that merely resembles a DSO-X or MSO-X series model is not
-sufficient for capability selection. Unregistered names such as <code>DSOX4054A</code>
-and raw model names such as <code>DSOX4024A</code> are rejected as <code>--model</code> values.</p>
-<p>In live execution, capabilities come only from the canonical physical identity
-resolved from the actual <code>*IDN?</code> manufacturer and model fields. A planning
-identity cannot override that result. Live workers treat <code>--model</code> as an
-expected canonical physical model ID and fail before command-specific SCPI
-when it does not match the detected identity.</p>
 <h2 id="capability-summary">Capability Summary</h2>
 <p>The Tektronix profiles admit only the existing operation subsets documented
 in the Tektronix model-support section below. All three support BYTE waveform
@@ -331,11 +224,8 @@ screenshots over USBTMC. Setup, reference memory, and instrument-side storage
 are not public operations on TDS2024B or TBS1052B. Normalized <code>check-error</code> is
 unsupported on all three. Tek workflow status remains separate from the
 normalized Keysight system-error queue.</p>
-<p>See Adding a model (<code>docs/core/adding-a-model.md</code>) for the Core extension boundary.
-Tektronix dry-run and the stateful simulator use the Tektronix command dialect
-for admitted operations, but simulation does not establish live hardware
-support. Signal presets and system-error queue injection remain unavailable for
-these profiles.</p>
+<p>Simulation does not establish live hardware support. Signal presets and
+system-error queue injection remain unavailable for these models.</p>
 <h2 id="tektronix-model-support">Tektronix Model Support</h2>
 <p>The registered Tektronix models use the existing public Scopes Tool contracts; this
 section records the model-specific hardware boundary. A driver method, simulator
@@ -991,79 +881,6 @@ format and the temporary 10-second timeout in <code>finally</code>, and attempts
 file deletion. It does not change working directory or acquisition state.
 Neither padded 8-bit data in 16-bit transfers nor larger native record lengths
 authorize WORD capture or requested 5000/10000-point capture.</p>
-<h3 id="aggregate-projections">Aggregate projections</h3>
-<p>Aggregates skip unsupported atomic queries and never mutate source/display,
-measurement slots, trigger mode, or cursor units merely to discover support.</p>
-<table>
-<thead>
-<tr>
-<th>Aggregate</th>
-<th>TBS2074 projection</th>
-<th>TDS2024B projection</th>
-<th>TBS1052B projection</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>channel-summary</code></td>
-<td>display, scale, offset, coupling, probe ratio, bandwidth limit, invert, label, probe skew, and V/A units on CH1-CH4. Range, impedance, and vernier unavailable.</td>
-<td>display, scale, offset, coupling, probe ratio, bandwidth limit, invert, units. Label, probe skew, range, impedance and vernier unavailable.</td>
-<td>Same as TDS2024B, CH1/CH2 only.</td>
-</tr>
-<tr>
-<td><code>live-data-snapshot</code> / <code>query_instrument_summary</code></td>
-<td>Channel display/scale/offset/units on CH1-CH4, timebase scale/position under the same Delay Mode ON prerequisite above, trigger type/sweep, edge source/slope, channel-qualified level and established source units.</td>
-<td>Channel display/scale/offset/units, timebase scale/position, trigger type/sweep/source/slope. Current analog edge-source MAIN:LEVEL is valid snapshot data even though standalone named-channel level is unsupported.</td>
-<td>Same as TDS2024B, bounded to two channels.</td>
-</tr>
-<tr>
-<td><code>system-information-snapshot</code> / <code>query_acquisition_readouts</code></td>
-<td>Identity, sample rate, acquisition points and record length available: SUPPORTED.</td>
-<td>Identity, acquisition points and record length available; sample rate unavailable: PARTIAL AGGREGATE.</td>
-<td>Same as TDS2024B: PARTIAL AGGREGATE.</td>
-</tr>
-<tr>
-<td><code>cursor-query</code></td>
-<td>Native X positions/delta only for time readback with a time-based source; Y positions/delta only for SCREEN readback when physical volts are established. Ambiguous axes remain null. Percent/Hz/dB/divisions/amps are not seconds/volts. Inactive/unestablished axes and dydx unavailable.</td>
-<td>Active VBARS seconds positions/delta or active HBARS volts positions/delta. Other axis/dydx and FFT/amp/unknown-unit fields unavailable.</td>
-<td>Same as TDS2024B.</td>
-</tr>
-</tbody>
-</table>
-<p><code>live-data-snapshot</code> is PARTIAL AGGREGATE on all three. Each registered profile
-declares fixed realtime acquisition architecture; absence of segmented-memory
-support alone would not establish that. Acquisition processing type remains a
-separate <code>ACQuire:MODe</code> readback. Unknown fields fall back independently; line
-or external source-channel/units/analog-level fields remain unavailable rather
-than receiving artificial values.</p>
-<p>Cursor OFF projects null positions/deltas/dydx. TBS2074 selects its cursor
-function through <code>CURSor:FUNCtion</code> using the five first-generation values:
-<code>OFF</code>, <code>SCREEN</code>, <code>WAVEform</code>, <code>VBArs</code>, and <code>HBArs</code>. The operator may request a
-function explicitly; without an explicit request the requested axes keep the
-previous mapping, where X only uses VBArs, Y only uses HBArs, and X plus Y uses
-SCREEN. <code>OFF</code> and <code>WAVEform</code> only switch the function and require no source
-channel and no positions; <code>WAVEform</code> has no position setter in this surface.
-<code>VBArs</code> accepts only X positions and <code>HBArs</code> only Y positions; every other
-combination is rejected before any instrument write. <code>CURSor:FUNCtion?</code> can
-return <code>TIME</code> after <code>WAVEform</code> or <code>VBArs</code>, and <code>SCREEN</code> after <code>SCREEN</code> or
-<code>HBArs</code>. Query reports the native value and leaves axes that cannot be
-established from it null; configure results retain the requested function.
-<code>AMPLitude</code> remains unsupported.</p>
-<p>TBS2074 setters use the selected/displayed waveform semantics; source selection
-can enable display and reset acquisition and is intentionally not restored
-because that would retarget the cursors. Physical-volts Y validation on CH3/CH4
-temporarily uses the waveform transfer source only to verify units and restores
-that transfer source in <code>finally</code>. B1 setters are X-only time or Y-only
-physical-volts; mixed-axis writes and auto-vertical remain unsupported. All
-returned positions are actual readbacks rather than echoed input. The
-source/unit rules follow the documented definitions in TBS2000 pp. 64, 67-73, 77, 161,
-191-201 and B1 pp. 2-61-2-68.</p>
-<p><code>measure-results</code> is intentionally excluded from nullable projections.
-<code>MEASUrement?</code> and per-slot aggregate queries describe settings, not the one
-native results response required by the public result/raw contract. Doctor
-reuses the admitted projections; reference labels remain nullable as described
-above. Required-state results such as hardcopy state or DVM/WGEN/Demo queries do
-not become partial aggregates merely because a surrounding result allows nulls.</p>
 <h3 id="system-diagnostics-workflows-and-host-functions">System, diagnostics, workflows, and host functions</h3>
 <table>
 <thead>
@@ -1081,14 +898,14 @@ not become partial aggregates merely because a surrounding result allows nulls.<
 <td>PARTIAL AGGREGATE</td>
 <td>PARTIAL AGGREGATE</td>
 <td>PARTIAL AGGREGATE</td>
-<td>Projection above.</td>
+<td>Some fields are unavailable; unsupported settings are not changed.</td>
 </tr>
 <tr>
 <td><code>system-information-snapshot</code></td>
 <td>SUPPORTED</td>
 <td>PARTIAL AGGREGATE</td>
 <td>PARTIAL AGGREGATE</td>
-<td>Acquisition-readout projection above.</td>
+<td>TBS2074 includes sample rate; the other two models may omit it.</td>
 </tr>
 <tr>
 <td><code>system-status-byte</code>, <code>system-clear-status</code>, <code>system-opc</code>, <code>system-standard-event</code></td>
@@ -1241,88 +1058,6 @@ settings/results exist.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="tek-post-command-status-boundary">Tek post-command status boundary</h3>
-<p>Ordinary supported Tek operations that use the transparent post-command status
-seam perform one internal <code>*ESR?</code> after the business response completes. Only
-SESR bits 5-2 (CME, EXE, DDE, QYE) are operation errors. PON, URQ, RQC, and OPC
-alone do not indicate operation failure.</p>
-<p>Ordinary non-measurement post-checks do not issue <code>EVENT?</code>, <code>EVMsg?</code>, <code>ALLEv?</code>,
-or <code>EVQty?</code>, do not emulate a normalized system-error queue, and do not populate top-level
-<code>system_error</code>. A nonzero error mask follows the existing structured error path
-and retains raw SESR. Because <code>*ESR?</code> is destructive, <code>system-standard-event</code>
-gets exactly its requested read; <code>system-clear-status</code>, <code>system-status-byte</code>,
-and <code>system-opc</code> do not receive an extra hidden SESR read. Post-checking is not
-a completion wait and never makes an unsupported operation supported. The
-<code>capture</code> primitive uses this post-command seam; <code>measure</code> and composed
-workflows use the native workflow checkpoint below without a second primitive
-SESR read.</p>
-<h3 id="native-workflow-status">Native workflow status</h3>
-<p>Workflow checkpoints first read <code>DESE?</code> and require error bits 2-5 to be
-enabled. They then consume one <code>*ESR?</code> followed by <code>ALLEv?</code> before any later
-SESR read. They do not modify DESE, ESE, or SRE. This ordering follows the
-documented destructive SESR/event cohort: a later SESR read can discard unread
-events from the preceding cohort. See TBS2000 pp. 206-209 and B1 chapter 3.</p>
-<p>Workflow results keep <code>system_error: null</code> and expose <code>post_command_status</code> with
-source <code>tektronix-sesr</code>, raw SESR/event responses, decoded events/categories,
-completeness, and destructive-read flags. Samples and sequence/acquisition steps
-use the same representation. Command, execution, device, and query error bits
-fail the checkpoint; informational events alone do not. A warning that sets an
-error bit still fails outside the measurement exception below. Malformed
-responses, queue overflow (350), and incomplete status fail closed and prevent
-further workflow steps. No retry may consume a
-second SESR to hide an unread or malformed cohort.</p>
-<p>Immediate measurements permit events 540–549 only when the value is valid and
-finite, the SESR has no other error bits besides Execution bit 4, and the event
-cohort is complete and contains only these measurement warnings with messages.
-The value, raw SESR, event codes and warning messages remain in the existing
-measurement status fields. A strict checkpoint after TYPE/SOURCE and units
-configuration separates earlier work from the value query; restoration receives
-a separate strict checkpoint. This rule applies to measure, sweep, log, until,
-triggered measurement loops, sequence measurement steps and Smoke measurements.
-Invalid values, other events, mixed errors and communication failures still fail.
-Tektronix Smoke also fails on invalid measurement sentinels; the Keysight Smoke
-policy of reporting invalid sentinels as warnings is unchanged.
-Capture, acquisition, trigger and cleanup checkpoints retain their error rules.</p>
-<p>Doctor stops on preexisting errors. Other workflows report stale events before
-proceeding according to the existing preflight policy; an incomplete preflight
-always fails. Cleanup explicitly clears status as a requested action and then
-verifies completion and native status. Public <code>check-error</code>,
-<code>query_system_error</code>, <code>drain_system_errors</code>, and <code>system-operation-status</code>
-remain unsupported.</p>
-<p><code>wait_for_current_trigger_completion</code> observes the current acquisition and
-never arms it. <code>single_wait</code> arms once and delegates to that wait. Triggered
-workflows compose one <code>single</code> with one current-acquisition wait; sequence
-<code>wait-trigger</code> likewise does not silently issue another <code>single</code>.</p>
-<h3 id="manual-ambiguities-and-excluded-interpretations">Manual ambiguities and excluded interpretations</h3>
-<p>These references are retained because the ambiguity could otherwise expand
-support incorrectly:</p>
-<ul>
-<li>TDS2000B/TBS1000B manual p. 2-98 includes BMP in TBS1000B
-  <code>HARDCopy:FORMat</code> syntax and applies it to USB-file/USBTMC output, while
-  p. 2-99 describes BMP as non-TBS1000B. TBS1052B BMP screenshot therefore
-  remains unsupported pending authoritative resolution. Separately,
-  JPEG is explicitly documented for TBS1000B on pp. 2-98 to 2-99,
-  with <code>HARDCopy START</code> output and USB Device port routing on pp. 2-96 to
-  2-102. This supports the separate JPEG path without admitting BMP.
-  <code>HARDCopy:FORMat?</code> is not a readback of <code>SAVE:IMAGE:FILEFORMAT</code>;
-  legacy instrument-side storage remains outside the public operation set.</li>
-<li>TBS2000 FFT documentation does not establish the full-span conversion or
-  frequency reference needed by the public atomic result (pp. 93-97).</li>
-<li>TBS2000 cursor documentation refers to a source without a corresponding
-  command entry. The selected-waveform adapter therefore uses documented
-  <code>SELect:CONTROl</code> semantics, including selection/display/acquisition effects
-  (pp. 67-73, 161).</li>
-<li>Some TBS2000 trigger examples contradict the command syntax. Only
-  independently documented trigger controls and the explicit runt subset are
-  admitted (pp. 172, 174, 177-180); pulse-width exposes only its selected
-  less-than/greater-than threshold, not retained independent thresholds or
-  range.</li>
-<li>TBS2000 measurement aggregate examples show statistics/indicator fields
-  without defined matching controls. They do not establish the public
-  measurement-statistics or marker-visibility features.</li>
-</ul>
-<p>No ambiguity in this section authorizes new public operations, enums, waveform
-conversions, filesystem helpers, or support decisions.</p>
 <h2 id="keysight-infiniivision-model-support">Keysight InfiniiVision Model Support</h2>
 <h3 id="acquisition">Acquisition</h3>
 <p>The 2000X, 3000X, and 4000X profiles support <code>normal</code>, <code>peak</code>, <code>average</code>, and
