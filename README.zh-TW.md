@@ -240,17 +240,21 @@ VISA Resource。
 
 ## 文件
 
-- CLI 使用指南：[English](docs/cli/USER_GUIDE.md) / [繁體中文](docs/cli/USER_GUIDE.zh-TW.md)
-- WebUI/Desktop 使用指南：[English](docs/webui/USER_GUIDE.md) / [繁體中文](docs/webui/USER_GUIDE.zh-TW.md)
-- Core README：[English](docs/core/README.md) / [繁體中文](docs/core/README.zh-TW.md)
-- CLI README：[English](docs/cli/README.md) / [繁體中文](docs/cli/README.zh-TW.md)
-- WebUI README：[English](docs/webui/README.md) / [繁體中文](docs/webui/README.zh-TW.md)
-- 支援型號：[English](docs/core/supported-models.md) / [繁體中文](docs/core/supported-models.zh-TW.md)
-- [Core 整合](docs/core/integration.md)與 [CLI 整合](docs/cli/cli-integration.md)
-- [公開合約](docs/contracts/)，包含 [CLI JSONL](docs/contracts/scopes-cli-jsonl-contract.md)、
-  [Worker](docs/contracts/scopes-worker-contract.md)及[工作流程協調](docs/contracts/scopes-orchestrator-workflows.md)
-- [專案結構](docs/architecture/monorepo-layout.md)、
-  [WebUI 修改規範](docs/webui/web-ui-change-rules.md)及[說明文件維護](docs/help/README.md)
+- [Core README](docs/core/README.zh-TW.md)
+- [支援型號](docs/core/supported-models.zh-TW.md)
+- [CLI 使用指南](docs/cli/USER_GUIDE.zh-TW.md)
+- [CLI README](docs/cli/README.zh-TW.md)
+- [WebUI README](docs/webui/README.zh-TW.md)
+- [WebUI／Desktop 使用指南](docs/webui/USER_GUIDE.zh-TW.md)
+- [Core 整合](docs/core/integration.md)
+- [CLI 整合](docs/cli/cli-integration.md)
+- [公開合約](docs/contracts/)
+- [Scopes CLI JSONL 合約](docs/contracts/scopes-cli-jsonl-contract.md)
+- [Scopes Worker 合約](docs/contracts/scopes-worker-contract.md)
+- [工作流程協調](docs/contracts/scopes-orchestrator-workflows.md)
+- [專案結構](docs/architecture/monorepo-layout.md)
+- [WebUI 修改規範](docs/webui/web-ui-change-rules.md)
+- [說明文件維護](docs/help/README.md)
 
 ## 參與貢獻
 
