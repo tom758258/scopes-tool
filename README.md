@@ -262,17 +262,21 @@ user-supplied VISA resource.
 
 ## Documentation
 
-- CLI User Guide: [English](docs/cli/USER_GUIDE.md) / [繁體中文](docs/cli/USER_GUIDE.zh-TW.md)
-- WebUI/Desktop User Guide: [English](docs/webui/USER_GUIDE.md) / [繁體中文](docs/webui/USER_GUIDE.zh-TW.md)
-- Core README: [English](docs/core/README.md) / [繁體中文](docs/core/README.zh-TW.md)
-- CLI README: [English](docs/cli/README.md) / [繁體中文](docs/cli/README.zh-TW.md)
-- WebUI README: [English](docs/webui/README.md) / [繁體中文](docs/webui/README.zh-TW.md)
-- Supported Models: [English](docs/core/supported-models.md) / [繁體中文](docs/core/supported-models.zh-TW.md)
-- [Core Integration](docs/core/integration.md) and [CLI Integration](docs/cli/cli-integration.md)
-- [Public Contracts](docs/contracts/), including [CLI JSONL](docs/contracts/scopes-cli-jsonl-contract.md),
-  [Worker](docs/contracts/scopes-worker-contract.md), and [Workflow orchestration](docs/contracts/scopes-orchestrator-workflows.md)
-- [Repository Layout](docs/architecture/monorepo-layout.md),
-  [WebUI Change Rules](docs/webui/web-ui-change-rules.md), and [Help Maintenance](docs/help/README.md)
+- [Core README](docs/core/README.md)
+- [Supported Models](docs/core/supported-models.md)
+- [CLI User Guide](docs/cli/USER_GUIDE.md)
+- [CLI README](docs/cli/README.md)
+- [WebUI README](docs/webui/README.md)
+- [WebUI / Desktop User Guide](docs/webui/USER_GUIDE.md)
+- [Core Integration](docs/core/integration.md)
+- [CLI Integration](docs/cli/cli-integration.md)
+- [Public Contracts](docs/contracts/)
+- [Scopes CLI JSONL Contract](docs/contracts/scopes-cli-jsonl-contract.md)
+- [Scopes Worker Contract](docs/contracts/scopes-worker-contract.md)
+- [Workflow Orchestration](docs/contracts/scopes-orchestrator-workflows.md)
+- [Repository Layout](docs/architecture/monorepo-layout.md)
+- [WebUI Change Rules](docs/webui/web-ui-change-rules.md)
+- [Help Maintenance](docs/help/README.md)
 
 ## Contributing
 
