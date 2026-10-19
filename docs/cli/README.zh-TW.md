@@ -186,7 +186,10 @@ Product 在開 VISA 前查 Transport，在業務 SCPI 前用真實 `*IDN?`，型
 
 針對已註冊、僅供驗證的 `@py` USB 連線或已核准的 `@py` TCPIP 組合，維護中的 `scripts/live-*.ps1` Wrapper 選擇 `@py` 並傳入隱藏 `--validation-allow-pending-live-support` CLI Switch。
 此 Switch 不是通用 `--force`：限 `@py`，驗證操作人員提供的 USB/TCPIP/LAN Resource 與連接儀器的 `*IDN?` Model，保留既有 Model、Capability 與 Cleanup Guard。
-Worker/WebUI 不能選 Validation Mode；驗證不提升 Product Support。USB 驗證子集與 Product Matrix 見 [Supported Models](../core/supported-models.md)。
+Worker/WebUI 不能選 Validation Mode；驗證不提升 Product Support。
+僅供驗證的 `@py` USB 型號為 `keysight-dsox2004a`、`keysight-dsox3024a`、
+`keysight-dsox4024a`、`keysight-dsox4034a`、`tektronix-tbs1052b`。
+Product 連線矩陣仍以[支援型號](../core/supported-models.zh-TW.md)為準。
 直接呼叫 Python `Oscilloscope.open()` 不受 Product Policy Gate 管理。
 
 <a id="agent-safe-automation"></a>

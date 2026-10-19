@@ -72,4 +72,4 @@ not establish live behavior. Live validation is explicit, bounded and uses only
 a user-supplied resource; its private evidence stays outside tracked public
 documentation. Maintain operator-facing model support and option limits in
 [supported models](supported-models.md), and detailed implementation rationale
-in [model implementation notes](model-implementation-notes.md).
+in [Core README](README.md#model-profiles-and-tektronix-implementation-boundaries).
