@@ -1,7 +1,7 @@
 export const en = {
   "device.visaBackend": "VISA backend",
-  "device.visaBackendHelp": "Live only. @py Product control is limited to supported TCPIP models; @py USB is not open.",
-    "supported_devices.pending": "Only the listed @py connections are Product-open; other @py connections remain unavailable.",
+  "device.visaBackendHelp": "Live only. PyVISA-py Product control is limited to supported TCPIP models; PyVISA-py USB is not open.",
+    "supported_devices.pending": "Only the listed PyVISA-py connections are Product-open; other PyVISA-py connections remain unavailable.",
   "accessibility.switch_language_to_zh_tw": "Switch language to Traditional Chinese",
   "accessibility.switch_language_to_en": "Switch language to English",
   "page.appearance": "Appearance",

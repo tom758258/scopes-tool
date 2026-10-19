@@ -1,7 +1,7 @@
 export const zhTW = {
   "device.visaBackend": "VISA 後端",
-  "device.visaBackendHelp": "僅限 Live。@py 正式控制只開放列出的 TCPIP 型號；@py USB 尚未開放。",
-    "supported_devices.pending": "只有列出的 @py 連線正式開放，其餘 @py 連線不提供正式操作。",
+  "device.visaBackendHelp": "僅限 Live。PyVISA-py 正式控制只開放列出的 TCPIP 型號；PyVISA-py USB 尚未開放。",
+    "supported_devices.pending": "只有列出的 PyVISA-py 連線正式開放，其餘 PyVISA-py 連線不提供正式操作。",
   "accessibility.switch_language_to_zh_tw": "切換語言為繁體中文",
   "accessibility.switch_language_to_en": "切換語言為英文",
   "page.appearance": "外觀",
