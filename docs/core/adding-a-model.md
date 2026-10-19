@@ -70,5 +70,6 @@ runner must fail as stale instead of reporting N/A.
 Follow [Testing Guidelines](../testing-guidelines.md). Hardware-free results do
 not establish live behavior. Live validation is explicit, bounded and uses only
 a user-supplied resource; its private evidence stays outside tracked public
-documentation. Maintain all durable model behavior and option limits in
-[supported models](supported-models.md).
+documentation. Maintain operator-facing model support and option limits in
+[supported models](supported-models.md), and detailed implementation rationale
+in [model implementation notes](model-implementation-notes.md).

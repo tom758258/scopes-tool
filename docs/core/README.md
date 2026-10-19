@@ -85,7 +85,9 @@ cannot select Validation Mode. Identification and resource discovery remain
 diagnostics; dry-run and simulation do not open a live VISA session.
 Direct Python use of `Oscilloscope.open()` is a low-level session interface,
 not a Product support entry point. See [Supported Models](supported-models.md)
-for the exact connections and model-specific feature limits.
+for the exact connections and model-specific feature limits. Engineering status,
+projection, and manual-ambiguity details are in
+[Model implementation notes](model-implementation-notes.md).
 
 ## Feature Areas
 

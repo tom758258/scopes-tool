@@ -69,7 +69,7 @@ System VISA USB is Product-open for all seven registered models. System VISA
 TCPIP and `@py` TCPIP are open only for DSOX4024A, DSOX4034A, and TBS2074.
 `@py` USB is not Product-open. Bluetooth, GPIB, ASRL, and custom backends do
 not gain Product support. Identification and discovery are diagnostics and do
-not authorize other operations. WebUI cannot enable contributor Validation Mode.
+not authorize other operations.
 
 Changing mode, resource, or planning model changes the result context. A
 previous context's values must not be used as the current instrument state.

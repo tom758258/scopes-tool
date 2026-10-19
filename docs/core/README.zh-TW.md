@@ -64,7 +64,9 @@ Contributor Validation Mode 是明確的 CLI-only 選項，適用於僅限驗證
 WebUI 與 Worker 不可選此模式。Identify 與 Resource Discovery 仍是診斷；
 Dry-run 與模擬不開啟 Live VISA Session。
 直接 Python 使用 `Oscilloscope.open()` 是低階 Session 介面，不是 Product 支援入口。
-確切連線及型號功能限制請見[支援型號](supported-models.zh-TW.md)。
+確切連線及型號功能限制請見[支援型號](supported-models.zh-TW.md)；
+實作狀態、彙總結果及手冊歧義請參閱
+[型號實作備註](model-implementation-notes.zh-TW.md)。
 
 ## 功能領域
 

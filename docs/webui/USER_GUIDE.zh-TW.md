@@ -56,7 +56,7 @@ CLI Help 也可透過 `scopes-tool user-guide --lang zh-TW` 獨立開啟。
 七個註冊型號皆開放 System VISA USB。System VISA TCPIP 與 `@py` TCPIP
 只開放 DSOX4024A、DSOX4034A、TBS2074。`@py` USB 未開放 Product Live。
 Bluetooth、GPIB、ASRL、自訂 Backend 不會因此取得支援。
-識別與搜尋是診斷，不代表授權其他操作。WebUI 不可啟用貢獻者 Validation Mode。
+識別與搜尋是診斷，不代表授權其他操作。
 
 變更模式、Resource 或規劃型號會改變結果情境，不可將前一情境的數值當成目前儀器狀態。
 選擇支援的裝置後可能自動讀取一次 Live Data Snapshot；Live Data 不會持續輪詢或串流波形。

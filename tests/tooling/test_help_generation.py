@@ -2,7 +2,10 @@
 
 from html.parser import HTMLParser
 from pathlib import Path
+import re
 import runpy
+
+import pytest
 from urllib.parse import unquote, urlsplit
 
 
@@ -38,6 +41,8 @@ def test_generated_help_languages_links_and_runtime_sync(tmp_path):
     for name, page in pages.items():
         assert page.lang == ("zh-TW" if ".zh-TW." in name else "en")
         assert "help-content" in page.ids
+        rendered = (tmp_path / name).read_text(encoding="utf-8")
+        assert not re.search(r"<code>(?:\.\./|docs/)[^<]*\.md</code>", rendered)
         for href in page.links:
             link = urlsplit(href)
             if link.scheme or link.netloc:
@@ -52,3 +57,10 @@ def test_generated_help_languages_links_and_runtime_sync(tmp_path):
         for name in (f"{guide}.html", f"{guide}.zh-TW.html", "supported-models.html",
                      "supported-models.zh-TW.html", "help.css"):
             assert (ROOT / "src" / owner / name).read_bytes() == (tmp_path / name).read_bytes()
+
+
+def test_help_rejects_unbundled_local_markdown_links():
+    generator = runpy.run_path(str(ROOT / "scripts/generate_help.py"))
+    rendered = '<a href="../contracts/scopes-cli-jsonl-contract.md">contract</a>'
+    with pytest.raises(ValueError, match="Offline Help link is not bundled"):
+        generator["rewrite_links"](rendered, ROOT / "docs/core/supported-models.md")
