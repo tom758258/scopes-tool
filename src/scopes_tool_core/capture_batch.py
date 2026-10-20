@@ -325,9 +325,10 @@ def run_capture_batch(
             scope,
         )
     except OscilloscopeError as exc:
-        manifest.status = "error"
-        manifest.end_time = batch_iso_timestamp()
-        manifest.error = str(exc)
+        if manifest.status in {"running", "completed"}:
+            manifest.status = "error"
+            manifest.end_time = batch_iso_timestamp()
+            manifest.error = str(exc)
         _write_batch_manifest_best_effort(manifest, manifest_path, history)
         if reporter_failed:
             raise
