@@ -1,6 +1,9 @@
 import json
 import logging
+from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -301,15 +304,30 @@ def test_run_capture_batch_uses_interruptible_wait_between_captures(
     assert waits == [(1.25, None)]
 
 
-@pytest.mark.parametrize("terminal_status", ["instrument_error", "cancelled", "completed"])
-@pytest.mark.parametrize("persistent_failure", [False, True], ids=["retry", "persistent"])
+@pytest.mark.parametrize("failure_source,persistent_failure,terminal_status", [
+    ("writer", False, "instrument_error"),
+    ("writer", False, "cancelled"),
+    ("writer", False, "completed"),
+    ("writer", True, "instrument_error"),
+    ("writer", True, "cancelled"),
+    ("writer", True, "completed"),
+    ("replace", True, "instrument_error"),
+    ("replace", True, "cancelled"),
+    ("replace", True, "completed"),
+    ("replace", False, "cancelled"),
+])
 def test_final_manifest_failure_preserves_capture_batch_error_state(
-    tmp_path, monkeypatch, terminal_status, persistent_failure
+    tmp_path, monkeypatch, terminal_status, persistent_failure, failure_source
 ):
     scope = Oscilloscope(SimulatorBackend(physical_model_id="keysight-dsox4024a"))
     output_dir = tmp_path / "final-failure"
     samples, progress, failed_snapshots = [], [], []
     write_manifest = capture_batch.write_batch_manifest
+    replace = Path.replace
+    manifest_path = output_dir / "manifest.json"
+    temporary = output_dir / ".manifest.json.tmp"
+    previous_snapshots = []
+    error = OSError("final manifest publication failed")
     instrument_error = terminal_status == "instrument_error"
     status = SystemErrorEntry(
         code=-222 if instrument_error else 0,
@@ -322,10 +340,23 @@ def test_final_manifest_failure_preserves_capture_batch_error_state(
         if payload["status"] != "running":
             if persistent_failure or not failed_snapshots:
                 failed_snapshots.append(dict(payload))
-                raise OSError("final manifest publication failed")
+                raise error
         return write_manifest(payload, path)
 
-    monkeypatch.setattr(capture_batch, "write_batch_manifest", fail_final_manifest)
+    def fail_final_replace(path, target):
+        if path == temporary and target == manifest_path:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload["status"] != "running":
+                if persistent_failure or not failed_snapshots:
+                    failed_snapshots.append(payload)
+                    previous_snapshots.append(manifest_path.read_bytes())
+                    raise error
+        return replace(path, target)
+
+    if failure_source == "writer":
+        monkeypatch.setattr(capture_batch, "write_batch_manifest", fail_final_manifest)
+    else:
+        monkeypatch.setattr(Path, "replace", fail_final_replace)
     with pytest.raises(_OperationError, match="final manifest publication failed") as caught:
         capture_batch.run_capture_batch(
             scope,
@@ -349,7 +380,11 @@ def test_final_manifest_failure_preserves_capture_batch_error_state(
     else:
         assert result.result["error"] is None
     assert isinstance(caught.value.__cause__, OscilloscopeError)
-    assert isinstance(caught.value.__cause__.__cause__, OSError)
+    assert caught.value.__cause__.__cause__ is error
+    assert "manifest" in str(caught.value)
+    assert "SCPI log" not in str(caught.value)
+    if failure_source == "replace":
+        assert str(manifest_path) in str(caught.value)
     assert result.result["completed_count"] == 1
     assert result.system_error["code"] == status.code
     assert [entry["index"] for entry in result.result["captures"]] == [1]
@@ -362,6 +397,8 @@ def test_final_manifest_failure_preserves_capture_batch_error_state(
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     journal = output_dir / ".manifest-history.jsonl"
     if persistent_failure:
+        if failure_source == "replace":
+            assert manifest_path.read_bytes() == previous_snapshots[0] == previous_snapshots[1]
         assert manifest["status"] == "running"
         assert manifest["completed_count"] == 1
         assert manifest["captures"] == []
@@ -375,7 +412,241 @@ def test_final_manifest_failure_preserves_capture_batch_error_state(
         assert manifest["status"] == expected_status
         assert manifest["error"] == result.result["error"]
         assert manifest["captures"] == samples
+        if terminal_status != "completed":
+            assert manifest["end_time"] == failed_snapshots[0]["end_time"]
         assert not journal.exists()
+
+
+@pytest.mark.parametrize("terminal_status,persistent_failure", [
+    ("instrument_error", True),
+    ("cancelled", False),
+])
+def test_final_journal_read_native_io_failure(
+    tmp_path, monkeypatch, terminal_status, persistent_failure
+):
+    output_dir = tmp_path / "journal-read-failure"
+    journal = output_dir / ".manifest-history.jsonl"
+    scope = Oscilloscope(SimulatorBackend(physical_model_id="keysight-dsox4024a"))
+    status = SystemErrorEntry(-222, "Data out of range", '-222,"Data out of range"')
+    if terminal_status == "instrument_error":
+        monkeypatch.setattr(scope, "workflow_status", lambda: status)
+    samples, progress, reads, timestamps = [], [], [], []
+    open_path = Path.open
+    error = OSError("journal read failed")
+
+    def timestamp():
+        value = f"2026-10-20T12:00:{len(timestamps):02d}+08:00"
+        timestamps.append(value)
+        return value
+
+    @contextmanager
+    def fail_read(path, mode, *args, **kwargs):
+        with open_path(path, mode, *args, **kwargs) as handle:
+            reads.append(handle.read())
+            with patch.object(handle, "read", side_effect=error):
+                yield handle
+
+    def open_with_read_failure(path, mode="r", *args, **kwargs):
+        if path == journal and mode == "rb" and (persistent_failure or not reads):
+            return fail_read(path, mode, *args, **kwargs)
+        return open_path(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_with_read_failure)
+    monkeypatch.setattr(capture_batch, "batch_iso_timestamp", timestamp)
+    with pytest.raises(_OperationError, match="journal read failed") as caught:
+        capture_batch.run_capture_batch(
+            scope,
+            "SIM::keysight-dsox4024a::INSTR",
+            CaptureBatchRequest(channels=[1], requested_count=3, output_dir=output_dir),
+            stop_requested=lambda: bool(samples),
+            sample_reporter=samples.append,
+            progress_reporter=progress.append,
+        )
+
+    result = caught.value.result
+    assert result.exit_code == 1
+    assert result.result["status"] == terminal_status
+    assert result.result["error"] is None
+    assert result.result["completed_count"] == 1
+    assert result.result["captures"] == [
+        dict(samples[0], actual_points={"CH1": samples[0]["actual_points"]})
+    ]
+    assert [item.completed_count for item in progress] == [1]
+    assert caught.value.__cause__.__cause__ is error
+    assert str(output_dir / "manifest.json") in str(caught.value)
+    assert "SCPI log" not in str(caught.value)
+    assert len(timestamps) == 2
+    if terminal_status == "instrument_error":
+        assert result.system_error["code"] == -222
+    for artifact in result.files:
+        assert Path(artifact["path"]).is_file()
+    assert not (output_dir / "waveform_0002.csv").exists()
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    if persistent_failure:
+        assert len(reads) == 2
+        with open_path(journal, "rb") as handle:
+            assert handle.read() == reads[0] == reads[1]
+        assert [json.loads(line) for line in reads[0].splitlines()] == samples
+        assert manifest["status"] == "running"
+        assert manifest["completed_count"] == 1
+    else:
+        assert len(reads) == 1
+        assert manifest["status"] == terminal_status
+        assert manifest["error"] is None
+        assert manifest["end_time"] == timestamps[1]
+        assert manifest["captures"] == samples
+        assert not journal.exists()
+
+
+@pytest.mark.parametrize("failure_source", ["journal_flush", "replace"])
+def test_running_manifest_native_io_failure_preserves_committed_captures(
+    tmp_path, monkeypatch, failure_source
+):
+    output_dir = tmp_path / "running-failure"
+    journal = output_dir / ".manifest-history.jsonl"
+    manifest_path = output_dir / "manifest.json"
+    samples, progress, failures = [], [], []
+    open_path, replace = Path.open, Path.replace
+    error = OSError("capture history commit failed")
+
+    @contextmanager
+    def fail_flush(path, mode, *args, **kwargs):
+        with open_path(path, mode, *args, **kwargs) as handle:
+            with patch.object(handle, "flush", side_effect=error):
+                failures.append(failure_source)
+                yield handle
+
+    def open_with_flush_failure(path, mode="r", *args, **kwargs):
+        if path == journal and mode == "ab" and samples and not failures:
+            return fail_flush(path, mode, *args, **kwargs)
+        return open_path(path, mode, *args, **kwargs)
+
+    def fail_replace(path, target):
+        if path == output_dir / ".manifest.json.tmp" and target == manifest_path:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload["status"] == "running" and payload.get("completed_count") == 2:
+                failures.append(failure_source)
+                raise error
+        return replace(path, target)
+
+    if failure_source == "journal_flush":
+        monkeypatch.setattr(Path, "open", open_with_flush_failure)
+    else:
+        monkeypatch.setattr(Path, "replace", fail_replace)
+    with pytest.raises(_OperationError, match="capture history commit failed") as caught:
+        capture_batch.run_capture_batch(
+            Oscilloscope(SimulatorBackend(physical_model_id="keysight-dsox4024a")),
+            "SIM::keysight-dsox4024a::INSTR",
+            CaptureBatchRequest(channels=[1], requested_count=3, output_dir=output_dir),
+            sample_reporter=samples.append,
+            progress_reporter=progress.append,
+        )
+
+    result = caught.value.result
+    assert failures == [failure_source]
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert "capture history commit failed" in result.result["error"]
+    assert result.result["completed_count"] == 1
+    assert [entry["index"] for entry in result.result["captures"]] == [1]
+    assert [entry["index"] for entry in samples] == [1]
+    assert [item.completed_count for item in progress] == [1]
+    assert caught.value.__cause__.__cause__ is error
+    assert str(manifest_path) in str(caught.value)
+    assert "SCPI log" not in str(caught.value)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "error"
+    assert manifest["captures"] == samples
+    assert not journal.exists()
+    for index in (1, 2):
+        assert (output_dir / f"waveform_{index:04d}.csv").is_file()
+        assert (output_dir / f"waveform_{index:04d}_meta.json").is_file()
+    assert not (output_dir / "waveform_0003.csv").exists()
+
+
+def test_scpi_log_native_io_failure_is_not_manifest_failure(tmp_path, monkeypatch):
+    output_dir = tmp_path / "scpi-log-failure"
+    error = OSError("SCPI log open failed")
+    open_log = logging.FileHandler._open
+
+    def fail_log_open(handler):
+        if Path(handler.baseFilename) == output_dir / "scpi.log":
+            raise error
+        return open_log(handler)
+
+    monkeypatch.setattr(logging.FileHandler, "_open", fail_log_open)
+    with pytest.raises(_OperationError, match="could not write SCPI log file") as caught:
+        capture_batch.run_capture_batch(
+            Oscilloscope(SimulatorBackend(physical_model_id="keysight-dsox4024a")),
+            "SIM::keysight-dsox4024a::INSTR",
+            CaptureBatchRequest(channels=[1], output_dir=output_dir),
+        )
+
+    assert caught.value.__cause__ is error
+    result = caught.value.result
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert result.result["completed_count"] == 0
+    assert str(output_dir / "scpi.log") in str(caught.value)
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["error"] == str(error)
+    assert manifest["captures"] == []
+
+
+@pytest.mark.parametrize("error_type", [OscilloscopeError, KeyboardInterrupt])
+def test_best_effort_manifest_native_io_failure_preserves_original_outcome(
+    tmp_path, monkeypatch, error_type
+):
+    output_dir = tmp_path / "best-effort-failure"
+    original = error_type("original failure")
+    replace = Path.replace
+    samples, failed_snapshots = [], []
+
+    def fail_final_replace(path, target):
+        if path == output_dir / ".manifest.json.tmp":
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload["status"] != "running":
+                failed_snapshots.append(payload)
+                raise OSError("best-effort publication failed")
+        return replace(path, target)
+
+    def fail_reporter(sample):
+        samples.append(sample)
+        raise original
+
+    monkeypatch.setattr(Path, "replace", fail_final_replace)
+    request = CaptureBatchRequest(channels=[1], requested_count=3, output_dir=output_dir)
+    scope = Oscilloscope(SimulatorBackend(physical_model_id="keysight-dsox4024a"))
+    if error_type is KeyboardInterrupt:
+        result = capture_batch.run_capture_batch(
+            scope, "SIM::keysight-dsox4024a::INSTR", request, sample_reporter=fail_reporter
+        )
+        assert result.exit_code == 130
+        assert result.result["status"] == "interrupted"
+        assert result.result["error"] == "KeyboardInterrupt"
+        assert result.result["completed_count"] == 1
+    else:
+        with pytest.raises(error_type) as caught:
+            capture_batch.run_capture_batch(
+                scope, "SIM::keysight-dsox4024a::INSTR", request,
+                sample_reporter=fail_reporter,
+            )
+        assert caught.value is original
+    assert len(failed_snapshots) == 1
+    assert failed_snapshots[0]["status"] == (
+        "interrupted" if error_type is KeyboardInterrupt else "error"
+    )
+    assert failed_snapshots[0]["error"] == (
+        "KeyboardInterrupt" if error_type is KeyboardInterrupt else str(original)
+    )
+    assert failed_snapshots[0]["end_time"] is not None
+    assert failed_snapshots[0]["captures"] == samples
+    journal = output_dir / ".manifest-history.jsonl"
+    assert [json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines()] == samples
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "running"
+    assert manifest["completed_count"] == 1
+    assert not (output_dir / "waveform_0002.csv").exists()
 
 
 @pytest.mark.parametrize("error_type", [OscilloscopeError, OSError, RuntimeError])
