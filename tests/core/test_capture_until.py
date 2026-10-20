@@ -97,7 +97,7 @@ def test_multi_channel_match_saves_all_selected_channels(monkeypatch, tmp_path):
     assert header == "time_s,ch1_v,ch2_v"
 
 
-def test_count_accumulates_matches_and_timeout_is_not_reset(monkeypatch, tmp_path):
+def test_count_accumulates_matches_and_timeout_is_not_reset(monkeypatch, tmp_path, check_incremental_manifest):
     clock = [0.0]
     captures = iter(
         (
@@ -130,6 +130,8 @@ def test_count_accumulates_matches_and_timeout_is_not_reset(monkeypatch, tmp_pat
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["termination_reason"] == "condition_timeout"
     assert len(manifest["matches"]) == 1
+    check_incremental_manifest(output_dir, "matches", 1)
+
 
 
 def test_multiple_matches_complete_and_cancellation_does_not_rollback(
@@ -162,3 +164,24 @@ def test_multiple_matches_complete_and_cancellation_does_not_rollback(
     assert completed.exit_code == 0
     assert completed.result["completed_count"] == 2
     assert len(list(completed_dir.glob("match_*.csv"))) == 2
+
+
+def test_snapshot_failure_preserves_only_committed_matches(
+    monkeypatch, tmp_path, fail_progress_snapshot
+):
+    fail_progress_snapshot()
+    capture = _single(1, (2.0, 3.0))
+    monkeypatch.setattr(capture_until, "_capture_waveform", lambda *args: capture)
+    samples, progress = [], []
+    result = capture_until.run_capture_until(
+        _scope(), RESOURCE, _request(tmp_path, count=3),
+        sample_reporter=samples.append, progress_reporter=progress.append,
+    )
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert result.result["completed_count"] == 1
+    assert [match["match_index"] for match in manifest["matches"]] == [1]
+    assert [sample["completed_count"] for sample in samples] == [1]
+    assert [item.completed_count for item in progress] == [1]
+    assert (tmp_path / "match_002.csv").exists()

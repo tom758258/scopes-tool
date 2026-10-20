@@ -109,7 +109,7 @@ def test_write_measure_log_manifest_json(tmp_path):
     assert payload["rows"][0]["system_error"]["code"] == 0
 
 
-def test_log_measurements_workflow_runs_successfully_and_writes_files(tmp_path, capsys):
+def test_log_measurements_workflow_runs_successfully_and_writes_files(tmp_path, capsys, check_incremental_manifest):
     backend = SimulatorBackend(physical_model_id="keysight-dsox4024a")
     scope = Oscilloscope(backend)
     scope.query_idn()
@@ -161,6 +161,8 @@ def test_log_measurements_workflow_runs_successfully_and_writes_files(tmp_path, 
         assert float(reader[i][4]) > 0.0
         assert float(reader[i][5]) > 0.0
         assert float(reader[i][6]) is not None
+    check_incremental_manifest(tmp_path, "rows", 3)
+
 
 
 def test_log_measurements_workflow_no_save_keeps_only_compact_state(tmp_path):
@@ -453,4 +455,29 @@ def test_log_measurements_workflow_completion_precedes_late_cancellation(tmp_pat
     assert manifest["completed_rows"] == 1
     with csv_path.open("r", encoding="utf-8") as handle:
         assert len(list(csv.reader(handle))) == 2
+    assert scpi_log_path.exists()
+
+
+def test_snapshot_failure_preserves_only_committed_rows(tmp_path, fail_progress_snapshot):
+    fail_progress_snapshot("completed_rows")
+    scope = Oscilloscope(SimulatorBackend(physical_model_id="keysight-dsox4024a"))
+    scope.query_idn()
+    csv_path, manifest_path, scpi_log_path = measure_logger.measure_log_paths(tmp_path)
+    samples, progress = [], []
+    with pytest.raises(OscilloscopeError, match="progress snapshot failed"):
+        measure_logger.log_measurements_workflow(
+            scope, "SIM::keysight-dsox4024a::INSTR", tmp_path,
+            csv_path, manifest_path, scpi_log_path, [1], ["vpp"], [], [],
+            0, 3, None, False,
+            sample_reporter=samples.append, progress_reporter=progress.append,
+        )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "error"
+    assert manifest["completed_rows"] == 1
+    assert [row["index"] for row in manifest["rows"]] == [1]
+    assert [sample["index"] for sample in samples] == [1]
+    assert [item.completed_count for item in progress] == [1]
+    assert csv_path.exists()
+    with csv_path.open("r", encoding="utf-8") as handle:
+        assert len(list(csv.reader(handle))) == 3
     assert scpi_log_path.exists()

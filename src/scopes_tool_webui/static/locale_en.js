@@ -1239,7 +1239,7 @@ export const en = {
   "help.workflow.measurement.items": "Select the single-channel measurement items to record on every selected channel.",
   "help.workflow.measurement.pairs": "Add source/reference channel pairs for two-channel measurements such as phase or delay. The two channels in a pair must differ.",
   "help.workflow.measurement.pair_items": "Select the two-channel measurement items to run for each configured channel pair.",
-  "help.workflow.measurement.interval_seconds": "Wait this many seconds after each measurement row or condition check before the next one. Use 0 for no added delay.",
+  "help.workflow.measurement.interval_seconds": "Measurement Log defaults to 1 second. Set the measurement or condition-check interval in seconds; 0 adds no delay.",
   "help.workflow.measure-log.count": "Optional maximum number of measurement rows to record. When both count and duration are set, logging stops when either limit is reached.",
   "help.workflow.measure-log.duration_seconds": "Optional maximum logging duration in seconds. When both duration and count are set, logging stops when either limit is reached.",
   "help.workflow.measure-log.stop_on_error": "Stop logging immediately when a measurement or instrument error occurs; when disabled, the workflow can continue and record the error.",

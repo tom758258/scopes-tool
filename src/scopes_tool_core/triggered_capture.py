@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from .status import status_fields
 
-import copy
 from dataclasses import dataclass
 import math
 from pathlib import Path
@@ -22,6 +21,7 @@ from .batch import (
     write_batch_manifest,
 )
 from .capabilities import ScopeCapabilities
+from ._history import _ManifestHistory
 from .errors import OscilloscopeError, ParameterValidationError
 from .operation_support import _capture_waveform
 from .operation_types import OperationResult
@@ -168,9 +168,10 @@ def run_triggered_capture_series(
     last_system_error: dict[str, object] | None = None
     current_cycle = 0
     reporter_failed = False
+    history = _ManifestHistory(manifest_path, "cycles")
 
     try:
-        _write_manifest(manifest, manifest_path)
+        history.write(manifest, _write_manifest)
         with workflow_scpi_logging(
             scpi_log_path,
             echo_to_stderr=request.log_scpi,
@@ -182,6 +183,7 @@ def run_triggered_capture_series(
                 current_cycle = index
                 if _stop_requested(stop_requested):
                     return _finish_result(
+                        history,
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                     )
@@ -193,6 +195,7 @@ def run_triggered_capture_series(
                 )
                 if trigger.outcome == "cancelled":
                     return _finish_result(
+                        history,
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                     )
@@ -204,11 +207,13 @@ def run_triggered_capture_series(
                         trigger.error,
                     )
                     return _finish_result(
+                        history,
                         "error", 1, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=error,
                     )
                 if _stop_requested(stop_requested):
                     return _finish_result(
+                        history,
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                     )
@@ -243,6 +248,7 @@ def run_triggered_capture_series(
                         "message": entry.format(),
                     }
                     return _finish_result(
+                        history,
                         "instrument_error", 1, manifest, manifest_path,
                         scpi_log_path, files, human, idn, last_system_error,
                         scope, error=error,
@@ -260,14 +266,11 @@ def run_triggered_capture_series(
                     "actual_points": capture_actual_points(capture),
                     **status_fields(dict(last_system_error)),
                 }
-                candidate = copy.deepcopy(manifest)
+                candidate = dict(manifest)
                 candidate["completed_count"] = index
-                candidate_cycles = candidate["cycles"]
-                assert isinstance(candidate_cycles, list)
-                candidate_cycles.append(cycle)
-                candidate["files"] = _relative_files(files, output_dir)
-                _write_manifest(candidate, manifest_path)
-                manifest = candidate
+                history.write(candidate, _write_manifest, record=cycle)
+                manifest["cycles"].append(cycle)
+                manifest["completed_count"] = index
 
                 human.extend(
                     [
@@ -294,11 +297,13 @@ def run_triggered_capture_series(
 
                 if index >= request.count:
                     return _finish_result(
+                        history,
                         "completed", 0, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                     )
                 if _stop_requested(stop_requested):
                     return _finish_result(
+                        history,
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                     )
@@ -307,28 +312,33 @@ def run_triggered_capture_series(
                     stop_requested=stop_requested,
                 ):
                     return _finish_result(
+                        history,
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                     )
     except KeyboardInterrupt:
         return _finish_result(
+            history,
             "interrupted", 130, manifest, manifest_path, scpi_log_path,
             files, human, idn, last_system_error, scope,
             error="KeyboardInterrupt", best_effort=True,
         )
-    except (OSError, OscilloscopeError) as exc:
-        if reporter_failed:
-            raise
+    except Exception as exc:
         error = {
             "type": type(exc).__name__,
             "cycle_index": current_cycle or None,
             "message": str(exc),
         }
-        return _finish_result(
+        result = _finish_result(
+            history,
             "error", 1, manifest, manifest_path, scpi_log_path, files,
             human, idn, last_system_error, scope, error=error,
             best_effort=True,
         )
+
+        if reporter_failed or not isinstance(exc, (OSError, OscilloscopeError)):
+            raise
+        return result
 
     raise AssertionError("finite triggered capture series exited without a result")
 
@@ -447,6 +457,7 @@ def _write_manifest(manifest: Mapping[str, object], path: Path) -> None:
 
 
 def _finish_result(
+    history: _ManifestHistory,
     status: str,
     exit_code: int,
     manifest: dict[str, object],
@@ -467,11 +478,11 @@ def _finish_result(
     manifest["error"] = error
     if best_effort:
         try:
-            _write_manifest(manifest, manifest_path)
-        except OscilloscopeError:
+            history.write(manifest, _write_manifest)
+        except (OSError, OscilloscopeError):
             pass
     else:
-        _write_manifest(manifest, manifest_path)
+        history.write(manifest, _write_manifest)
     human.extend(
         [
             f"Triggered capture series status: {status}",

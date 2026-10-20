@@ -4,7 +4,7 @@ import json
 import pytest
 
 from scopes_tool_core import triggered_measurement
-from scopes_tool_core.errors import ParameterValidationError
+from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
 from scopes_tool_core.trigger import TriggerWaitResult
@@ -88,7 +88,7 @@ def test_planner_reuses_measurement_channel_and_pair_validation(tmp_path):
         )
 
 
-def test_happy_path_persists_two_completed_cycles_and_reports(tmp_path):
+def test_happy_path_persists_two_completed_cycles_and_reports(tmp_path, check_incremental_manifest):
     scope = _scope()
     output_dir = tmp_path / "run"
     samples = []
@@ -133,25 +133,13 @@ def test_happy_path_persists_two_completed_cycles_and_reports(tmp_path):
     ]
     assert len(rows) == 3
     assert (output_dir / "scpi.log").exists()
+    check_incremental_manifest(output_dir, "cycles", 2)
 
 
-def test_no_save_keeps_only_compact_runtime_state(monkeypatch, tmp_path):
+
+def test_no_save_keeps_only_compact_runtime_state(tmp_path):
     scope = _scope()
     output_dir = tmp_path / "not-created"
-    observed_cycles = []
-    finish_result = triggered_measurement._finish_result
-
-    def inspect_finish(*args, **kwargs):
-        observed_cycles.append(list(args[2]["cycles"]))
-        return finish_result(*args, **kwargs)
-
-    monkeypatch.setattr(triggered_measurement, "_finish_result", inspect_finish)
-    monkeypatch.setattr(
-        triggered_measurement.copy,
-        "deepcopy",
-        lambda value: pytest.fail("no-save must not deepcopy the runtime manifest"),
-    )
-
     result = triggered_measurement.run_triggered_measure_loop(
         scope,
         RESOURCE,
@@ -161,9 +149,26 @@ def test_no_save_keeps_only_compact_runtime_state(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert result.result["completed_count"] == 3
     assert result.result["last_measurement"]["index"] == 3
-    assert observed_cycles == [[]]
     assert result.files == []
     assert not output_dir.exists()
+
+
+def test_snapshot_failure_preserves_only_committed_cycles(tmp_path, fail_progress_snapshot):
+    fail_progress_snapshot()
+    output_dir = tmp_path / "failed"
+    samples, progress = [], []
+    result = triggered_measurement.run_triggered_measure_loop(
+        _scope(), RESOURCE, _request(output_dir, count=3),
+        sample_reporter=samples.append, progress_reporter=progress.append,
+    )
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert result.result["completed_count"] == 1
+    assert result.result["last_measurement"]["index"] == 1
+    assert [cycle["index"] for cycle in manifest["cycles"]] == [1]
+    assert [sample["index"] for sample in samples] == [1]
+    assert [item.completed_count for item in progress] == [1]
 
 
 def test_invalid_measurement_sentinel_is_nan_and_cycle_continues(tmp_path):
@@ -291,6 +296,11 @@ def test_reporters_run_after_csv_and_manifest_persist(tmp_path):
         manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
         with (output_dir / "measurements.csv").open(encoding="utf-8") as handle:
             row_count = len(list(csv.reader(handle)))
+        journal = output_dir / ".manifest-history.jsonl"
+        committed = [json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines()]
+        assert len(committed) == sample["index"]
+        assert committed[-1]["index"] == sample["index"]
+        assert manifest["cycles"] == []
         observed.append((sample["index"], manifest["completed_count"], row_count))
 
     result = triggered_measurement.run_triggered_measure_loop(
@@ -304,9 +314,35 @@ def test_reporters_run_after_csv_and_manifest_persist(tmp_path):
     assert observed == [(1, 1, 2)]
 
 
+@pytest.mark.parametrize("failure", [RuntimeError, OSError, OscilloscopeError])
+def test_reporter_failure_finalizes_history_and_propagates(tmp_path, failure):
+    error = failure("reporter failed")
+
+    def report(sample):
+        raise error
+
+    with pytest.raises(failure) as caught:
+        triggered_measurement.run_triggered_measure_loop(
+            _scope(), RESOURCE, _request(tmp_path), sample_reporter=report,
+        )
+    assert caught.value is error
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "error"
+    assert manifest["completed_count"] == 1
+    assert [cycle["index"] for cycle in manifest["cycles"]] == [1]
+    assert not (tmp_path / ".manifest-history.jsonl").exists()
+
+
 def test_keyboard_interrupt_uses_shared_interrupted_contract(monkeypatch, tmp_path):
+    wait = Oscilloscope.wait_for_current_trigger_completion
+    calls = 0
+
     def _raise_keyboard_interrupt(*args, **kwargs):
-        raise KeyboardInterrupt()
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise KeyboardInterrupt()
+        return wait(*args, **kwargs)
 
     monkeypatch.setattr(
         Oscilloscope,
@@ -328,6 +364,8 @@ def test_keyboard_interrupt_uses_shared_interrupted_contract(monkeypatch, tmp_pa
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "interrupted"
     assert manifest["error"] == "KeyboardInterrupt"
+    assert manifest["completed_count"] == 1
+    assert [cycle["index"] for cycle in manifest["cycles"]] == [1]
 
 
 def test_measurement_query_exception_fails_fast_without_writing_csv_row(monkeypatch, tmp_path):

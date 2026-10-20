@@ -1239,7 +1239,7 @@ export const zhTW = {
   "help.workflow.measurement.items": "選擇要在每個所選通道上記錄的單通道量測項目。",
   "help.workflow.measurement.pairs": "新增雙通道量測使用的來源／參考通道配對，例如相位或延遲；同一配對中的兩個通道不可相同。",
   "help.workflow.measurement.pair_items": "選擇要對每組來源／參考通道配對執行的雙通道量測項目。",
-  "help.workflow.measurement.interval_seconds": "每筆量測或每次條件檢查完成後等待這段秒數，再執行下一次；0 表示不額外等待。",
+  "help.workflow.measurement.interval_seconds": "Measurement Log 預設為 1 秒。設定量測或條件檢查的間隔秒數；0 表示不額外等待。",
   "help.workflow.measure-log.count": "選用的量測記錄筆數上限。若同時設定筆數與記錄時間，任一限制先到達就會停止。",
   "help.workflow.measure-log.duration_seconds": "選用的最長記錄時間（秒）。若同時設定時間與筆數，任一限制先到達就會停止。",
   "help.workflow.measure-log.stop_on_error": "發生量測或儀器錯誤時立即停止記錄；停用時，工作流程可繼續並記錄該錯誤。",

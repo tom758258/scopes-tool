@@ -18,6 +18,7 @@ from .batch import (
 from .acquisition import acquisition_type_query, parse_acquisition_type
 from .capabilities import ScopeCapabilities
 from .channel import channel_units_query, validate_analog_channel
+from ._history import _ManifestHistory
 from .errors import OscilloscopeError, ParameterValidationError, WaveformResponseError
 from .operation_types import OperationResult
 from .status import parse_system_error
@@ -532,6 +533,7 @@ def run_segmented_capture(
     vertical_unit: WaveformVerticalUnit | None = None
     acquired_segments = 0
     exported_segments = 0
+    history = _ManifestHistory(manifest_path, "segments")
     session_read_timed_out = False
     human = [f"Resource: {resource}"]
     controller: SegmentedMemoryController | None = None
@@ -565,7 +567,7 @@ def run_segmented_capture(
             echo_to_stderr=request.log_scpi,
         ):
             try:
-                _write_manifest(manifest, manifest_path)
+                history.write(manifest, _write_manifest)
                 try:
                     idn = scope.query_idn()
                 except Exception as exc:
@@ -611,7 +613,7 @@ def run_segmented_capture(
                     "segmented capture channel-unit read timed out",
                 )
                 manifest["vertical_unit"] = vertical_unit
-                _write_manifest(manifest, manifest_path)
+                history.write(manifest, _write_manifest)
                 raise_if_cancelled()
                 scope.scpi.write(segmented_mode_command("segmented"))
                 scope.scpi.write(segmented_count_command(request.segments))
@@ -779,10 +781,12 @@ def run_segmented_capture(
                     }
                     segments = manifest["segments"]
                     assert isinstance(segments, list)
+                    candidate = dict(manifest)
+                    candidate["exported_segments"] = exported_segments + 1
+                    history.write(candidate, _write_manifest, record=segment_entry)
                     segments.append(segment_entry)
                     exported_segments += 1
                     manifest["exported_segments"] = exported_segments
-                    _write_manifest(manifest, manifest_path)
 
                 # Once every requested segment has been exported, completion
                 # takes precedence over a late cancellation request. Final state
@@ -839,7 +843,7 @@ def run_segmented_capture(
                 status = "cancelled"
             elif primary_error is None:
                 status = "completed"
-            elif exported_segments:
+            elif any(item["kind"] == "csv" for item in files):
                 status = "partial"
             else:
                 status = "failed"
@@ -849,19 +853,19 @@ def run_segmented_capture(
             manifest["acquired_segments"] = acquired_segments
             manifest["exported_segments"] = exported_segments
             manifest["error"] = error_text
-            _write_manifest(manifest, manifest_path)
+            history.write(manifest, _write_manifest)
     except Exception as exc:
         if session_read_timed_out and isinstance(exc, SegmentedCaptureTimeout):
             primary_error = exc
         else:
             primary_error = primary_error or exc
-        manifest["status"] = "partial" if exported_segments else "failed"
+        manifest["status"] = "partial" if any(item["kind"] == "csv" for item in files) else "failed"
         manifest["end_time"] = batch_iso_timestamp()
         manifest["acquired_segments"] = acquired_segments
         manifest["exported_segments"] = exported_segments
         manifest["error"] = _error_text(primary_error)
         try:
-            _write_manifest(manifest, manifest_path)
+            history.write(manifest, _write_manifest)
         except Exception:
             pass
 

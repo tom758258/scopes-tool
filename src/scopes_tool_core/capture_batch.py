@@ -20,6 +20,7 @@ from .batch import (
     system_error_manifest_dict,
     write_batch_manifest,
 )
+from ._history import _ManifestHistory
 from .errors import OscilloscopeError
 from .operation_support import (
     _append_session_header,
@@ -91,6 +92,7 @@ def run_capture_batch(
     idn = None
     last_system_error: dict[str, object] | None = None
     reporter_failed = False
+    history = _ManifestHistory(manifest_path, "captures")
 
     try:
         with workflow_scpi_logging(
@@ -109,7 +111,7 @@ def run_capture_batch(
                 manifest.status = "error"
                 manifest.error = "Capabilities unavailable for this model"
                 manifest.end_time = batch_iso_timestamp()
-                _write_batch_manifest(manifest, manifest_path)
+                history.write(vars(manifest), _write_batch_manifest)
                 human.extend(
                     [
                         f"Output directory: {output_dir}",
@@ -139,7 +141,7 @@ def run_capture_batch(
             manifest.channels = list(channels)
             manifest.points = points
             manifest.format = waveform_format
-            _write_batch_manifest(manifest, manifest_path)
+            history.write(vars(manifest), _write_batch_manifest)
 
             human.extend(
                 [
@@ -160,6 +162,7 @@ def run_capture_batch(
             for index in range(1, request.requested_count + 1):
                 if stop_requested is not None and stop_requested():
                     return _cancel_capture_batch(
+                        history,
                         manifest,
                         manifest_path,
                         scpi_log_path,
@@ -197,14 +200,15 @@ def run_capture_batch(
                     "actual_points": capture_actual_points(capture),
                     **status_fields(dict(last_system_error)),
                 }
-                manifest.captures.append(capture_entry)
                 files.extend(
                     [
                         {"kind": "csv", "path": str(written_csv)},
                         {"kind": "metadata", "path": str(written_meta)},
                     ]
                 )
-                _write_batch_manifest(manifest, manifest_path)
+                candidate = dict(vars(manifest), completed_count=len(manifest.captures) + 1)
+                history.write(candidate, _write_batch_manifest, record=capture_entry)
+                manifest.captures.append(capture_entry)
                 human.extend(
                     [
                         f"Capture {index}/{request.requested_count}:",
@@ -233,7 +237,7 @@ def run_capture_batch(
                 if entry.is_error:
                     manifest.status = "instrument_error"
                     manifest.end_time = batch_iso_timestamp()
-                    _write_batch_manifest(manifest, manifest_path)
+                    history.write(vars(manifest), _write_batch_manifest)
                     human.extend(
                         [
                             f"SCPI log: {scpi_log_path}",
@@ -257,6 +261,7 @@ def run_capture_batch(
 
                 if stop_requested is not None and stop_requested():
                     return _cancel_capture_batch(
+                        history,
                         manifest,
                         manifest_path,
                         scpi_log_path,
@@ -275,6 +280,7 @@ def run_capture_batch(
                     )
                 ):
                     return _cancel_capture_batch(
+                        history,
                         manifest,
                         manifest_path,
                         scpi_log_path,
@@ -287,7 +293,7 @@ def run_capture_batch(
 
             manifest.status = "completed"
             manifest.end_time = batch_iso_timestamp()
-            _write_batch_manifest(manifest, manifest_path)
+            history.write(vars(manifest), _write_batch_manifest)
             human.extend(
                 [f"SCPI log: {scpi_log_path}", f"Manifest: {manifest_path}"]
             )
@@ -306,7 +312,7 @@ def run_capture_batch(
         manifest.status = "interrupted"
         manifest.end_time = batch_iso_timestamp()
         manifest.error = "KeyboardInterrupt"
-        _write_batch_manifest_best_effort(manifest, manifest_path)
+        _write_batch_manifest_best_effort(manifest, manifest_path, history)
         return _capture_batch_operation_result(
             130,
             manifest,
@@ -319,13 +325,12 @@ def run_capture_batch(
             scope,
         )
     except OscilloscopeError as exc:
+        manifest.status = "error"
+        manifest.end_time = batch_iso_timestamp()
+        manifest.error = str(exc)
+        _write_batch_manifest_best_effort(manifest, manifest_path, history)
         if reporter_failed:
             raise
-        if manifest.status == "running":
-            manifest.status = "error"
-            manifest.end_time = batch_iso_timestamp()
-            manifest.error = str(exc)
-            _write_batch_manifest_best_effort(manifest, manifest_path)
         raise _OperationError(
             exc,
             _capture_batch_operation_result(
@@ -341,12 +346,12 @@ def run_capture_batch(
             ),
         ) from exc
     except OSError as exc:
-        if reporter_failed:
-            raise
         manifest.status = "error"
         manifest.end_time = batch_iso_timestamp()
         manifest.error = str(exc)
-        _write_batch_manifest_best_effort(manifest, manifest_path)
+        _write_batch_manifest_best_effort(manifest, manifest_path, history)
+        if reporter_failed:
+            raise
         error = OscilloscopeError(f"could not write SCPI log file {scpi_log_path}: {exc}")
         raise _OperationError(
             error,
@@ -362,6 +367,13 @@ def run_capture_batch(
                 scope,
             ),
         ) from exc
+    except Exception as exc:
+        manifest.status = "error"
+        manifest.end_time = batch_iso_timestamp()
+        manifest.error = str(exc)
+        _write_batch_manifest_best_effort(manifest, manifest_path, history)
+        raise
+
 
 
 def _capture_batch_operation_result(
@@ -408,6 +420,7 @@ def _capture_batch_operation_result(
 
 
 def _cancel_capture_batch(
+    history: _ManifestHistory,
     manifest: BatchManifest,
     manifest_path: Path,
     scpi_log_path: Path,
@@ -420,7 +433,7 @@ def _cancel_capture_batch(
     manifest.status = "cancelled"
     manifest.error = None
     manifest.end_time = batch_iso_timestamp()
-    _write_batch_manifest(manifest, manifest_path)
+    history.write(vars(manifest), _write_batch_manifest)
     human.extend([f"SCPI log: {scpi_log_path}", f"Manifest: {manifest_path}"])
     return _capture_batch_operation_result(
         130,
@@ -438,15 +451,16 @@ def _cancel_capture_batch(
 def _write_batch_manifest_best_effort(
     manifest: BatchManifest,
     manifest_path: Path,
+    history: _ManifestHistory,
 ) -> None:
     try:
-        write_batch_manifest(manifest, manifest_path)
-    except OSError:
+        history.write(vars(manifest), _write_batch_manifest)
+    except (OSError, OscilloscopeError):
         pass
 
 
 def _write_batch_manifest(
-    manifest: BatchManifest,
+    manifest: BatchManifest | Mapping[str, object],
     manifest_path: Path,
 ) -> None:
     try:

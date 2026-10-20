@@ -87,6 +87,25 @@ Direct Python use of `Oscilloscope.open()` is a low-level session interface,
 not a Product support entry point. See [Supported Models](supported-models.md)
 for the exact connections and model-specific feature limits.
 
+## Workflow Manifest Persistence
+
+Measurement Log, Triggered Measurement Loop, Periodic Capture, Triggered
+Capture Series, Segmented Capture, Capture Until, and Generic Sequence append
+each committed history record to an internal JSONL journal. While running,
+`manifest.json` contains compact progress and state rather than accumulated
+history or artifact lists. CSV rows and capture artifacts are written first;
+history and the progress snapshot must succeed before completion counts are
+advanced and sample/progress callbacks are notified.
+
+On completion, cooperative cancellation, or a handled error/interruption,
+the committed records are assembled into the full final `manifest.json`,
+preserving its existing schema, fields, history order, and artifact paths.
+The final manifest is published by atomic replacement before the journal is
+removed. If final publication fails, the operation cannot report success;
+already written data and the journal are retained where possible. Automatic
+recovery after process termination or power loss is outside this contract.
+Supported no-save workflows create no journal or manifest.
+
 ## Feature Areas
 
 Core groups the instrument surface into these feature families:
@@ -117,7 +136,7 @@ an exhaustive API, SCPI, model, firmware, or option-support matrix.
 Core provides finite synchronous workflows built from existing instrument
 operations. Workflows can accept cooperative stop requests, synchronous
 progress reporters, and operation-specific sample callbacks; they do not
-introduce an async runtime, scheduler, persistence layer, or event bus.
+introduce an async runtime, scheduler, or event bus.
 
 The current workflow surface includes `measure-log`, Periodic Capture through
 `capture-batch`, Capture Until, Capture Monitor, Triggered Measurement Loop,

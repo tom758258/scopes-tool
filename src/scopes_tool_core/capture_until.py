@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-import copy
 from dataclasses import dataclass
 import math
 from pathlib import Path
@@ -21,6 +20,7 @@ from .batch import (
 )
 from .capabilities import ScopeCapabilities
 from .channel import validate_analog_channel
+from ._history import _ManifestHistory
 from .errors import OscilloscopeError, ParameterValidationError
 from .operation_support import _capture_waveform
 from .operation_types import OperationResult
@@ -181,9 +181,10 @@ def run_capture_until(
     last_system_error: dict[str, object] | None = None
     reporter_failed = False
     current_capture = 0
+    history = _ManifestHistory(manifest_path, "matches")
 
     try:
-        _write_manifest(manifest, manifest_path)
+        history.write(manifest, _write_manifest)
         with workflow_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
             for entry in drain_preexisting_system_errors(scope):
                 human.append(f"Pre-operation stale system error drained: {entry.format()}")
@@ -191,12 +192,14 @@ def run_capture_until(
             while int(manifest["completed_count"]) < request.count:
                 if _stop_requested(stop_requested):
                     return _finish_result(
+                        history,
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                         termination_reason=None,
                     )
                 if time.perf_counter() - start_perf >= float(request.timeout_seconds):
                     return _finish_result(
+                        history,
                         "error", 1, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope,
                         error=_condition_timeout_error(request.timeout_seconds),
@@ -210,6 +213,7 @@ def run_capture_until(
                 manifest["capture_count"] = current_capture
                 if entry.is_error:
                     return _finish_result(
+                        history,
                         "instrument_error", 1, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope,
                         error={
@@ -251,16 +255,13 @@ def run_capture_until(
                         "metadata": relative_manifest_path(written_metadata, output_dir),
                         "actual_points": capture_actual_points(capture),
                     }
-                    candidate = copy.deepcopy(manifest)
+                    candidate = dict(manifest)
                     candidate["completed_count"] = match_index
-                    matches = candidate["matches"]
-                    assert isinstance(matches, list)
-                    matches.append(match_entry)
-                    candidate["files"] = _relative_files(files, output_dir)
-                    _write_manifest(candidate, manifest_path)
-                    manifest = candidate
+                    history.write(candidate, _write_manifest, record=match_entry)
+                    manifest["matches"].append(match_entry)
+                    manifest["completed_count"] = match_index
                 else:
-                    _write_manifest(manifest, manifest_path)
+                    history.write(manifest, _write_manifest)
 
                 update = {
                     "capture_index": current_capture,
@@ -287,12 +288,14 @@ def run_capture_until(
 
                 if int(manifest["completed_count"]) >= request.count:
                     return _finish_result(
+                        history,
                         "completed", 0, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                         termination_reason="condition_met",
                     )
                 if _stop_requested(stop_requested):
                     return _finish_result(
+                        history,
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                         termination_reason=None,
@@ -305,20 +308,21 @@ def run_capture_until(
                     wait_seconds, stop_requested=stop_requested
                 ):
                     return _finish_result(
+                        history,
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, human, idn, last_system_error, scope, error=None,
                         termination_reason=None,
                     )
     except KeyboardInterrupt:
         return _finish_result(
+            history,
             "interrupted", 130, manifest, manifest_path, scpi_log_path,
             files, human, idn, last_system_error, scope,
             error="KeyboardInterrupt", termination_reason=None, best_effort=True,
         )
-    except (OSError, OscilloscopeError) as exc:
-        if reporter_failed:
-            raise
-        return _finish_result(
+    except Exception as exc:
+        result = _finish_result(
+            history,
             "error", 1, manifest, manifest_path, scpi_log_path, files, human,
             idn, last_system_error, scope,
             error={
@@ -329,6 +333,10 @@ def run_capture_until(
             termination_reason=None,
             best_effort=True,
         )
+        if reporter_failed or not isinstance(exc, (OSError, OscilloscopeError)):
+            raise
+        return result
+
     raise AssertionError("finite capture until exited without a result")
 
 
@@ -456,6 +464,7 @@ def _relative_files(
 
 
 def _finish_result(
+    history: _ManifestHistory,
     status: str,
     exit_code: int,
     manifest: dict[str, object],
@@ -478,11 +487,11 @@ def _finish_result(
     manifest["error"] = error
     if best_effort:
         try:
-            _write_manifest(manifest, manifest_path)
-        except OscilloscopeError:
+            history.write(manifest, _write_manifest)
+        except (OSError, OscilloscopeError):
             pass
     else:
-        _write_manifest(manifest, manifest_path)
+        history.write(manifest, _write_manifest)
     human.extend(
         [
             f"Capture until status: {status}",

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from .status import status_fields
 
-import copy
 import csv
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -22,6 +21,7 @@ from .batch import (
     write_batch_manifest,
 )
 from .capabilities import ScopeCapabilities
+from ._history import _ManifestHistory
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import pair_measurement_query
 from .operation_types import OperationResult
@@ -180,10 +180,11 @@ def run_triggered_measure_loop(
     last_system_error: dict[str, object] | None = None
     current_cycle = 0
     reporter_failed = False
+    history = _ManifestHistory(manifest_path, "cycles")
 
     try:
         if manifest_path is not None:
-            _write_manifest(manifest, manifest_path)
+            history.write(manifest, _write_manifest)
         with workflow_scpi_logging(
             scpi_log_path,
             echo_to_stderr=request.log_scpi,
@@ -206,6 +207,7 @@ def run_triggered_measure_loop(
                     current_cycle = index
                     if _stop_requested(stop_requested):
                         return _finish_result(
+                            history,
                             "cancelled", 130, manifest, manifest_path, csv_path,
                             scpi_log_path, files, human, idn, last_system_error,
                             scope, error=None,
@@ -219,6 +221,7 @@ def run_triggered_measure_loop(
                     )
                     if trigger.outcome == "cancelled":
                         return _finish_result(
+                            history,
                             "cancelled", 130, manifest, manifest_path, csv_path,
                             scpi_log_path, files, human, idn, last_system_error,
                             scope, error=None,
@@ -231,12 +234,14 @@ def run_triggered_measure_loop(
                             trigger.error,
                         )
                         return _finish_result(
+                            history,
                             "error", 1, manifest, manifest_path, csv_path,
                             scpi_log_path, files, human, idn, last_system_error,
                             scope, error=error,
                         )
                     if _stop_requested(stop_requested):
                         return _finish_result(
+                            history,
                             "cancelled", 130, manifest, manifest_path, csv_path,
                             scpi_log_path, files, human, idn, last_system_error,
                             scope, error=None,
@@ -263,6 +268,7 @@ def run_triggered_measure_loop(
                             )
                             if _stop_requested(stop_requested):
                                 return _finish_result(
+                                    history,
                                     "cancelled", 130, manifest, manifest_path, csv_path,
                                     scpi_log_path, files, human, idn, last_system_error,
                                     scope, error=None,
@@ -281,6 +287,7 @@ def run_triggered_measure_loop(
                             )
                             if _stop_requested(stop_requested):
                                 return _finish_result(
+                                    history,
                                     "cancelled", 130, manifest, manifest_path, csv_path,
                                     scpi_log_path, files, human, idn, last_system_error,
                                     scope, error=None,
@@ -296,6 +303,7 @@ def run_triggered_measure_loop(
                             "message": entry.format(),
                         }
                         return _finish_result(
+                            history,
                             "instrument_error", 1, manifest, manifest_path, csv_path,
                             scpi_log_path, files, human, idn, last_system_error,
                             scope, error=error,
@@ -329,14 +337,13 @@ def run_triggered_measure_loop(
                             "trigger_elapsed_seconds": trigger_elapsed_seconds,
                             **status_fields(dict(last_system_error)),
                         }
-                        candidate = copy.deepcopy(manifest)
+                        candidate = dict(manifest)
                         candidate["completed_count"] = index
-                        candidate_cycles = candidate["cycles"]
-                        assert isinstance(candidate_cycles, list)
-                        candidate_cycles.append(cycle)
                         candidate["last_measurement"] = sample
-                        _write_manifest(candidate, manifest_path)
-                        manifest = candidate
+                        history.write(candidate, _write_manifest, record=cycle)
+                        manifest["cycles"].append(cycle)
+                        manifest["completed_count"] = index
+                        manifest["last_measurement"] = sample
                     else:
                         manifest["completed_count"] = index
                         manifest["last_measurement"] = sample
@@ -357,12 +364,14 @@ def run_triggered_measure_loop(
 
                     if index >= request.count:
                         return _finish_result(
+                            history,
                             "completed", 0, manifest, manifest_path, csv_path,
                             scpi_log_path, files, human, idn, last_system_error,
                             scope, error=None,
                         )
                     if _stop_requested(stop_requested):
                         return _finish_result(
+                            history,
                             "cancelled", 130, manifest, manifest_path, csv_path,
                             scpi_log_path, files, human, idn, last_system_error,
                             scope, error=None,
@@ -372,30 +381,35 @@ def run_triggered_measure_loop(
                         stop_requested=stop_requested,
                     ):
                         return _finish_result(
+                            history,
                             "cancelled", 130, manifest, manifest_path, csv_path,
                             scpi_log_path, files, human, idn, last_system_error,
                             scope, error=None,
                         )
     except KeyboardInterrupt:
         return _finish_result(
+            history,
             "interrupted", 130, manifest, manifest_path, csv_path,
             scpi_log_path, files, human, idn, last_system_error, scope,
             error="KeyboardInterrupt",
             best_effort=True,
         )
-    except (OSError, OscilloscopeError) as exc:
-        if reporter_failed:
-            raise
+    except Exception as exc:
         error = {
             "type": type(exc).__name__,
             "cycle_index": current_cycle or None,
             "message": str(exc),
         }
-        return _finish_result(
+        result = _finish_result(
+            history,
             "error", 1, manifest, manifest_path, csv_path, scpi_log_path,
             files, human, idn, last_system_error, scope, error=error,
             best_effort=True,
         )
+
+        if reporter_failed or not isinstance(exc, (OSError, OscilloscopeError)):
+            raise
+        return result
 
     raise AssertionError("finite triggered measurement loop exited without a result")
 
@@ -581,6 +595,7 @@ def _write_manifest(manifest: Mapping[str, object], path: Path) -> None:
 
 
 def _finish_result(
+    history: _ManifestHistory,
     status: str,
     exit_code: int,
     manifest: dict[str, object],
@@ -603,11 +618,11 @@ def _finish_result(
         pass
     elif best_effort:
         try:
-            _write_manifest(manifest, manifest_path)
-        except OscilloscopeError:
+            history.write(manifest, _write_manifest)
+        except (OSError, OscilloscopeError):
             pass
     else:
-        _write_manifest(manifest, manifest_path)
+        history.write(manifest, _write_manifest)
     human.append(f"Triggered measurement loop status: {status}")
     if manifest_path is not None:
         human.extend([f"CSV: {csv_path}", f"Manifest: {manifest_path}", f"SCPI log: {scpi_log_path}"])

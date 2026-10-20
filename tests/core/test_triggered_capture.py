@@ -75,6 +75,7 @@ def test_planner_uses_one_representative_cycle_without_writing_files(tmp_path):
 
 def test_happy_path_commits_two_cycles_before_reporting_and_preserves_completion(
     tmp_path,
+    check_incremental_manifest,
 ):
     scope = _scope()
     output_dir = tmp_path / "run"
@@ -88,6 +89,11 @@ def test_happy_path_commits_two_cycles_before_reporting_and_preserves_completion
         )
         csv_path = output_dir / sample["csv"]
         metadata_path = output_dir / sample["metadata"]
+        journal = output_dir / ".manifest-history.jsonl"
+        committed = [json.loads(line) for line in journal.read_text(encoding="utf-8").splitlines()]
+        assert committed[-1] == sample
+        assert len(committed) == sample["index"]
+        assert manifest["cycles"] == []
         observed.append(
             (
                 sample["index"],
@@ -125,6 +131,8 @@ def test_happy_path_commits_two_cycles_before_reporting_and_preserves_completion
     assert manifest["status"] == "completed"
     assert manifest["completed_count"] == 2
     assert len(manifest["cycles"]) == 2
+    check_incremental_manifest(output_dir, "cycles", 2)
+
 
 
 def test_later_trigger_timeout_preserves_previous_cycle_and_stops(monkeypatch, tmp_path):
@@ -229,6 +237,25 @@ def test_post_capture_system_error_keeps_diagnostics_without_committing_cycle(tm
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["completed_count"] == 0
     assert manifest["cycles"] == []
+
+
+def test_snapshot_failure_preserves_committed_cycles_and_artifacts(tmp_path, fail_progress_snapshot):
+    fail_progress_snapshot()
+    output_dir = tmp_path / "failed"
+    samples, progress = [], []
+    result = triggered_capture.run_triggered_capture_series(
+        _scope(), RESOURCE, _request(output_dir, count=3),
+        sample_reporter=samples.append, progress_reporter=progress.append,
+    )
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert result.result["completed_count"] == 1
+    assert [cycle["index"] for cycle in manifest["cycles"]] == [1]
+    assert [sample["index"] for sample in samples] == [1]
+    assert [item.completed_count for item in progress] == [1]
+    assert (output_dir / "waveform_0002.csv").exists()
+    assert (output_dir / "waveform_0002_meta.json").exists()
 
 
 def test_waveform_failure_does_not_commit_cycle(monkeypatch, tmp_path):

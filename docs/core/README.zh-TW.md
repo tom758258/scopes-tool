@@ -66,6 +66,20 @@ Dry-run 與模擬不開啟 Live VISA Session。
 直接 Python 使用 `Oscilloscope.open()` 是低階 Session 介面，不是 Product 支援入口。
 確切連線及型號功能限制請見[支援型號](supported-models.zh-TW.md)。
 
+## 工作流程 Manifest 持久化
+
+Measurement Log、Triggered Measurement Loop、Periodic Capture、Triggered
+Capture Series、Segmented Capture、Capture Until 與 Generic Sequence 將每筆
+已提交歷史附加至內部 JSONL Journal。執行中的 `manifest.json` 保存精簡進度與
+狀態，不包含累積歷史或 Artifact 清單。先寫入 CSV 資料列與擷取檔案；歷史與進度
+快照都成功保存後，才增加完成計數並通知 Sample／Progress Callback。
+
+正常完成、合作式取消或可處理的錯誤／中斷時，已提交紀錄會整合為完整的最終
+`manifest.json`，維持既有 Schema、欄位、歷史順序與 Artifact 路徑。
+最終 Manifest 經原子替換成功發布後，才移除 Journal。若最終發布失敗，流程不得
+回報成功，並盡可能保留已寫入資料與 Journal。程序強制終止或斷電後的自動復原
+不在此契約範圍內。原本支援 No-save 的流程不會建立 Journal 或 Manifest。
+
 ## 功能領域
 
 Core 將儀器介面分成以下功能：
@@ -85,7 +99,7 @@ Core 將儀器介面分成以下功能：
 ## 工作流程基礎
 
 Core 以既有儀器操作組成有限次同步流程，可接受合作式停止要求、同步進度回報與操作專屬
-Sample Callback；不引入非同步 Runtime、Scheduler、Persistence Layer 或 Event Bus。
+Sample Callback；不引入非同步 Runtime、Scheduler 或 Event Bus。
 
 目前流程包括 `measure-log`、透過 `capture-batch` 的 Periodic Capture、Capture Until、
 Capture Monitor、Triggered Measurement Loop、Triggered Capture Series、Measure Until

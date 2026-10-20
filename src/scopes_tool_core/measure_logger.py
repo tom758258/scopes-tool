@@ -15,6 +15,7 @@ import time
 from typing import Callable, Mapping
 
 from .batch import idn_manifest_dict, relative_manifest_path, system_error_manifest_dict
+from ._history import _ManifestHistory
 from .errors import OscilloscopeError, VisaBackendError
 from .capabilities import operation_supported
 from .scope import Oscilloscope
@@ -254,9 +255,10 @@ def log_measurements_workflow(
         ),
     )
 
+    history = _ManifestHistory(manifest_path, "rows")
     if scpi_log_path is not None:
         _touch_measure_log_file(scpi_log_path, "SCPI log")
-    _persist_measure_log_manifest(manifest, manifest_path)
+    history.write(vars(manifest), write_measure_log_manifest)
 
     headers = ["timestamp_iso", "elapsed_seconds"]
     for ch in channels:
@@ -306,6 +308,7 @@ def log_measurements_workflow(
                     break
                 if stop_requested is not None and stop_requested():
                     return _cancel_measurement_log(
+                        history,
                         manifest,
                         manifest_path,
                         human,
@@ -355,6 +358,7 @@ def log_measurements_workflow(
                         row_data[col] = val
                         if stop_requested is not None and stop_requested():
                             return _cancel_measurement_log(
+                                history,
                                 manifest,
                                 manifest_path,
                                 human,
@@ -381,6 +385,7 @@ def log_measurements_workflow(
                         row_data[col] = val
                         if stop_requested is not None and stop_requested():
                             return _cancel_measurement_log(
+                                history,
                                 manifest,
                                 manifest_path,
                                 human,
@@ -395,16 +400,6 @@ def log_measurements_workflow(
                     writer.writerow(row_vals)
                     csv_file.flush()
 
-                manifest.completed_rows = row_index
-                if manifest_path is not None:
-                    manifest.rows.append(
-                        {
-                            "index": row_index,
-                            "timestamp_iso": iso_now,
-                            "elapsed_seconds": elapsed_now,
-                            **status_fields(system_error_manifest_dict(system_err)),
-                        }
-                    )
                 last_system_error = system_error_manifest_dict(system_err)
                 sample = {
                     "index": row_index,
@@ -413,8 +408,20 @@ def log_measurements_workflow(
                     "values": {header: row_data[header] for header in headers[2:]},
                     **status_fields(dict(last_system_error)),
                 }
+                record = {
+                    "index": row_index,
+                    "timestamp_iso": iso_now,
+                    "elapsed_seconds": elapsed_now,
+                    **status_fields(dict(last_system_error)),
+                }
+                candidate = dict(vars(manifest))
+                candidate["completed_rows"] = row_index
+                candidate["last_measurement"] = sample
+                history.write(candidate, write_measure_log_manifest, record=record)
+                if manifest_path is not None:
+                    manifest.rows.append(record)
+                manifest.completed_rows = row_index
                 manifest.last_measurement = sample
-                _persist_measure_log_manifest(manifest, manifest_path)
                 try:
                     if sample_reporter is not None:
                         sample_reporter(sample)
@@ -441,7 +448,7 @@ def log_measurements_workflow(
                     manifest.status = "instrument_error"
                     manifest.error = f"SystemError: {system_err.format()}"
                     manifest.end_time = logger_iso_timestamp()
-                    _persist_measure_log_manifest(manifest, manifest_path)
+                    history.write(vars(manifest), write_measure_log_manifest)
                     _append_last_measurement(human, manifest)
                     return MeasureLogWorkflowResult(
                         1,
@@ -458,6 +465,7 @@ def log_measurements_workflow(
 
                 if stop_requested is not None and stop_requested():
                     return _cancel_measurement_log(
+                        history,
                         manifest,
                         manifest_path,
                         human,
@@ -471,6 +479,7 @@ def log_measurements_workflow(
                     stop_requested=stop_requested,
                 ):
                     return _cancel_measurement_log(
+                        history,
                         manifest,
                         manifest_path,
                         human,
@@ -479,7 +488,7 @@ def log_measurements_workflow(
 
             manifest.status = "completed"
             manifest.end_time = logger_iso_timestamp()
-            _persist_measure_log_manifest(manifest, manifest_path)
+            history.write(vars(manifest), write_measure_log_manifest)
             human.append("Measurement logging completed successfully.")
             _append_last_measurement(human, manifest)
             return MeasureLogWorkflowResult(
@@ -494,7 +503,7 @@ def log_measurements_workflow(
         manifest.error = "KeyboardInterrupt"
         manifest.end_time = logger_iso_timestamp()
         try:
-            _persist_measure_log_manifest(manifest, manifest_path)
+            history.write(vars(manifest), write_measure_log_manifest)
         except OSError:
             pass
         LOGGER.warning("measurement logging interrupted")
@@ -506,34 +515,33 @@ def log_measurements_workflow(
             last_system_error,
         )
     except OSError as exc:
-        if reporter_failed:
-            raise
         manifest.status = "error"
         manifest.error = str(exc)
         manifest.end_time = logger_iso_timestamp()
         try:
-            _persist_measure_log_manifest(manifest, manifest_path)
+            history.write(vars(manifest), write_measure_log_manifest)
         except OSError:
             pass
+        if reporter_failed:
+            raise
         raise OscilloscopeError(
             _format_measure_log_file_error(
                 "measurement log output", csv_path or Path("measurements.csv"), exc
             )
         ) from exc
-    except OscilloscopeError as exc:
-        if reporter_failed:
-            raise
+    except Exception as exc:
         manifest.status = "error"
         manifest.error = str(exc)
         manifest.end_time = logger_iso_timestamp()
         try:
-            _persist_measure_log_manifest(manifest, manifest_path)
+            history.write(vars(manifest), write_measure_log_manifest)
         except OSError:
             pass
         raise
 
 
 def _cancel_measurement_log(
+    history: _ManifestHistory,
     manifest: MeasureLogManifest,
     manifest_path: Path | None,
     human: list[str],
@@ -542,7 +550,7 @@ def _cancel_measurement_log(
     manifest.status = "cancelled"
     manifest.error = None
     manifest.end_time = logger_iso_timestamp()
-    _persist_measure_log_manifest(manifest, manifest_path)
+    history.write(vars(manifest), write_measure_log_manifest)
     human.append("Measurement logging cancelled.")
     _append_last_measurement(human, manifest)
     return MeasureLogWorkflowResult(

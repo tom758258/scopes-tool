@@ -143,7 +143,7 @@ def test_workflow_scpi_logging_writes_package_debug_to_file(tmp_path):
     ]
 
 
-def test_run_capture_batch_completes_and_writes_representative_artifacts(tmp_path):
+def test_run_capture_batch_completes_and_writes_representative_artifacts(tmp_path, check_incremental_manifest):
     scope = Oscilloscope(
         SimulatorBackend(physical_model_id="keysight-dsox4024a")
     )
@@ -169,6 +169,30 @@ def test_run_capture_batch_completes_and_writes_representative_artifacts(tmp_pat
     assert (output_dir / "waveform_0001.csv").exists()
     assert (output_dir / "waveform_0001_meta.json").exists()
     assert (output_dir / "scpi.log").exists()
+    check_incremental_manifest(output_dir, "captures", 2)
+
+
+
+def test_snapshot_failure_preserves_only_committed_captures(tmp_path, fail_progress_snapshot):
+    fail_progress_snapshot()
+    output_dir = tmp_path / "failed"
+    samples, progress = [], []
+    with pytest.raises(OscilloscopeError) as caught:
+        capture_batch.run_capture_batch(
+            Oscilloscope(SimulatorBackend(physical_model_id="keysight-dsox4024a")),
+            "SIM::keysight-dsox4024a::INSTR",
+            CaptureBatchRequest(channels=[1], requested_count=3, output_dir=output_dir),
+            sample_reporter=samples.append, progress_reporter=progress.append,
+        )
+    result = caught.value.result
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert result.result["completed_count"] == 1
+    assert [capture["index"] for capture in manifest["captures"]] == [1]
+    assert [sample["index"] for sample in samples] == [1]
+    assert [item.completed_count for item in progress] == [1]
+    assert (output_dir / "waveform_0002.csv").exists()
 
 
 def test_run_capture_batch_cancels_before_next_capture_and_reports_sample(tmp_path):

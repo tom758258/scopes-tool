@@ -186,7 +186,7 @@ class _FinalModeVisaTimeoutBackend(_TimeoutTrackingBackend):
 
 
 def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, check_incremental_manifest
 ):
     vertical_units = []
     original_convert_byte_waveform = segmented_capture_module.convert_byte_waveform
@@ -273,6 +273,8 @@ def test_run_segmented_capture_exports_segments_in_order_and_writes_manifest(
         ":ACQuire:MODE?",
         ":SYSTem:ERRor?",
     ]
+    check_incremental_manifest(tmp_path, "segments", 2)
+
 
 
 def test_run_segmented_capture_unit_query_timeout_stops_before_capture(tmp_path):
@@ -767,13 +769,16 @@ def test_run_segmented_capture_keeps_csv_file_when_manifest_update_fails(
     csv_path = tmp_path / "segment_0001.csv"
     assert result.exit_code == 1
     assert result.result["status"] == "partial"
-    assert result.result["exported_segments"] == 1
+    assert result.result["exported_segments"] == 0
     assert "simulated manifest failure" in result.result["error"]
     assert csv_path.exists()
     assert {"kind": "csv", "path": str(csv_path)} in result.files
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["vertical_unit"] == "A"
     assert result.result["vertical_unit"] == "A"
+
+    assert manifest["segments"] == []
+    assert manifest["exported_segments"] == 0
 
 
 def test_run_segmented_capture_cancels_before_single_when_stop_arrives_during_setup(

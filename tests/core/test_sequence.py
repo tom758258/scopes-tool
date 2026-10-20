@@ -5,6 +5,7 @@ import pytest
 from scopes_tool_core import sequence
 from scopes_tool_core.cleanup import CleanupResult
 from scopes_tool_core.errors import OscilloscopeError, ParameterValidationError
+from scopes_tool_core.operation_types import OperationResult
 from scopes_tool_core.scope import Oscilloscope
 from scopes_tool_core.simulator_backend import SimulatorBackend
 from scopes_tool_core.status import SystemErrorEntry
@@ -145,7 +146,7 @@ def test_sequence_product_limits_reject_over_limit_documents(payload, message):
 
 
 def test_sequence_executes_steps_in_loop_order_and_reports_progress(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, check_incremental_manifest
 ):
     waits = []
     progress = []
@@ -174,6 +175,60 @@ def test_sequence_executes_steps_in_loop_order_and_reports_progress(
     assert all(item.total_count == 4 for item in progress)
     assert result.result["completed_loops"] == 2
     assert result.result["completed_step_executions"] == 4
+    check_incremental_manifest(tmp_path / "run", "executions", 4)
+
+
+
+@pytest.mark.parametrize("save_results", [True, False])
+def test_sequence_does_not_copy_accumulated_results(monkeypatch, tmp_path, save_results):
+    class MeasuredValue(float):
+        def __deepcopy__(self, memo):
+            pytest.fail("committed measurement history must not be copied at each step")
+
+    monkeypatch.setattr(
+        sequence, "run_measure",
+        lambda *args, **kwargs: OperationResult(0, {"value": MeasuredValue(1.5)}),
+    )
+    output_dir = tmp_path / "run"
+    result = sequence.run_sequence(
+        _scope(), RESOURCE,
+        sequence.SequenceRequest(
+            _document(_step("measure", item="vpp", channel=1), loop_count=3),
+            output_dir=output_dir if save_results else None, save_results=save_results,
+        ),
+    )
+    assert result.exit_code == 0
+    assert result.result["completed_step_executions"] == 3
+    assert result.result["steps"][0]["last_result"] == {"value": 1.5}
+    if save_results:
+        manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert [record["loop_index"] for record in manifest["executions"]] == [1, 2, 3]
+    else:
+        assert list(tmp_path.iterdir()) == []
+
+
+def test_final_manifest_failure_cannot_report_success(monkeypatch, tmp_path):
+    dump = json.dump
+
+    def fail_final(payload, handle, *args, **kwargs):
+        if payload.get("status") in {"completed", "error"}:
+            raise OSError("final manifest unavailable")
+        return dump(payload, handle, *args, **kwargs)
+
+    monkeypatch.setattr(json, "dump", fail_final)
+    result = sequence.run_sequence(
+        _scope(), RESOURCE,
+        sequence.SequenceRequest(_document(_step("wait", seconds=0)), output_dir=tmp_path),
+    )
+    assert result.exit_code == 1
+    assert result.result["status"] == "error"
+    assert result.result["completed_step_executions"] == 1
+    assert "final manifest unavailable" in result.result["error"]
+    snapshot = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert snapshot["status"] == "running"
+    assert snapshot["completed_step_executions"] == 1
+    journal = tmp_path / ".manifest-history.jsonl"
+    assert [json.loads(line)["step_index"] for line in journal.read_text().splitlines()] == [1]
 
 
 def test_sequence_wait_cancellation_does_not_execute_next_step(monkeypatch, tmp_path):

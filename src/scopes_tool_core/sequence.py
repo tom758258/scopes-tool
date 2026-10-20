@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from .status import status_payload, status_fields
 from .planning import workflow_step_scpi
-import copy
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -16,6 +15,7 @@ from typing import Mapping
 
 from .capabilities import ScopeCapabilities
 from .cleanup import CLEANUP_PROFILES, execute_cleanup, plan_cleanup
+from ._history import _ManifestHistory
 from .errors import OscilloscopeError, ParameterValidationError
 from .measurements import is_pair_measurement_item, normalize_measurement_item
 from .operation_types import (
@@ -25,7 +25,7 @@ from .operation_types import (
     _OperationError,
 )
 from .operations import run_capture, run_measure
-from .output_files import write_json_file, write_json_file_best_effort, write_screenshot_png_file
+from .output_files import write_json_file, write_screenshot_png_file
 from .planning import (
     CapturePlanRequest,
     MeasurePlanRequest,
@@ -344,9 +344,10 @@ def run_sequence(
     else:
         human.append("Result file saving: disabled")
     last_system_error: dict[str, object] | None = None
+    history = _ManifestHistory(manifest_path, "executions")
     start_perf = time.perf_counter()
     if manifest_path is not None:
-        _write_sequence_manifest(manifest, manifest_path)
+        history.write(manifest, _write_sequence_manifest)
 
     try:
         with workflow_scpi_logging(scpi_log_path, echo_to_stderr=request.log_scpi):
@@ -355,6 +356,7 @@ def run_sequence(
             for loop_index in range(1, document.loop_count + 1):
                 if _stop_requested(stop_requested):
                     return _finish_sequence(
+                        history,
                         "cancelled", 130, manifest, manifest_path, scpi_log_path,
                         files, summaries, human, idn, last_system_error, scope,
                         output_dir, error=None,
@@ -362,6 +364,7 @@ def run_sequence(
                 for step_index, step in enumerate(document.steps, start=1):
                     if _stop_requested(stop_requested):
                         return _finish_sequence(
+                            history,
                             "cancelled", 130, manifest, manifest_path, scpi_log_path,
                             files, summaries, human, idn, last_system_error, scope,
                             output_dir, error=None,
@@ -379,6 +382,7 @@ def run_sequence(
                         )
                     except _SequenceStepCancelled:
                         return _finish_sequence(
+                            history,
                             "cancelled", 130, manifest, manifest_path, scpi_log_path,
                             files, summaries, human, idn, last_system_error, scope,
                             output_dir, error=None,
@@ -390,6 +394,7 @@ def run_sequence(
                         failed = _failed_step(loop_index, step_index, step.action, exc)
                         manifest["failed_step"] = failed
                         return _finish_sequence(
+                            history,
                             "error", 1, manifest, manifest_path, scpi_log_path,
                             files, summaries, human, idn, last_system_error, scope,
                             output_dir, error=str(exc), failed_step=failed,
@@ -412,13 +417,14 @@ def run_sequence(
                         }
                         manifest["failed_step"] = failed
                         return _finish_sequence(
+                            history,
                             outcome.status, 1, manifest, manifest_path, scpi_log_path,
                             files, summaries, human, idn, last_system_error, scope,
                             output_dir, error=message, failed_step=failed,
                         )
 
                     completed = int(manifest["completed_step_executions"]) + 1
-                    candidate_manifest = copy.deepcopy(manifest)
+                    candidate_manifest = dict(manifest)
                     candidate_manifest["completed_step_executions"] = completed
                     if step_index == len(document.steps):
                         candidate_manifest["completed_loops"] = loop_index
@@ -430,25 +436,19 @@ def run_sequence(
                         "result": outcome.result,
                         "files": [_relative_file(item, output_dir) for item in outcome.files] if output_dir is not None else [],
                     }
-                    executions = candidate_manifest["executions"]
-                    assert isinstance(executions, list)
-                    executions.append(record)
-                    candidate_manifest["files"] = [_relative_file(item, output_dir) for item in files] if output_dir is not None else []
-                    if manifest_path is None:
-                        manifest = candidate_manifest
-                    else:
-                        try:
-                            _write_sequence_manifest(candidate_manifest, manifest_path)
-                        except OscilloscopeError as exc:
-                            failed = _failed_step(loop_index, step_index, step.action, exc)
-                            manifest["failed_step"] = failed
-                            return _finish_sequence(
-                                "error", 1, manifest, manifest_path, scpi_log_path,
-                                files, summaries, human, idn, last_system_error, scope,
-                                output_dir, error=str(exc), failed_step=failed,
-                            )
-
-                        manifest = candidate_manifest
+                    try:
+                        history.write(candidate_manifest, _write_sequence_manifest, record=record)
+                    except (OSError, OscilloscopeError) as exc:
+                        failed = _failed_step(loop_index, step_index, step.action, exc)
+                        manifest["failed_step"] = failed
+                        return _finish_sequence(
+                            history,
+                            "error", 1, manifest, manifest_path, scpi_log_path,
+                            files, summaries, human, idn, last_system_error, scope,
+                            output_dir, error=str(exc), failed_step=failed,
+                        )
+                    manifest = candidate_manifest
+                    manifest["executions"].append(record)
                     summary = summaries[step_index - 1]
                     summary["completed_executions"] = int(summary["completed_executions"]) + 1
                     summary["last_result"] = outcome.result
@@ -467,18 +467,21 @@ def run_sequence(
 
                     if completed >= total:
                         return _finish_sequence(
+                            history,
                             "completed", 0, manifest, manifest_path, scpi_log_path,
                             files, summaries, human, idn, last_system_error, scope,
                             output_dir, error=None,
                         )
                     if _stop_requested(stop_requested):
                         return _finish_sequence(
+                            history,
                             "cancelled", 130, manifest, manifest_path, scpi_log_path,
                             files, summaries, human, idn, last_system_error, scope,
                             output_dir, error=None,
                         )
     except KeyboardInterrupt:
         return _finish_sequence(
+            history,
             "interrupted", 130, manifest, manifest_path, scpi_log_path,
             files, summaries, human, idn, last_system_error, scope,
             output_dir, error="KeyboardInterrupt",
@@ -488,10 +491,20 @@ def run_sequence(
         manifest["end_time"] = _sequence_timestamp()
         manifest["error"] = str(exc)
         return _finish_sequence(
+            history,
             "error", 1, manifest, manifest_path, scpi_log_path,
             files, summaries, human, idn, last_system_error, scope,
             output_dir, error=str(exc),
         )
+
+    except Exception as exc:
+        _finish_sequence(
+            history,
+            "error", 1, manifest, manifest_path, scpi_log_path,
+            files, summaries, human, idn, last_system_error, scope,
+            output_dir, error=str(exc),
+        )
+        raise
 
     raise AssertionError("finite sequence exited without a terminal result")
 
@@ -780,6 +793,7 @@ def _execute_step(
 
 
 def _finish_sequence(
+    history: _ManifestHistory,
     status: str,
     exit_code: int,
     manifest: dict[str, object],
@@ -809,8 +823,17 @@ def _finish_sequence(
         if output_dir is not None
         else []
     )
-    if manifest_path is not None:
-        write_json_file_best_effort(manifest, manifest_path)
+    try:
+        history.write(manifest, _write_sequence_manifest)
+    except (OSError, OscilloscopeError) as exc:
+        if exit_code == 0:
+            status, exit_code, error = "error", 1, str(exc)
+            manifest["status"] = status
+            manifest["error"] = error
+        try:
+            history.write(manifest, _write_sequence_manifest)
+        except (OSError, OscilloscopeError):
+            pass
     human.extend(
         [
             f"Sequence status: {status}",
