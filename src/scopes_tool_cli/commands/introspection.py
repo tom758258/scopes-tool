@@ -18,7 +18,7 @@ MANIFEST_EVENT = "tool_manifest"
 CAPABILITIES_EVENT = "capabilities"
 ERROR_EVENT = "error"
 TOOL_ID = "scopes"
-WORKER_COMPATIBILITY_POLICY = "v2-only"
+WORKER_COMPATIBILITY_POLICY = "v3-only"
 SCHEMA_VERSION = 2
 INTROSPECTION_EXIT_USAGE_ERROR = 2
 DEFAULT_MODEL_ID = "keysight-dsox4024a"
@@ -37,7 +37,7 @@ def _write_json(payload: dict[str, object]) -> None:
 
 def build_manifest() -> dict[str, object]:
     # Lazy import: worker_commands imports cli at module level.
-    from ..worker_commands import WORKER_SCHEMA_VERSION
+    from ..worker_commands import WORKER_FEATURES, WORKER_SCHEMA_VERSION
 
     return {
         "event": MANIFEST_EVENT,
@@ -48,6 +48,8 @@ def build_manifest() -> dict[str, object]:
             "schema_versions": [WORKER_SCHEMA_VERSION],
             "compatibility_policy": WORKER_COMPATIBILITY_POLICY,
         },
+        "execution": {"model": "multi_job", "context_binding": "startup"},
+        "features": {name: dict(value) for name, value in WORKER_FEATURES.items()},
     }
 
 

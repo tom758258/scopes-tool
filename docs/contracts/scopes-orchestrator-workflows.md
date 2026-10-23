@@ -1,10 +1,10 @@
 # Scopes Orchestrator Workflows
 
-Common schema version: `2`
+Worker schema version: `3`
 
-Compatibility policy: `v2-only`
+Manifest schema version: `2`; ordinary CLI schema version: `2`.
 
-Implementation status: `Common v2-only conformant`
+Compatibility policy: `v3-only`
 
 This document gives Scopes-specific workflows for agents that drive the
 Keysight oscilloscope CLI and worker. Shared lifecycle ordering is defined in
@@ -13,11 +13,15 @@ envelope rules are defined in
 [Common CLI JSON / JSONL Contract](common-cli-jsonl-contract.md). Worker
 behavior is defined in [Scopes Worker Contract](scopes-worker-contract.md).
 
-## Common v2 Compatibility
+## Common v3 Compatibility
 
-The current Scopes implementation supports Common schema 2 only. Send exact
-integer `schema_version: 2`; do not send schema 1, use fallback, or perform
-version negotiation. Malformed or non-v2 runtime boundaries fail closed.
+Scopes Worker uses Common schema 3 only. Send exact integer token
+`schema_version: 3`; missing versions, old versions, `"3"`, `true`, `3.0`,
+and `3e0` fail closed without fallback or version negotiation. Manifest
+schema 2 declares `v3-only`, `[3]`, `multi_job`/`startup`, and only
+`common.async_jobs` version 1. All inventory commands are Async Jobs, including
+`stop-acquisition`; lifecycle `POST /stop` remains separate. Ordinary CLI JSON,
+capabilities, and domain artifacts retain their independent contracts.
 
 ## Periodic Capture Mapping
 
@@ -27,11 +31,11 @@ which delegates to the existing Core `CaptureBatchRequest` and
 `run_capture_batch()` operation. There is no `periodic-capture` command or
 alias.
 
-Submit a Worker job with the existing schema 2 envelope:
+Submit a Worker job with the schema 3 envelope:
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "capture-batch",
   "arguments": {
     "channel": [1],
@@ -57,7 +61,7 @@ configure or force a trigger.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "triggered-capture-series",
   "arguments": {
     "channel": [1],
@@ -84,7 +88,7 @@ single-channel measurement without controlling acquisition or trigger state.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "measure-until",
   "arguments": {
     "channel": 1,
@@ -109,7 +113,7 @@ which delegates to Core `CaptureUntilRequest` and `run_capture_until()`.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "capture-until",
   "arguments": {
     "channel": [1, 2],
@@ -142,7 +146,7 @@ Capture Monitor uses the finite machine-facing CLI and Worker command
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "capture-monitor",
   "arguments": {
     "channel": [1, 2],
@@ -190,8 +194,14 @@ scopes-tool worker --live --resource USB0::...::INSTR --model keysight-dsox4024a
 ```
 
 Wait for the Common control-plane readiness signal: read the worker stdout
-JSONL `ready` event or poll `GET /status` until a valid status response is
-reachable. The Scopes CLI helper for polling is:
+JSONL `ready` event or poll `GET /status` until a valid Common Status has
+`worker_state: "running"` and `fatal_error: null`. Validate schema, runtime
+features, and control URLs; HTTP 200 alone does not establish readiness.
+Bind the non-empty `run_id` to this Worker session and require later HTTP and
+JSONL observations to agree. Managed local orchestrators apply the Common
+loopback, same-origin, no-redirect and no-proxy connection rules before use;
+independent CLI host options retain their existing behavior.
+The Scopes CLI helper for polling is:
 
 ```text
 scopes-tool wait-ready --port 8765 --json
@@ -270,7 +280,11 @@ scopes-tool status --port 8765 --json
 
 Use the `job_finished` event's state, `ok`, `exit_code`, `result`, `files`,
 and `error` for pass/fail decisions. `GET /status.last_job` exposes the same
-in-memory terminal view for the most recent finished job.
+in-memory terminal view for the most recent finished job. Require complete
+identity, fixed completion `timestamp_utc`, state, `ok`, `result`, and Common
+`error`; preserve partial results, files, and domain diagnostics. Later polls
+must not replace the confirmed result. `last_job` is not history. A completed
+job does not itself establish Worker shutdown or workflow completion.
 
 For `capture` jobs with `wait_trigger`, use `result.trigger.outcome` and
 `result.trigger.capture_allowed` to distinguish
@@ -305,6 +319,7 @@ ready = None
 summary = None
 workflow_error = None
 stderr_lines = []
+worker_errors = []
 worker = subprocess.Popen(
     [
         sys.executable,
@@ -328,7 +343,10 @@ worker = subprocess.Popen(
 def read_stdout():
     assert worker.stdout is not None
     for line in worker.stdout:
-        events.put(json.loads(line))
+        event = json.loads(line)
+        if event.get("event") == "error" and event.get("scope") == "worker":
+            worker_errors.append(event)
+        events.put(event)
 
 
 def read_stderr():
@@ -337,8 +355,10 @@ def read_stderr():
         stderr_lines.append(line.rstrip())
 
 
-threading.Thread(target=read_stdout, daemon=True).start()
-threading.Thread(target=read_stderr, daemon=True).start()
+stdout_reader = threading.Thread(target=read_stdout, daemon=True)
+stderr_reader = threading.Thread(target=read_stderr, daemon=True)
+stdout_reader.start()
+stderr_reader.start()
 
 
 def wait_event(name, *, predicate=None, timeout=10):
@@ -372,9 +392,10 @@ def wait_event(name, *, predicate=None, timeout=10):
 try:
     ready = wait_event("ready")
     assert ready["event"] == "ready"
-    assert ready["schema_version"] == 2
+    assert ready["schema_version"] == 3
     assert ready["service"] == "scopes-tool"
     assert ready["run_id"]
+    assert ready["features"] == {"common.async_jobs": {"contract_version": 1}}
     assert ready["host"] == "127.0.0.1"
     assert ready["port"] == 8765
     assert ready["mode"] == "simulate"
@@ -409,9 +430,11 @@ try:
     assert wait_payload["urls"]["command_url"] == ready["command_url"]
     assert wait_payload["urls"]["status_url"] == ready["status_url"]
     assert wait_payload["urls"]["stop_url"] == ready["stop_url"]
-    assert "command_url" not in wait_payload
-    assert "status_url" not in wait_payload
-    assert "stop_url" not in wait_payload
+    for name in ("command_url", "status_url", "stop_url"):
+        assert wait_payload[name] == ready[name]
+    assert wait_payload["worker_state"] == "running"
+    assert wait_payload["fatal_error"] is None
+    assert wait_payload["features"] == ready["features"]
     assert "trigger_url" not in wait_payload
     assert "trigger_url" not in wait_payload["urls"]
 
@@ -439,6 +462,8 @@ try:
     accepted = json.loads(send.stdout)
     assert send.returncode == 0
     assert accepted["status"] == "accepted"
+    assert accepted["kind"] == "async_job"
+    assert accepted["error"] is None
     assert accepted["command"] == "identify"
     assert accepted["job_id"] == client_job_id
     assert accepted["worker_job_id"]
@@ -502,6 +527,9 @@ finally:
             worker.kill()
             worker.wait(timeout=5)
 
+stdout_reader.join(timeout=5)
+stderr_reader.join(timeout=5)
+
 workflow_failed = (
     workflow_error is not None
     or ready is None
@@ -511,6 +539,10 @@ workflow_failed = (
     or summary.get("ok") is not True
     or summary.get("failed") != 0
     or summary.get("cancelled") != 0
+    or summary.get("fatal_error") is not None
+    or worker_errors
+    or stdout_reader.is_alive()
+    or stderr_reader.is_alive()
     or worker.returncode != 0
 )
 if workflow_failed:
@@ -609,7 +641,14 @@ selecting the resource.
 
 ## Cleanup Rule
 
-Prefer `scopes-tool stop` for worker cleanup. Queued jobs become
+Prefer `scopes-tool stop` for worker cleanup. Stop accepts an empty body, `{}`,
+or optional schema 3 and string reason, acknowledging with HTTP 202 and
+`error: null`; clients also accept Common HTTP 200 acknowledgements. Repeated
+stop is harmless. Acceptance does not establish job or cleanup completion.
+Wait for summary, any later observable cleanup/error evidence, stdout EOF, and
+actual process exit. Preserve known failure even after a successful summary
+or exit 0. Keep confirmed job results separately. Natural completion requires
+no extra stop or `stopping` event. Queued jobs become
 `cancelled`; running jobs stop at cooperative checkpoints. If a blocking device
 operation is still in progress, process termination may be required after the
 operator-defined timeout.

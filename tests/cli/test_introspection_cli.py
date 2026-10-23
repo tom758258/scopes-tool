@@ -64,7 +64,11 @@ def test_manifest_json_reports_static_tool_identity(capsys):
     assert payload["worker_protocol"]["schema_versions"] == [
         WORKER_SCHEMA_VERSION
     ]
-    assert payload["worker_protocol"]["compatibility_policy"] == "v2-only"
+    assert payload["worker_protocol"]["compatibility_policy"] == "v3-only"
+    assert WORKER_SCHEMA_VERSION == 3
+    assert payload["execution"] == {"model": "multi_job", "context_binding": "startup"}
+    assert payload["features"] == {"common.async_jobs": {"contract_version": 1}}
+    assert "commands" not in payload
 
 
 def test_manifest_json_does_not_touch_visa_or_filesystem(
@@ -86,7 +90,7 @@ def test_manifest_text_mode_smoke(capsys):
     captured = capsys.readouterr()
     assert captured.err == ""
     assert "scopes" in captured.out
-    assert "v2-only" in captured.out
+    assert "v3-only" in captured.out
 
 
 def test_capabilities_json_default_model_uses_core_registry(

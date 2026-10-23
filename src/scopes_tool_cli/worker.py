@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,6 +29,8 @@ from .worker_client import (
     client_wait_ready,
 )
 from .worker_commands import (
+    DOMAIN_COMMANDS,
+    WORKER_FEATURES,
     WORKER_SCHEMA_VERSION,
     _CORE_WORKFLOW_COMMANDS,
     parse_domain_command,
@@ -56,9 +59,10 @@ class WorkerJob:
     started_time: str | None = None
     finished_time: str | None = None
     result: dict[str, Any] | None = None
-    error: dict[str, str] | None = None
+    error: dict[str, Any] | None = None
     exit_code: int | None = None
     cancel_requested: bool = False
+    terminal_snapshot: dict[str, Any] | None = field(default=None, init=False)
 
 
 @dataclass
@@ -76,7 +80,7 @@ class WorkerRuntime:
     simulator_state: SimulatorInstrumentState | None = field(default=None, init=False)
     active_job_id: str | None = None
     last_job_id: str | None = None
-    fatal_error: str | None = None
+    fatal_error: dict[str, Any] | None = None
     stopping: bool = False
     accepted: int = 0
     succeeded: int = 0
@@ -97,10 +101,16 @@ class WorkerRuntime:
     def base_url(self) -> str:
         return f"http://{self.host}:{self.port}"
 
+    def control_urls(self) -> dict[str, str]:
+        return {f"{name}_url": f"{self.base_url()}/{name}"
+                for name in ("status", "command", "stop")}
+
     def status_payload(self) -> dict[str, Any]:
         with self.lock:
             active = self.jobs.get(self.active_job_id) if self.active_job_id else None
             last = self.jobs.get(self.last_job_id) if self.last_job_id else None
+            active_snapshot = _job_summary(active, terminal=False)
+            last_snapshot = _job_summary(last)
             queued = [
                 {
                     "worker_job_id": job.worker_job_id,
@@ -115,6 +125,9 @@ class WorkerRuntime:
             "schema_version": WORKER_SCHEMA_VERSION,
             "service": "scopes-tool",
             "status": "stopping" if self.stopping else "ready",
+            "worker_state": "failed" if self.fatal_error is not None else (
+                "stopping" if self.stopping else "running"
+            ),
             "run_id": self.run_id,
             "mode": self.mode,
             "model": self.model,
@@ -124,13 +137,11 @@ class WorkerRuntime:
                 "size": self.queue.qsize(),
                 "jobs": queued,
             },
-            "active_job": _job_summary(active),
-            "last_job": _job_summary(last),
-            "urls": {
-                "command_url": f"{self.base_url()}/command",
-                "status_url": f"{self.base_url()}/status",
-                "stop_url": f"{self.base_url()}/stop",
-            },
+            "active_job": active_snapshot,
+            "last_job": last_snapshot,
+            **self.control_urls(),
+            "urls": self.control_urls(),
+            "features": deepcopy(WORKER_FEATURES),
             "fatal_error": self.fatal_error,
             "timestamp_utc": _now(),
         }
@@ -166,28 +177,41 @@ def run_worker(args: argparse.Namespace) -> int:
         output_format=args.format,
     )
     handler = _make_handler(runtime)
-    server = ThreadingHTTPServer((args.host, args.port), handler)
-    runtime.port = server.server_port
-    worker_thread = threading.Thread(target=_job_loop, args=(runtime,), daemon=True)
-    worker_thread.start()
-    runtime.emit(
-        "ready",
-        status_url=f"{runtime.base_url()}/status",
-        command_url=f"{runtime.base_url()}/command",
-        stop_url=f"{runtime.base_url()}/stop",
-    )
     try:
+        server = ThreadingHTTPServer((args.host, args.port), handler)
+    except Exception as exc:
+        runtime.fatal_error = _common_error("worker", "startup_failed", str(exc), exc)
+        runtime.emit("error", scope="worker", fatal=True, error=runtime.fatal_error)
+        runtime.emit("summary", ok=False, fatal_error=runtime.fatal_error, exit_code=3)
+        return 3
+    summary_emitted = False
+    try:
+        runtime.port = server.server_port
+        worker_thread = threading.Thread(target=_job_loop, args=(runtime,), daemon=True)
+        worker_thread.start()
+        runtime.emit("ready")
         server.serve_forever()
     except KeyboardInterrupt:
         runtime.stopping = True
-        runtime.emit("summary", ok=False, fatal_error="interrupted", exit_code=130)
+        runtime.fatal_error = _common_error("worker", "interrupted", "interrupted")
+        runtime.emit("summary", ok=False, fatal_error=runtime.fatal_error, exit_code=130)
+        summary_emitted = True
         return 130
     except Exception as exc:
-        runtime.fatal_error = str(exc)
+        runtime.fatal_error = _common_error("worker", "worker_failed", str(exc), exc)
+        runtime.emit("error", scope="worker", fatal=True, error=runtime.fatal_error)
         runtime.emit("summary", ok=False, fatal_error=runtime.fatal_error, exit_code=3)
+        summary_emitted = True
         return 3
     finally:
-        server.server_close()
+        try:
+            server.server_close()
+        except Exception as exc:
+            runtime.fatal_error = _common_error("worker", "cleanup_failed", str(exc), exc)
+            runtime.emit("error", scope="worker", fatal=True, error=runtime.fatal_error)
+            if not summary_emitted:
+                runtime.emit("summary", ok=False, fatal_error=runtime.fatal_error, exit_code=3)
+            return 3
     runtime.queue.join()
     runtime.emit(
         "summary",
@@ -205,9 +229,17 @@ def _make_handler(runtime: WorkerRuntime):
 
         def do_GET(self) -> None:
             if self.path != "/status":
-                self._send(404, {"status": "error", "error": {"message": "not found"}})
+                self._send(404, {"status": "error", "error": _common_error(
+                    "validation", "not_found", "not found"
+                )})
                 return
-            self._send(200, runtime.status_payload())
+            try:
+                self._send(200, runtime.status_payload())
+            except Exception as exc:
+                self._send(500, {"status": "error", "error": _common_error(
+                    "worker", "status_failed", str(exc), exc
+                )})
+                return
 
         def do_POST(self) -> None:
             if self.path == "/command":
@@ -216,7 +248,9 @@ def _make_handler(runtime: WorkerRuntime):
             if self.path == "/stop":
                 self._handle_stop()
                 return
-            self._send(404, {"status": "error", "error": {"message": "not found"}})
+            self._send(404, {"status": "error", "error": _common_error(
+                "validation", "not_found", "not found"
+            )})
 
         def _handle_command(self) -> None:
             command_echo: str | None = None
@@ -238,24 +272,41 @@ def _make_handler(runtime: WorkerRuntime):
                     ),
                 )
                 return
-            except OscilloscopeError as exc:
+            except (OscilloscopeError, UnicodeError, ValueError) as exc:
                 self._send(
                     400,
                     _command_error_envelope(str(exc), command_echo, job_id_echo, exc),
                 )
                 return
+            except Exception as exc:
+                self._send(500, _command_error_envelope(
+                    str(exc), command_echo, job_id_echo, exc,
+                    category="worker", code="command_failed",
+                ))
+                return
+            try:
+                self._admit_command(command, arguments, job_id)
+            except Exception as exc:
+                self._send(500, _command_error_envelope(
+                    str(exc), command_echo, job_id_echo, exc,
+                    category="worker", code="command_failed",
+                ))
+
+        def _admit_command(
+            self, command: str, arguments: dict[str, Any], job_id: str | None
+        ) -> None:
             if runtime.stopping:
                 self._send(
                     409,
                     _command_rejected_envelope(
-                        "worker_stopping", command_echo, job_id_echo
+                        "worker_stopping", command, job_id
                     ),
                 )
                 return
             if runtime.queue.full():
                 self._send(
                     429,
-                    _command_rejected_envelope("queue_full", command_echo, job_id_echo),
+                    _command_rejected_envelope("queue_full", command, job_id),
                 )
                 return
             worker_job_id = uuid4().hex
@@ -278,7 +329,7 @@ def _make_handler(runtime: WorkerRuntime):
                     runtime.jobs.pop(worker_job_id, None)
                 self._send(
                     429,
-                    _command_rejected_envelope("queue_full", command_echo, job_id_echo),
+                    _command_rejected_envelope("queue_full", command, job_id),
                 )
                 return
             response = {
@@ -286,19 +337,53 @@ def _make_handler(runtime: WorkerRuntime):
                 "command": command,
                 "job_id": job_id,
                 "worker_job_id": worker_job_id,
+                "kind": "async_job",
+                "error": None,
             }
             self._send(202, response)
 
         def _handle_stop(self) -> None:
-            runtime.stopping = True
-            cancelled = []
-            with runtime.lock:
-                for job in list(runtime.jobs.values()):
-                    if job.state == "queued":
-                        _finish_cancelled_job(runtime, job, started=False)
-                        cancelled.append(job.worker_job_id)
-                    elif job.state == "running":
-                        job.cancel_requested = True
+            try:
+                raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                body = json.loads(raw.decode("utf-8") if raw else "{}")
+                if not isinstance(body, dict):
+                    raise OscilloscopeError("stop body must be a JSON object")
+                if set(body) - {"schema_version", "reason"}:
+                    raise OscilloscopeError("unknown stop request field")
+                if "schema_version" in body and (
+                    type(body["schema_version"]) is not int
+                    or body["schema_version"] != WORKER_SCHEMA_VERSION
+                ):
+                    raise OscilloscopeError("schema_version must be exactly 3")
+                if "reason" in body and not isinstance(body["reason"], str):
+                    raise OscilloscopeError("reason must be a string")
+            except (OscilloscopeError, UnicodeError, ValueError) as exc:
+                self._send(400, {"status": "error", "error": _common_error(
+                    "validation", "invalid_stop", str(exc), exc
+                )})
+                return
+            except Exception as exc:
+                self._send(500, {"status": "error", "error": _common_error(
+                    "worker", "stop_failed", str(exc), exc
+                )})
+                return
+            try:
+                cancelled = []
+                with runtime.lock:
+                    first_stop = not runtime.stopping
+                    runtime.stopping = True
+                    if first_stop:
+                        for job in list(runtime.jobs.values()):
+                            if job.state == "queued":
+                                _finish_cancelled_job(runtime, job, started=False)
+                                cancelled.append(job.worker_job_id)
+                            elif job.state == "running":
+                                job.cancel_requested = True
+            except Exception as exc:
+                self._send(500, {"status": "error", "error": _common_error(
+                    "worker", "stop_failed", str(exc), exc
+                )})
+                return
             self._send(
                 202,
                 {
@@ -306,12 +391,15 @@ def _make_handler(runtime: WorkerRuntime):
                     "run_id": runtime.run_id,
                     "cancelled_jobs": cancelled,
                     "active_job": runtime.active_job_id,
+                    "error": None,
                 },
             )
-            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            if first_stop:
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
 
         def _send(self, status: int, payload: dict[str, Any]) -> None:
-            payload = {**payload, "schema_version": WORKER_SCHEMA_VERSION}
+            payload = {**payload, "schema_version": WORKER_SCHEMA_VERSION,
+                       "run_id": runtime.run_id}
             data = json.dumps(payload, sort_keys=True).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
@@ -431,9 +519,13 @@ def _event_payload(runtime: WorkerRuntime, event: str, **values: Any) -> dict[st
                 "mode": runtime.mode,
                 "model": runtime.model,
                 "resource": runtime.resource,
+                **runtime.control_urls(),
+                "features": deepcopy(WORKER_FEATURES),
             }
         )
         payload.pop("trigger_url", None)
+    elif event == "status":
+        payload.update(runtime.status_payload())
     elif event == "job_started":
         job = runtime.jobs.get(str(payload.get("worker_job_id")))
         payload.setdefault("job_id", None if job is None else job.job_id)
@@ -461,6 +553,7 @@ def _event_payload(runtime: WorkerRuntime, event: str, **values: Any) -> dict[st
 
 
 def _retain_terminal_job(runtime: WorkerRuntime, job: WorkerJob) -> None:
+    _terminal_job_view(job)
     previous_id = runtime.last_job_id
     if previous_id is not None and previous_id != job.worker_job_id:
         previous = runtime.jobs.get(previous_id)
@@ -580,33 +673,55 @@ def _existing_files(files: list[Any]) -> list[Any]:
 
 
 def _terminal_job_view(job: WorkerJob) -> dict[str, Any]:
+    if job.terminal_snapshot is not None:
+        return deepcopy(job.terminal_snapshot)
     payload = job.result if isinstance(job.result, dict) else {}
     files = payload.get("files")
-    return {
+    domain_error = job.error if job.error is not None else payload.get("error")
+    error = None
+    if job.state != "succeeded":
+        message = domain_error.get("message") if isinstance(domain_error, dict) else None
+        error = _common_error(
+            "execution", "job_cancelled" if job.state == "cancelled" else "job_failed",
+            message or f"job {job.state}", domain_error=domain_error,
+        )
+        if payload.get("error") is not None and payload["error"] != domain_error:
+            error["details"]["domain_error"] = deepcopy(payload["error"])
+            error["details"]["cancellation_error"] = deepcopy(domain_error)
+    snapshot = {
         "worker_job_id": job.worker_job_id,
         "job_id": job.job_id,
         "command": job.command,
         "state": job.state,
+        "timestamp_utc": job.finished_time or _now(),
         "ok": job.state == "succeeded",
         "exit_code": job.exit_code,
         "result": payload.get("result"),
         "files": _existing_files(files) if isinstance(files, list) else [],
-        "error": job.error if job.error is not None else payload.get("error"),
+        "error": error,
     }
+    if job.state == "succeeded" and domain_error is not None:
+        snapshot["domain_error"] = deepcopy(domain_error)
+    job.terminal_snapshot = deepcopy(snapshot)
+    return snapshot
 
 
-def _job_summary(job: WorkerJob | None) -> dict[str, Any] | None:
+def _job_summary(job: WorkerJob | None, *, terminal: bool = True) -> dict[str, Any] | None:
     if job is None:
+        return None
+    state = job.state
+    if not terminal and state not in {"queued", "running"}:
         return None
     summary: dict[str, Any] = {
         "worker_job_id": job.worker_job_id,
         "job_id": job.job_id,
         "command": job.command,
-        "state": job.state,
+        "state": state,
+        "timestamp_utc": job.started_time or job.accepted_time or job.request_time,
         "exit_code": job.exit_code,
     }
-    if job.state in {"succeeded", "failed", "cancelled"}:
-        summary.update(_terminal_job_view(job))
+    if terminal and state in {"succeeded", "failed", "cancelled"}:
+        return deepcopy(job.terminal_snapshot)
     return summary
 
 
@@ -626,12 +741,15 @@ def _command_error_envelope(
     command: str | None,
     job_id: str | None,
     exc: Exception | None = None,
+    *, category: str = "validation", code: str = "validation_error",
 ) -> dict[str, Any]:
     return {
         "status": "error",
         "command": command,
         "job_id": job_id,
-        "error": "validation_error",
+        "kind": "async_job" if command in DOMAIN_COMMANDS else None,
+        "worker_job_id": None,
+        "error": _common_error(category, code, message, exc),
         "message": message,
         "error_detail": {
             "type": type(exc).__name__ if exc is not None else "ValidationError",
@@ -648,7 +766,23 @@ def _command_rejected_envelope(
         "command": command,
         "job_id": job_id,
         "reason": reason,
+        "kind": "async_job",
+        "worker_job_id": None,
+        "error": _common_error("admission", reason, reason),
     }
+
+
+def _common_error(
+    category: str, code: str, message: str, exc: Exception | None = None,
+    *, domain_error: Any = None,
+) -> dict[str, Any]:
+    details = {}
+    if domain_error is not None:
+        details["domain_error"] = deepcopy(domain_error)
+    elif exc is not None:
+        details["domain_error"] = {"type": type(exc).__name__, "message": str(exc)}
+    return {"category": category, "code": code,
+            "message": message or code, "details": details}
 
 
 def _now() -> str:

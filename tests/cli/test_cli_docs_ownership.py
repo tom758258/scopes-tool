@@ -153,5 +153,10 @@ def test_scopes_contracts_keep_public_commands_and_schema_fields():
         "ok",
         "failed",
         "cancelled",
+        "worker_state",
+        "features",
+        "timestamp_utc",
+        "category",
+        "details",
     ):
         assert field in text

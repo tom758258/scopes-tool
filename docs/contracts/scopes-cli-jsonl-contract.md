@@ -1,8 +1,10 @@
 # Scopes CLI JSON / JSONL Contract
 
-Common schema version: `2`
+Worker schema version: `3`
 
-Compatibility policy: `v2-only`
+Manifest schema version: `2`; ordinary CLI schema version: `2`.
+
+Compatibility policy: `v3-only`
 
 This document defines Scopes-specific CLI JSON and JSONL payloads. Shared
 envelope rules are defined in
@@ -10,11 +12,10 @@ envelope rules are defined in
 behavior and artifacts are defined in
 [Scopes Worker Contract](scopes-worker-contract.md).
 
-The current Scopes Worker JSONL events, lifecycle client machine JSON, and
-general one-shot CLI machine JSON use Common schema 2. Lifecycle clients reject
-non-v2 Worker responses, and Common-governed boundaries require exact integer
-`schema_version: 2` without v1 fallback or version negotiation. Independently
-versioned domain artifacts retain their existing schemas.
+Worker HTTP and JSONL use exact integer schema 3, without fallback or
+version negotiation. Directly forwarded Worker responses retain schema 3.
+Ordinary one-shot CLI JSON, client-owned errors and dry-run previews, Manifest,
+and capabilities keep schema 2. Domain artifact schemas remain independent.
 
 Common fields such as `event`, `schema_version`, `timestamp_utc`, `run_id`,
 `ok`, `message`, `fatal_error`, and `exit_code` keep their Common meanings
@@ -43,28 +44,48 @@ Human diagnostics belong on stderr or in text mode. The worker emits:
 - `job_finished`: emitted when a queued job reaches a terminal state.
 - `summary`: emitted when the worker process exits normally or fatally.
 
-All runtime events include `schema_version: 2`, `timestamp_utc`, and the same
+All runtime events include `schema_version: 3`, `timestamp_utc`, and the same
 `run_id`. The Scopes `ready` event includes `service: "scopes-tool"`,
-`host`, `port`, `mode`, `model`, `resource`, `command_url`, `status_url`, and
-`stop_url`; it means `/command`, `/status`, and `/stop` are reachable. It does
-not include `trigger_url`.
+`host`, `port`, `mode`, `model`, `resource`, `command_url`, `status_url`,
+`stop_url`, and `features: {"common.async_jobs": {"contract_version": 1}}`.
+It means `/command`, `/status`, and `/stop` are reachable. It does not include
+`trigger_url`.
 
 `job_started` includes `job_id`, `worker_job_id`, and `command`. `job_finished`
 includes `job_id`, `worker_job_id`, `command`, `state`, `ok`, `exit_code`,
 `result`, `files`, and `error`.
 `state` is one of `succeeded`, `failed`, or `cancelled`; only `succeeded` may
 use `ok: true`. `result` carries the command's structured domain result and is
-null when none exists, such as for queued jobs cancelled by `/stop`. `files`
-lists command artifact entries whose paths exist. `summary` includes
+null when none exists, such as for queued jobs cancelled by `/stop`.
+Success requires `ok: true` and `error: null`; failure requires `ok: false` and
+a Common Error. Cancellation uses `ok: false` and retains cancellation
+diagnostics. Common Error includes `category`, `code`, `message`, and `details`;
+original domain errors remain in `details.domain_error`, with separate
+`details.cancellation_error` when both diagnostics exist.
+When existing Core precedence establishes success despite an adapter error,
+Common `error` is null and optional terminal `domain_error` retains that
+diagnostic for the consumer's shutdown and workflow assessment. `files`
+lists artifacts present at completion. Terminal `timestamp_utc`, result, files,
+and error are captured once and remain stable across later status polling.
+`summary` includes
 `accepted`, `succeeded`, `failed`, `cancelled`, `ok`, `fatal_error`, and
-`exit_code`.
+`exit_code`. An optional JSONL `status` contains `worker_state`, `fatal_error`,
+`active_job`, and `last_job` under Common Status. Fatal Worker error events
+include Common Error, `scope: "worker"`, and `fatal: true`.
+Summary reports the Worker result; ordinary job failure need not fail a
+multi-job Worker. Consumers continue through later cleanup/error evidence,
+stdout EOF, and actual exit. Neither summary nor exit 0 clears known failure.
+Worker exits retain `0/2/3` and interruption `130`; no additional `stopping`
+event is required on natural completion.
 
 ## Worker Client JSON
 
 `scopes-tool send-command`, `status`, `stop`, and `wait-ready` emit one
 JSON object when called with `--json`.
 
-All worker client JSON includes `schema_version: 2` and `timestamp_utc`.
+Forwarded Worker JSON retains `schema_version: 3`; locally generated client
+errors and dry-run previews use CLI `schema_version: 2`. Both include
+`timestamp_utc`. A preview embeds a schema-3 Worker request in `request`.
 `send-command` uses the worker command name in `command`; `status`, `stop`, and
 `wait-ready` use the lifecycle CLI command name.
 
@@ -87,11 +108,15 @@ responses include `service: "scopes-tool"`, `status`, `run_id`, `mode`,
 `fatal_error`, and `timestamp_utc`. `run_id` must match the `ready` event from
 the same worker session.
 
-The URL fields for `status` and `wait-ready` are only in the nested `urls`
-object. The `urls` object must contain `command_url`, `status_url`, and
-`stop_url`. Top-level `command_url`, `status_url`, and `stop_url` fields are
-not supported in `status` or `wait-ready` JSON. The `urls` object must not
-include `trigger_url`; Scopes workers do not expose a trigger endpoint.
+`status` and `wait-ready` include `worker_state` and runtime `features`.
+Top-level `command_url`, `status_url`, and `stop_url` match ready; the nested
+`urls` object preserves the same fields for existing consumers. No trigger
+endpoint is declared. `wait-ready` requires a valid schema, non-empty runtime
+identity, UTC timestamp, supported runtime features and same-origin control
+URLs, `worker_state: "running"`, and `fatal_error: null`; HTTP 200 alone is
+insufficient. An identity change while polling is a protocol failure.
+HTTP 500 status-handler failures contain `status: "error"` and a Common Error,
+not a Common Status snapshot.
 
 Worker HTTP `400` is a validation failure and exits `2`. Runtime errors,
 connection errors, timeouts, invalid responses, HTTP request failures, worker
@@ -155,7 +180,13 @@ exactly one JSON object on stdout with exit code `0`.
 - `tool_version`: installed distribution version.
 - `worker_protocol`: object with the supported Worker protocol
   `schema_versions` (from the existing Worker schema version source) and the
-  fixed `compatibility_policy: "v2-only"`.
+  fixed `compatibility_policy: "v3-only"`, with `schema_versions: [3]`.
+- `execution`: `model: "multi_job"`, `context_binding: "startup"`.
+- `features`: `common.async_jobs` with `contract_version: 1`.
+
+The domain Command Inventory explicitly defines every `/command` as an
+`async_job`, including `stop-acquisition`; the Manifest does not enumerate it.
+No Cancel or Streaming feature is advertised.
 
 It does not report per-model capabilities; use `capabilities` for that.
 
@@ -929,8 +960,8 @@ text:
 ## Compatibility Rules
 
 Consumers must ignore unknown fields. New optional fields may be added under
-Common schema version `2`; independently versioned Scopes domain artifacts
-retain their documented versioning. Removing required fields or changing
+Worker schema version `3` or independent CLI schema version `2`, as applicable;
+independently versioned Scopes domain artifacts retain their documented versioning. Removing required fields or changing
 required field types requires a major schema version bump.
 
 Human-readable stdout, stderr, Markdown summaries, and SCPI log text are

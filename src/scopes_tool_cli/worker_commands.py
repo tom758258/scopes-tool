@@ -77,7 +77,8 @@ if TYPE_CHECKING:
     from .worker import WorkerRuntime
 
 
-WORKER_SCHEMA_VERSION = 2
+WORKER_SCHEMA_VERSION = 3
+WORKER_FEATURES = {"common.async_jobs": {"contract_version": 1}}
 
 _CORE_WORKFLOW_COMMANDS = {
     "segmented-capture",
@@ -286,7 +287,7 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
     arguments = _normalize_triggered_capture_series_worker_arguments(command, arguments)
     arguments = _normalize_measure_until_worker_arguments(command, arguments)
     job_id = body.get("job_id")
-    if job_id is not None and not isinstance(job_id, str):
+    if "job_id" in body and not isinstance(job_id, str):
         raise OscilloscopeError("job_id must be a string when provided")
     return command, arguments, job_id
 

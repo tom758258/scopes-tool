@@ -1,19 +1,22 @@
 # Scopes Worker Contract
 
-Common schema version: `2`
+Worker schema version: `3`
 
-Compatibility policy: `v2-only`
+Manifest schema version: `2`; ordinary CLI schema version: `2`.
 
-This is the Scopes worker contract only. It follows
-[Common Worker Protocol](common-worker-protocol.md) for lifecycle concepts and
-defines the Scopes-specific command model, queue behavior, and artifacts.
+Compatibility policy: `v3-only`
 
-The current Scopes Worker implementation enforces Common schema 2. `/command`
-requests are v2-only: missing schema versions, schema 1, and non-integer schema
-values are rejected. Worker HTTP responses, status responses, and JSONL events
-use schema 2. Scopes execution context remains
-startup-bound; top-level `/command` `context` is forbidden, and the Worker does
-not provide v1 fallback or version negotiation.
+This Scopes-specific contract follows
+[Common Worker Protocol](common-worker-protocol.md), revision `3.0`, and owns
+the domain command model, queue, sessions, stop, cleanup, and artifacts.
+Worker HTTP and JSONL enforce exact integer schema 3 without fallback or
+version negotiation. Execution is `multi_job` with `startup` context binding.
+The Manifest and runtime adopt only `common.async_jobs`, `contract_version: 1`.
+Neither `common.job_cancel` nor `common.streaming` is declared.
+
+Every existing `/command` entry in the Command Inventory is an `async_job`,
+including `stop-acquisition`. The Manifest need not enumerate these commands.
+HTTP `POST /stop` is separate lifecycle control.
 
 ## Contents
 
@@ -117,82 +120,91 @@ resource.
 
 ## Endpoints
 
-`GET /status` is non-mutating. It returns `run_id`, mode, model, resource,
-queue summary, active job, last job, command/status/stop URLs, `fatal_error`,
-and `timestamp_utc`. For a terminal (`succeeded`, `failed`, or `cancelled`)
-most recent job, `last_job` carries the same terminal view as the
-`job_finished` event: `state`, `ok`, `exit_code`, `result`, `files`, and
-`error`. Active and queued jobs keep progress and identity information only.
-`GET /status` must not create artifacts, mutate the queue, open VISA, or
-send SCPI. It does not include `trigger_url`.
+`GET /status` returns HTTP `200` with the Common Status fields:
+`schema_version: 3`, observation `timestamp_utc`, `run_id`, `worker_state`,
+and `fatal_error` (Common Error or null). `worker_state` is `running`,
+`stopping`, or `failed` according to existing runtime state; a fatal failure
+requires a non-null error. The response includes top-level `status_url`,
+`command_url`, `stop_url`, and runtime `features`, matching ready. The nested
+`urls` object remains available with the same URLs. Scopes diagnostics retain
+`service`, `status`, mode, model, resource, and queue summary.
 
-`POST /command` is the Scopes worker-specific implementation of the Common
-command envelope. It accepts exactly this JSON object:
+Every status includes `active_job` and `last_job`, each null when absent.
+Active snapshots contain `worker_job_id`, `job_id`, `command`, `state`
+(`queued` or `running`), and the time that state was established in
+`timestamp_utc`. The latest terminal snapshot contains the same identity,
+fixed completion `timestamp_utc`, `state`, `ok`, `exit_code`, `result`,
+`files`, and `error` as `job_finished`. There is no job history or replay.
+
+Status reads existing memory only: no queue mutation, artifact creation or
+availability checks, session open, SCPI, or error clearing. A structured
+status-handler failure returns HTTP `500` with `schema_version: 3`, `run_id`,
+`status: "error"`, and Common Error category `worker`, code `status_failed`;
+it is not a status snapshot and cannot establish readiness.
+
+`POST /command` accepts exactly this envelope:
 
 ```json
-{"schema_version": 2, "command": "identify", "arguments": {}, "job_id": "client-id"}
+{"schema_version": 3, "command": "identify", "arguments": {}, "job_id": "client-id"}
 ```
 
 Allowed top-level fields are `schema_version`, `command`, `arguments`, and
-`job_id`. `context` is not an allowed top-level `/command` request field for
-Scopes. Mode, model, and resource are fixed at Worker startup. `command` must
-be a known Scopes worker command, `arguments` must be omitted or an object,
-and `job_id` must be omitted or a string. Unknown fields and malformed bodies
-return HTTP `400` and are not enqueued.
+`job_id`. Startup-bound context forbids request-level `context`; command
+arguments cannot override mode, model, or resource. `command` must be a known
+non-empty command string, `arguments` may be omitted or an object, and
+`job_id` may be omitted or a string. Malformed JSON, non-object bodies,
+unknown fields, and invalid parameters return HTTP `400` before enqueue,
+session open, SCPI, or artifact side effects.
 
-`schema_version` is required and must be the exact JSON integer `2`. Missing
-schema versions, `1`, `"2"`, `2.0`, and `true` are rejected. Scopes does not
-support a v1 fallback.
+`schema_version` is required and must be the exact JSON integer token `3`.
+Missing values, old versions, `"3"`, `true`, `3.0`, and `3e0` are rejected.
 
-Every `/command` response contains the Common fields `schema_version`,
-`status`, `command`, and `job_id`. A safely identifiable client command string
-and client job string are echoed even when validation fails, including unknown
-commands and unknown top-level fields. Malformed JSON, non-object bodies,
-missing commands, and non-string command identities use `command: null`; omitted
-or non-string `job_id` values use `job_id: null`.
+Every command response includes `schema_version`, `run_id`, `status`,
+`command`, `job_id`, `kind`, `worker_job_id`, and `error`. Safely identifiable
+command and job strings are echoed even on failure; other identities are null.
+`kind` is `async_job` for a recognized Scopes command, otherwise null.
+No created job means `worker_job_id: null`.
 
-Accepted responses use HTTP `202` and contain:
+Accepted responses use HTTP `202`:
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
+  "run_id": "runtime-id",
   "status": "accepted",
   "command": "identify",
   "job_id": "client-id",
-  "worker_job_id": "worker-generated-id"
+  "kind": "async_job",
+  "worker_job_id": "worker-generated-id",
+  "error": null
 }
 ```
 
-`202 accepted` means the job was validated and enqueued. It does not mean the
-oscilloscope action succeeded. The Worker allocates no artifact directory;
-commands that write host files require caller-supplied destinations.
+Acceptance means validated and enqueued, not domain completion. Each accepted
+job receives a unique worker job ID within the runtime. Client `job_id` is
+correlation only, without deduplication or safe-retry guarantees. The Worker
+allocates no artifact directory; file-writing commands need caller destinations.
 
-Queue, stopping, rate, or other Scopes admission failures use
-`status: "rejected"` and a Scopes-specific `reason`, for example:
+Existing admission semantics remain HTTP `409` for `worker_stopping` and
+HTTP `429` for `queue_full`, with `status: "rejected"`, preserved `reason`,
+and Common Error category `admission` whose code is that reason. Validation
+uses HTTP `400`, `status: "error"`, category `validation`, code
+`validation_error`. Handling failures use HTTP `500`, `status: "error"`,
+category `worker`, code `command_failed`. HTTP 500 or a lost response does not
+prove that a command did not execute; do not automatically resend it.
 
-```json
-{
-  "schema_version": 2,
-  "status": "rejected",
-  "command": "identify",
-  "job_id": "client-id",
-  "reason": "queue_full"
-}
-```
+Every Common Error has `category`, stable `code`, non-empty `message`, and
+object `details`. Existing domain errors are retained in
+`details.domain_error`; validation also preserves `message` and `error_detail`.
 
-Validation failures use HTTP `400`, `status: "error"`, the Common
-`command`/`job_id` echo rules, `error: "validation_error"`, and `message`:
-
-```json
-{
-  "schema_version": 2,
-  "status": "error",
-  "command": "identify",
-  "job_id": "client-id",
-  "error": "validation_error",
-  "message": "unknown request field: extra"
-}
-```
+`POST /stop` accepts an empty body, `{}`, or an object containing only optional
+exact integer `schema_version: 3` and string `reason`. Unknown fields and
+invalid types return HTTP `400` with category `validation`, code `invalid_stop`;
+handling failures return HTTP `500` with category `worker`, code `stop_failed`.
+The successful HTTP `202` acknowledgement contains `schema_version: 3`,
+`run_id`, `status: "accepted"`, `error: null`, plus existing `cancelled_jobs`
+and `active_job` diagnostics. Repeated stop requests do not repeat stop side
+effects. An acknowledgement alone does not establish job or cleanup completion.
 
 `POST /stop` does not enter the normal command queue. It sets cooperative stop,
 rejects new commands, cancels queued jobs, and emits `job_finished` for each
@@ -217,7 +229,39 @@ condition is complete does not replace the completed Core result. For
 `failed` to Worker `failed`. A late Worker stop flag does not replace these
 higher-precedence Core results.
 
-The worker exposes no `/trigger`, `trigger_url`, or `soft-*` endpoints.
+Ready includes the Common runtime envelope, control URLs, and runtime
+`features`. It establishes control readiness, not device initialization.
+JSONL `status` follows the same Common Status and job-snapshot schema as HTTP.
+
+On normal controllable paths each accepted job emits one `job_finished`:
+`succeeded` requires `ok: true` and `error: null`; `failed` requires `ok: false`
+and a Common Error; `cancelled` uses `ok: false` and preserves cancellation
+diagnostics. Failures use category `execution`, code `job_failed` or
+`job_cancelled`, retaining domain errors and any partial result and files.
+When both a domain error and cancellation diagnostic exist, the latter is
+retained in `details.cancellation_error`.
+If existing Core precedence establishes success while the adapter also reports
+an error, Common `error` remains null and the original diagnostic is retained
+in the terminal's optional `domain_error` field. It must not be discarded as
+shutdown or cleanup evidence.
+
+Terminal `timestamp_utc`, state, result, error, and files are captured once at
+completion. `files` contains artifacts present at that time. Later deletion
+or movement does not rewrite the confirmed terminal; status observation time
+may advance. Existing terminal precedence and latest-terminal retention remain.
+
+A controllable shutdown emits `summary` with `ok`, `fatal_error` (Common Error
+or null), intended `exit_code`, and accepted/succeeded/failed/cancelled counts.
+An ordinary job failure does not itself fail the multi-job Worker summary.
+Observe subsequent error/cleanup evidence, stdout EOF, and actual exit;
+summary alone does not prove cleanup. Fatal Worker errors use category `worker`;
+structured error events include `scope: "worker"` and `fatal: true`.
+Worker process exit meanings are success `0`, usage/validation `2`, runtime
+failure `3`, with interruption `130` preserved. Existing observable cleanup
+failure remains failure even after summary. Natural completion requires no
+extra `stopping` event or stop operation.
+
+The worker exposes no `/cancel`, `/trigger`, `trigger_url`, or `soft-*` endpoints.
 
 ## Command Inventory
 
@@ -310,7 +354,7 @@ alias.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "capture-batch",
   "arguments": {
     "channel": [1],
@@ -336,7 +380,7 @@ limit. Unknown fields and `log_scpi` are rejected.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "capture-until",
   "arguments": {
     "channel": [1, 2],
@@ -369,7 +413,7 @@ multiple of `points`. Unknown fields and `log_scpi` are rejected.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "capture-monitor",
   "arguments": {
     "channel": [1, 2],
@@ -399,7 +443,7 @@ fields and wrong JSON types are rejected before enqueue. `log_scpi` is rejected.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "triggered-capture-series",
   "arguments": {
     "channel": [1],
@@ -428,7 +472,7 @@ fields and wrong JSON types are rejected before enqueue.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "triggered-measure-loop",
   "arguments": {
     "channel": [1, 2],
@@ -455,7 +499,7 @@ rejected.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "measure-until",
   "arguments": {
     "channel": 1,
@@ -596,11 +640,11 @@ startup-bound model capability: counts are 2-250 on 2000X and 2-1000 on
 3000X/4000X. The worker does not accept resource, model, mode, path, capture,
 or export arguments and does not create a domain artifact for this command.
 
-`segmented-capture` accepts only this Common v2 request shape:
+`segmented-capture` accepts only this Common v3 request shape:
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "command": "segmented-capture",
   "arguments": {
     "channel": 1,
@@ -2504,15 +2548,16 @@ includes `query_kind: "maximum"` and `maximum_sample_rate_hz`.
 Directory-output commands write domain artifacts only inside the
 caller-supplied `output_dir`. Other pre-existing
 command artifact paths
-are rejected before simulator/VISA open or SCPI execution. Command `files`
-lists only command artifact paths that actually exist.
+are rejected before simulator/VISA open or SCPI execution. Terminal `files`
+lists command artifact paths present when the terminal was captured.
 
 Live worker jobs validate identity before command-specific SCPI. The worker
 opens the startup `resource`, sets a fixed `2000 ms` timeout, queries `*IDN?`,
 resolves its manufacturer and model to a canonical physical model ID, and
 compares that ID with the startup `model`. A mismatch
-fails the job with structured `error.type: "identity_mismatch"`,
-`expected_model`, and `actual_idn`; the worker control plane remains alive.
+fails the job with Common Error category `execution` and the original
+`type: "identity_mismatch"`, `expected_model`, and `actual_idn` retained in
+`error.details.domain_error`; the worker control plane remains alive.
 
 ## Client Commands
 

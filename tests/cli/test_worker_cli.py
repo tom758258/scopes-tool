@@ -289,7 +289,10 @@ def test_worker_request_rejects_unknown_command():
     (
         {"command": "identify", "arguments": {}},
         {"schema_version": 1, "command": "identify", "arguments": {}},
-        {"schema_version": "2", "command": "identify", "arguments": {}},
+        {"schema_version": 2, "command": "identify", "arguments": {}},
+        {"schema_version": 3, "command": "identify", "job_id": None},
+        *[f'{{"schema_version": {version}, "command": "identify"}}'.encode()
+          for version in ('"3"', 'true', '3.0', '3e0')],
         {
             "schema_version": worker.WORKER_SCHEMA_VERSION,
             "command": "identify",
@@ -298,16 +301,20 @@ def test_worker_request_rejects_unknown_command():
         },
     ),
 )
-def test_worker_http_rejects_non_v2_requests_before_side_effects(tmp_path, body):
+def test_worker_http_rejects_non_v3_requests_before_side_effects(tmp_path, body, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     runtime = _runtime()
     with _worker_server(runtime):
-        status, payload = _post_command(runtime, body, add_schema=False)
+        status, payload = _post_command(
+            runtime, body, add_schema=False, raw=isinstance(body, bytes)
+        )
 
     assert status == 400
     assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert payload["status"] == "error"
     assert runtime.accepted == 0
     assert runtime.jobs == {}
+    assert runtime.queue.empty()
     assert not any(tmp_path.iterdir())
 
 
@@ -507,7 +514,9 @@ def test_worker_stop_cancels_multiple_queued_jobs_safely(tmp_path):
         assert event["worker_job_id"] == job.worker_job_id
         assert event["state"] == "cancelled"
         assert event["exit_code"] == 3
-        assert event["error"] == {"type": "cancelled", "message": "cancelled by stop"}
+        assert event["error"]["details"]["domain_error"] == {
+            "type": "cancelled", "message": "cancelled by stop"
+        }
 
 
 def test_command_acceptance_validates_sample_rate_maximum_before_enqueue(tmp_path):
@@ -610,7 +619,8 @@ def test_worker_rejects_capture_batch_cli_only_arguments_before_artifact(
     assert payload["status"] == "error"
     assert payload["command"] == "capture-batch"
     assert payload["job_id"] == "invalid-periodic-capture"
-    assert payload["error"] == "validation_error"
+    assert payload["error"]["category"] == "validation"
+    assert payload["error"]["code"] == "validation_error"
     assert runtime.accepted == 0
     assert runtime.jobs == {}
     assert not (tmp_path / runtime.run_id).exists()
@@ -693,6 +703,9 @@ def test_worker_correlation_flows_through_events_and_memory(tmp_path):
     assert status == 202
     assert accepted["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert accepted["status"] == "accepted"
+    assert accepted["run_id"] == runtime.run_id
+    assert accepted["kind"] == "async_job"
+    assert accepted["error"] is None
     assert accepted["command"] == "identify"
     assert accepted["job_id"] == client_job_id
     assert "artifact_path" not in accepted
@@ -821,7 +834,8 @@ def test_worker_failed_job_exposes_terminal_error_in_status_last_job(
     assert last_job["exit_code"] == 3
     assert last_job["result"] is None
     assert last_job["files"] == []
-    assert last_job["error"] == {
+    assert last_job["error"]["category"] == "execution"
+    assert last_job["error"]["details"]["domain_error"] == {
         "type": "OscilloscopeError",
         "message": "simulated instrument failure",
     }
@@ -850,7 +864,8 @@ def test_worker_rejects_missing_output_before_enqueue(
     assert status == 400
     assert payload["status"] == "error"
     assert payload["command"] == command
-    assert payload["error"] == "validation_error"
+    assert payload["error"]["category"] == "validation"
+    assert payload["error"]["code"] == "validation_error"
     assert f"requires argument {missing_key}" in payload["message"]
     assert runtime.accepted == 0
     assert runtime.jobs == {}
@@ -893,12 +908,17 @@ def test_command_validation_errors_use_common_echo_rules(
     assert payload["status"] == "error"
     assert payload["command"] == expected_command
     assert payload["job_id"] == expected_job_id
-    assert payload["error"] == "validation_error"
+    assert payload["error"]["category"] == "validation"
+    assert payload["error"]["code"] == "validation_error"
     assert not any(tmp_path.iterdir())
 
 
-def test_queue_full_rejection_uses_rejected_reason(tmp_path):
+@pytest.mark.parametrize(("stopping", "expected_status", "reason"), [
+    (False, 429, "queue_full"), (True, 409, "worker_stopping"),
+])
+def test_queue_full_rejection_uses_rejected_reason(tmp_path, stopping, expected_status, reason):
     runtime = _runtime(queue_max=1)
+    runtime.stopping = stopping
     runtime.queue.put_nowait(
         worker.WorkerJob(
             command="identify",
@@ -915,13 +935,18 @@ def test_queue_full_rejection_uses_rejected_reason(tmp_path):
             {"command": "identify", "arguments": {}, "job_id": "job-3"},
         )
 
-    assert status == 429
+    assert status == expected_status
     assert payload == {
         "schema_version": worker.WORKER_SCHEMA_VERSION,
+        "run_id": runtime.run_id,
+        "kind": "async_job",
+        "worker_job_id": None,
+        "error": {"category": "admission", "code": reason,
+                  "message": reason, "details": {}},
         "status": "rejected",
         "command": "identify",
         "job_id": "job-3",
-        "reason": "queue_full",
+        "reason": reason,
     }
 
 
@@ -1461,7 +1486,9 @@ def test_send_command_dry_run_does_not_contact_http(capsys):
     assert worker.client_send_command(args) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "dry_run"
-    assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
+    assert payload["schema_version"] == 2
+    assert payload["request_sent"] is False
+    assert payload["client_command"] == "send-command"
     assert "timestamp_utc" in payload
     assert payload["command"] == "identify"
     assert payload["request"] == {
@@ -1472,7 +1499,7 @@ def test_send_command_dry_run_does_not_contact_http(capsys):
     }
 
 
-def test_send_command_sends_v2_request(monkeypatch, capsys):
+def test_send_command_sends_v3_request(monkeypatch, capsys):
     args = argparse.Namespace(
         command="send-command",
         host="127.0.0.1",
@@ -1531,13 +1558,19 @@ def test_lifecycle_client_fails_closed_on_invalid_worker_response(
 
     assert worker.client_get(args, "/status") == 3
     payload = json.loads(capsys.readouterr().out)
-    assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
+    assert payload["schema_version"] == 2
     assert payload["status"] == "error"
 
 
 def test_stop_is_lifecycle_command_and_stop_acquisition_is_domain(capsys):
     assert cli.main(["stop", "--port", "9", "--timeout-ms", "1", "--json"]) == 3
     assert cli.main(["stop-acquisition", "--simulate", "--json"]) == 0
+    runtime = _runtime()
+    with _worker_server(runtime):
+        status, payload = _post_command(runtime, {"command": "stop-acquisition"})
+    assert status == 202
+    assert payload["kind"] == "async_job"
+    assert payload["worker_job_id"]
 
 
 def test_lifecycle_fallback_error_uses_cli_schema(monkeypatch, capsys):
@@ -1594,11 +1627,12 @@ def test_worker_event_payloads_have_required_fields():
         exit_code=3,
         result=None,
         files=[],
-        error={"type": "x", "message": "y"},
+        error={"category": "execution", "code": "x", "message": "y", "details": {}},
     )
-    summary = worker._event_payload(runtime, "summary", ok=True, fatal_error=None)
+    status = worker._event_payload(runtime, "status")
+    summary = worker._event_payload(runtime, "summary", ok=True, fatal_error=None, exit_code=0)
 
-    for payload in (ready, started, finished, summary):
+    for payload in (ready, status, started, finished, summary):
         assert payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
         assert payload["run_id"] == runtime.run_id
         assert "timestamp_utc" in payload
@@ -1617,6 +1651,10 @@ def test_worker_event_payloads_have_required_fields():
     assert finished["result"] is None
     assert finished["files"] == []
     assert summary["accepted"] == 0
+    assert status["worker_state"] == "running"
+    assert status["fatal_error"] is None
+    assert status["active_job"] is None
+    assert status["last_job"] is None
 
 
 def test_worker_event_payload_rejects_job_finished_without_result_and_files():
@@ -1653,9 +1691,11 @@ def _assert_status_payload_matches_ready(payload, ready):
     assert payload["urls"]["command_url"] == ready["command_url"]
     assert payload["urls"]["status_url"] == ready["status_url"]
     assert payload["urls"]["stop_url"] == ready["stop_url"]
-    assert "command_url" not in payload
-    assert "status_url" not in payload
-    assert "stop_url" not in payload
+    for name in ("command_url", "status_url", "stop_url"):
+        assert payload[name] == ready[name]
+    assert payload["worker_state"] == "running"
+    assert payload["fatal_error"] is None
+    assert payload["features"] == ready["features"]
     assert "trigger_url" not in payload
     assert "trigger_url" not in payload["urls"]
 
@@ -1720,6 +1760,18 @@ def test_status_and_wait_ready_match_ready_session_and_status_urls(tmp_path, cap
     _assert_status_payload_matches_ready(status_payload, ready)
     assert stop_payload["schema_version"] == worker.WORKER_SCHEMA_VERSION
     assert stop_payload["status"] == "accepted"
+    for payload, method, endpoint in (
+        (wait_payload, "GET", "/status"),
+        (status_payload, "GET", "/status"),
+        (stop_payload, "POST", "/stop"),
+    ):
+        assert payload["method"] == method
+        assert payload["endpoint"] == endpoint
+        assert payload["request_sent"] is True
+        assert payload["reachable"] is True
+        assert payload["http_status"] in {200, 202}
+        assert payload["timeout_ms"] == 1000
+        assert payload["elapsed_ms"] >= 0
 
 
 def test_worker_lifecycle_failure_before_ready_keeps_stderr_diagnostics():
@@ -2006,7 +2058,7 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert result["state"] == "cancelled"
     assert result["exit_code"] == 3
-    assert result["error"]["type"] == "cancelled"
+    assert result["error"]["details"]["domain_error"]["type"] == "cancelled"
     assert result["result"]["status"] == "cancelled"
     assert result["result"]["error"] is None
     assert result["result"]["completed_count"] == 1
@@ -2019,6 +2071,7 @@ def test_stop_cooperatively_cancels_running_capture_batch_before_next_capture(
     ("status", "payload_ok", "exit_code", "expected_state"),
     (
         ("completed", True, 0, "succeeded"),
+        ("completed", False, 1, "succeeded"),
         ("instrument_error", False, 1, "failed"),
     ),
 )
@@ -2064,8 +2117,12 @@ def test_worker_preserves_core_workflow_result_after_late_cancellation(
     assert result["result"]["status"] == status
     if status == "completed":
         assert result["error"] is None
+        if not payload_ok:
+            assert result["domain_error"] == {
+                "type": "OscilloscopeError", "message": "instrument error"
+            }
     else:
-        assert result["error"]["type"] == "OscilloscopeError"
+        assert result["error"]["details"]["domain_error"]["type"] == "OscilloscopeError"
 
 
 def _execute_worker_job(runtime, command, arguments):
@@ -2719,7 +2776,8 @@ def test_worker_triggered_capture_series_rejects_cli_paths_before_artifacts(
 
     assert status == 400
     assert payload["status"] == "error"
-    assert payload["error"] == "validation_error"
+    assert payload["error"]["category"] == "validation"
+    assert payload["error"]["code"] == "validation_error"
     assert runtime.accepted == 0
     assert runtime.jobs == {}
     assert not (tmp_path / runtime.run_id).exists()
@@ -2833,7 +2891,8 @@ def test_worker_measure_until_rejects_invalid_public_contract_before_artifacts(
 
     assert status == 400
     assert payload["status"] == "error"
-    assert payload["error"] == "validation_error"
+    assert payload["error"]["category"] == "validation"
+    assert payload["error"]["code"] == "validation_error"
     assert runtime.accepted == 0
     assert runtime.jobs == {}
     assert not (tmp_path / runtime.run_id).exists()
@@ -3187,6 +3246,8 @@ def _simulation_worker_process(command=None):
                 ready = event
                 break
         assert ready is not None
+        assert ready["schema_version"] == 3
+        assert ready["features"] == {"common.async_jobs": {"contract_version": 1}}
         yield ready, records
     finally:
         try:
@@ -3195,6 +3256,10 @@ def _simulation_worker_process(command=None):
                                              headers={"Content-Type": "application/json"})
                 with urlrequest.urlopen(request, timeout=5) as response:
                     assert response.status == 202
+                    acknowledgement = json.load(response)
+                    assert acknowledgement["schema_version"] == 3
+                    assert acknowledgement["run_id"] == ready["run_id"]
+                    assert acknowledgement["error"] is None
                 process.wait(timeout=15)
         finally:
             if process.poll() is None:
@@ -3205,20 +3270,29 @@ def _simulation_worker_process(command=None):
             process.stdout.close()
             process.stderr.close()
         assert process.returncode == 0, stderr
+        assert not reader.is_alive(), "stdout EOF was not observed"
+        assert all(record["schema_version"] == 3 for record in records)
+        assert all(record["run_id"] == ready["run_id"] for record in records)
         assert records[-1]["event"] == "summary"
         assert records[-1]["ok"] is True
+        assert records[-1]["fatal_error"] is None
+        assert records[-1]["exit_code"] == 0
 
 
 def _submit_simulation_job(ready, command, arguments, job_id):
     import time
     request = urlrequest.Request(ready["command_url"], method="POST",
-        data=json.dumps({"schema_version": 2, "command": command,
+        data=json.dumps({"schema_version": 3, "command": command,
                          "arguments": arguments, "job_id": job_id}).encode(),
         headers={"Content-Type": "application/json"})
     with urlrequest.urlopen(request, timeout=5) as response:
         assert response.status == 202
         accepted = json.load(response)
     assert accepted["job_id"] == job_id
+    assert accepted["schema_version"] == 3
+    assert accepted["run_id"] == ready["run_id"]
+    assert accepted["kind"] == "async_job"
+    assert accepted["error"] is None
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
         with urlrequest.urlopen(ready["status_url"], timeout=5) as response:
@@ -3265,6 +3339,8 @@ def test_real_simulation_worker_retains_settings_isolates_and_restarts():
     finished = [record for record in records if record["event"] == "job_finished"]
     assert len(finished) == 7
     assert all(record["state"] == "succeeded" for record in finished)
+    assert len({record["worker_job_id"] for record in finished}) == 7
+    assert all(record["error"] is None and record["timestamp_utc"] for record in finished)
     with _simulation_worker_process() as (restarted, _):
         assert restarted["run_id"] != first["run_id"]
         _assert_simulation_defaults(restarted)
@@ -3376,3 +3452,242 @@ def test_worker_cannot_request_contributor_backend_validation(field):
             {field: True if field != "support_policy_mode" else "validation"},
             _live_runtime(),
         )
+
+
+def _request_worker(runtime, path, data=None):
+    request = urlrequest.Request(
+        f"{runtime.base_url()}{path}", data=data,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlrequest.urlopen(request, timeout=2) as response:
+            return response.status, json.load(response)
+    except urlerror.HTTPError as exc:
+        return exc.code, json.load(exc)
+
+
+def test_worker_v3_handler_failures_are_common_errors(monkeypatch):
+    runtime = _runtime()
+    with _worker_server(runtime):
+        with monkeypatch.context() as patch:
+            def fail_status():
+                raise RuntimeError("status unavailable")
+            patch.setattr(runtime, "status_payload", fail_status)
+            status, payload = _request_worker(runtime, "/status")
+        assert status == 500
+        assert payload["error"]["code"] == "status_failed"
+        assert "worker_state" not in payload
+        with monkeypatch.context() as patch:
+            def fail_parse(*args):
+                raise RuntimeError("command handler unavailable")
+            patch.setattr(worker, "parse_domain_command", fail_parse)
+            status, payload = _post_command(runtime, {"command": "identify"})
+        assert status == 500
+        assert payload["error"]["code"] == "command_failed"
+        assert payload["kind"] == "async_job"
+        assert payload["worker_job_id"] is None
+    assert payload["run_id"] == runtime.run_id
+    assert payload["error"]["category"] == "worker"
+    assert isinstance(payload["error"]["details"], dict)
+    assert runtime.accepted == 0
+    assert runtime.queue.empty()
+
+
+@pytest.mark.parametrize("state", ["succeeded", "failed", "cancelled"])
+def test_worker_v3_terminal_snapshot_survives_artifact_removal(tmp_path, monkeypatch, capsys, state):
+    runtime = _runtime()
+    events = []
+    runtime.emit = lambda event, **values: events.append({"event": event, **values})
+    artifact = tmp_path / "partial.csv"
+    artifact.write_text("value\n1\n", encoding="utf-8")
+    domain_error = {"type": "ReadFailure", "message": "partial read", "code": 42}
+    started = threading.Event()
+    release = threading.Event()
+
+    def execute(parsed, *, stop_requested=None):
+        started.set()
+        assert release.wait(timeout=5)
+        if state == "cancelled":
+            runtime.jobs[runtime.active_job_id].cancel_requested = True
+        return {"ok": state == "succeeded", "result": {"count": 1},
+                "files": [{"kind": "csv", "path": str(artifact)}],
+                "error": None if state == "succeeded" else domain_error}, (
+                    0 if state == "succeeded" else 3
+                )
+
+    monkeypatch.setattr(cli, "_execute_json_command", execute)
+    threading.Thread(target=worker._job_loop, args=(runtime,), daemon=True).start()
+    with _worker_server(runtime):
+        _, accepted = _post_command(runtime, {"command": "identify", "job_id": "snapshot"})
+        assert started.wait(timeout=2)
+        args = argparse.Namespace(command="status", host=runtime.host, port=runtime.port,
+                                  timeout_ms=1000, client_json=True)
+        try:
+            assert worker.client_get(args, "/status") == 0
+            active = json.loads(capsys.readouterr().out)["active_job"]
+            assert active["worker_job_id"] == accepted["worker_job_id"]
+            assert active["state"] == "running"
+            assert active["timestamp_utc"]
+        finally:
+            release.set()
+        runtime.queue.join()
+        _, first = _request_worker(runtime, "/status")
+        assert worker.client_get(args, "/status") == 0
+        forwarded = json.loads(capsys.readouterr().out)
+        assert forwarded["schema_version"] == 3
+        assert forwarded["last_job"] == first["last_job"]
+        artifact.unlink()
+        # Polling must use memory only, including when files no longer exist.
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "exists", lambda *_: pytest.fail("status touched filesystem"))
+            _, second = _request_worker(runtime, "/status")
+        assert first["last_job"] == second["last_job"]
+    terminals = [event for event in events if event["event"] == "job_finished"]
+    assert len(terminals) == 1
+    terminal = terminals[0]
+    for key, value in first["last_job"].items():
+        assert terminal[key] == value
+    assert terminal["worker_job_id"] == accepted["worker_job_id"]
+    assert terminal["timestamp_utc"]
+    assert terminal["state"] == state
+    assert terminal["ok"] is (state == "succeeded")
+    assert terminal["result"] == {"count": 1}
+    assert terminal["files"] == [{"kind": "csv", "path": str(artifact)}]
+    if state == "succeeded":
+        assert terminal["error"] is None
+    else:
+        assert terminal["error"]["category"] == "execution"
+        # Cancel diagnostics and the original read error both remain accessible.
+        if state == "failed":
+            assert terminal["error"]["details"]["domain_error"] == domain_error
+        else:
+            assert terminal["error"]["details"]["domain_error"] == domain_error
+            assert terminal["error"]["details"]["cancellation_error"]["type"] == "cancelled"
+
+
+@pytest.mark.parametrize("body", [b"{", b"[]", b'{"extra":1}', b'{"reason":null}',
+                                   b'{"schema_version":2}', b'{"schema_version":"3"}',
+                                   b'{"schema_version":true}', b'{"schema_version":3.0}',
+                                   b'{"schema_version":3e0}'])
+def test_worker_v3_invalid_stop_does_not_stop_worker(body):
+    runtime = _runtime()
+    with _worker_server(runtime):
+        status, payload = _request_worker(runtime, "/stop", body)
+        assert status == 400
+        assert payload["schema_version"] == 3
+        assert payload["run_id"] == runtime.run_id
+        assert payload["error"]["category"] == "validation"
+        assert runtime.stopping is False
+        assert _request_worker(runtime, "/status")[0] == 200
+
+
+def test_worker_v3_stop_accepts_legal_bodies_without_duplicate_effects(monkeypatch):
+    runtime = _runtime()
+    with _worker_server(runtime):
+        # Keep HTTP available only in this test to observe repeated requests.
+        original_shutdown = ThreadingHTTPServer.shutdown
+        shutdowns = []
+        with monkeypatch.context() as patch:
+            patch.setattr(ThreadingHTTPServer, "shutdown", lambda server: shutdowns.append(server))
+            for body in (b"", b"{}", b'{"reason":"operator"}',
+                         b'{"schema_version":3,"reason":"again"}'):
+                status, payload = _request_worker(runtime, "/stop", body)
+                assert status == 202
+                assert payload["schema_version"] == 3
+                assert payload["run_id"] == runtime.run_id
+                assert payload["status"] == "accepted"
+                assert payload["error"] is None
+                assert payload["cancelled_jobs"] == []
+        assert ThreadingHTTPServer.shutdown is original_shutdown
+        assert len(shutdowns) == 1
+
+
+@pytest.mark.parametrize("change", [
+    {"worker_state": "starting"}, {"worker_state": "stopping"},
+    {"worker_state": "running", "fatal_error": {
+        "category": "worker", "code": "broken", "message": "broken", "details": {}}},
+    {"features": {}}, {"features": {"common.async_jobs": {"contract_version": True}}},
+    {"status_url": "http://127.0.0.1:1/status"}, {"run_id": ""},
+    {"active_job": {}}, {"last_job": {"state": "succeeded"}},
+])
+def test_wait_ready_requires_valid_running_status(monkeypatch, capsys, change):
+    runtime = _runtime()
+    runtime.port = 8765
+    response = runtime.status_payload() | change
+    monkeypatch.setattr(worker_client, "_http_request", lambda *a, **kw: (response, 200))
+    args = argparse.Namespace(command="wait-ready", host="127.0.0.1", port=8765,
+                              timeout_ms=1, client_json=True)
+    assert worker.client_wait_ready(args) == 3
+    payload = json.loads(capsys.readouterr().out)
+    assert payload.get("ok") is not True
+
+
+@pytest.mark.parametrize(("scenario", "exit_code"), [
+    ("natural", 0), ("usage", 2), ("startup", 3), ("serve", 3),
+    ("interrupt", 130), ("cleanup", 3), ("cleanup_after_summary", 3),
+])
+def test_worker_v3_subprocess_exit_and_summary_evidence(scenario, exit_code):
+    import os
+    script = textwrap.dedent('''
+        from scopes_tool_cli import cli, worker
+        import sys
+        scenario = sys.argv[1]
+        class Server:
+            server_port = 8765
+            def __init__(self, *args):
+                if scenario == "startup":
+                    raise OSError("bind failed")
+            def serve_forever(self):
+                if scenario in {"interrupt", "cleanup_after_summary"}:
+                    raise KeyboardInterrupt()
+                if scenario == "serve":
+                    raise RuntimeError("serve failed")
+            def server_close(self):
+                if scenario in {"cleanup", "cleanup_after_summary"}:
+                    raise OSError("close failed after summary")
+        worker.ThreadingHTTPServer = Server
+        arguments = ["worker", "--simulate"]
+        if scenario == "usage":
+            arguments += ["--model", "unknown"]
+        sys.exit(cli.main(arguments))
+    ''')
+    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2] / "src"))
+    process = subprocess.run([sys.executable, "-c", script, scenario], env=env,
+                             capture_output=True, text=True, timeout=10)
+    assert process.returncode == exit_code, process.stderr
+    records = [json.loads(line) for line in process.stdout.splitlines()]
+    if scenario == "usage":
+        assert records == []
+        return
+    assert all(record["schema_version"] == 3 for record in records)
+    assert len({record["run_id"] for record in records}) == 1
+    summaries = [record for record in records if record["event"] == "summary"]
+    assert len(summaries) == 1
+    summary = summaries[0]
+    assert summary["ok"] is (scenario == "natural")
+    assert summary["exit_code"] == (130 if scenario == "cleanup_after_summary" else exit_code)
+    if scenario == "natural":
+        assert summary["fatal_error"] is None
+        assert not any(record["event"] == "stopping" for record in records)
+    else:
+        assert summary["fatal_error"]["category"] == "worker"
+    if scenario == "cleanup_after_summary":
+        assert records[-1]["event"] == "error"
+        assert records[-1]["fatal"] is True
+        assert records[-1]["error"]["code"] == "cleanup_failed"
+
+
+def test_wait_ready_rejects_identity_change_between_polls(monkeypatch, capsys):
+    runtime = _runtime()
+    runtime.port = 8765
+    observations = iter([
+        runtime.status_payload() | {"worker_state": "starting"},
+        runtime.status_payload() | {"run_id": "different-worker"},
+    ])
+    monkeypatch.setattr(worker_client, "_http_request", lambda *a, **kw: (next(observations), 200))
+    monkeypatch.setattr(worker_client.time, "sleep", lambda _: None)
+    args = argparse.Namespace(command="wait-ready", host=runtime.host, port=runtime.port,
+                              timeout_ms=1000, client_json=True)
+    assert worker.client_wait_ready(args) == 3
+    payload = json.loads(capsys.readouterr().out)
+    assert "run_id changed" in payload["error"]["message"]
