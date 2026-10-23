@@ -1,5 +1,6 @@
 import argparse
 from contextlib import contextmanager
+import io
 import json
 from pathlib import Path
 import queue
@@ -1499,14 +1500,15 @@ def test_send_command_dry_run_does_not_contact_http(capsys):
     }
 
 
-def test_send_command_sends_v3_request(monkeypatch, capsys):
+@pytest.mark.parametrize("job_id", ["job-1", None])
+def test_send_command_sends_v3_request(monkeypatch, capsys, job_id):
     args = argparse.Namespace(
         command="send-command",
         host="127.0.0.1",
         port=8765,
         worker_command="identify",
         arguments_json="{}",
-        job_id="job-1",
+        job_id=job_id,
         timeout_ms=1000,
         format="json",
         client_json=True,
@@ -1516,13 +1518,108 @@ def test_send_command_sends_v3_request(monkeypatch, capsys):
 
     def fake_http_request(_args, _path, *, method, body=None):
         sent.update(body or {})
-        return {"schema_version": worker.WORKER_SCHEMA_VERSION, "status": "accepted"}, 202
+        return {
+            "schema_version": 3, "run_id": "run-1", "status": "accepted",
+            "command": "identify", "job_id": job_id, "kind": "async_job",
+            "worker_job_id": "worker-job-1", "error": None,
+        }, 202
 
     monkeypatch.setattr(worker_client, "_http_request", fake_http_request)
 
     assert worker.client_send_command(args) == 0
-    json.loads(capsys.readouterr().out)
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == 3
+    assert payload["job_id"] == job_id
     assert sent["schema_version"] == worker.WORKER_SCHEMA_VERSION
+    if job_id is None:
+        assert "job_id" not in sent
+    else:
+        assert sent["job_id"] == job_id
+
+
+@pytest.mark.parametrize(("endpoint", "http_status", "changes", "omitted", "exit_code"), [
+    ("command", 202, {}, "run_id", 3),
+    ("command", 202, {"run_id": ""}, None, 3),
+    ("command", 202, {}, "worker_job_id", 3),
+    ("command", 202, {"worker_job_id": None}, None, 3),
+    ("command", 202, {"kind": "control"}, None, 3),
+    ("command", 202, {"status": "error"}, None, 3),
+    ("command", 202, {"error": "unexpected"}, None, 3),
+    ("command", 202, {}, "error", 3),
+    ("command", 202, {"command": "measure"}, None, 3),
+    ("command", 202, {"job_id": "other-job"}, None, 3),
+    ("command", 202, {}, "job_id", 3),
+    ("command", 202, {"schema_version": 3.0}, None, 3),
+    ("command", 200, {}, None, 3),
+    ("stop", 200, {}, None, 0),
+    ("stop", 202, {}, None, 0),
+    ("stop", 202, {}, "run_id", 3),
+    ("stop", 202, {}, "status", 3),
+    ("stop", 202, {}, "error", 3),
+    ("stop", 200, {"status": "error"}, None, 3),
+    ("stop", 200, {"error": "unexpected"}, None, 3),
+    ("stop", 202, {"schema_version": True}, None, 3),
+    ("command", 400, {}, None, 2),
+    ("command", 409, {}, None, 3),
+    ("command", 429, {}, None, 3),
+    ("command", 500, {}, None, 3),
+])
+def test_lifecycle_client_post_response_contract(
+    monkeypatch, capsys, endpoint, http_status, changes, omitted, exit_code
+):
+    response = {"schema_version": 3, "run_id": "run-1", "status": "accepted", "error": None}
+    if endpoint == "command":
+        response.update(command="identify", job_id="job-1", kind="async_job",
+                        worker_job_id="worker-job-1")
+    if http_status >= 400:
+        category, code = {
+            400: ("validation", "validation_error"),
+            409: ("admission", "worker_stopping"),
+            429: ("admission", "queue_full"),
+            500: ("worker", "command_failed"),
+        }[http_status]
+        response.update(status="rejected" if category == "admission" else "error",
+                        worker_job_id=None,
+                        error={"category": category, "code": code,
+                               "message": "Request failed", "details": {}})
+    response.update(changes)
+    if omitted is not None:
+        del response[omitted]
+    requests = []
+
+    def fake_urlopen(request, *, timeout):
+        requests.append(request)
+        stream = io.BytesIO(json.dumps(response).encode("utf-8"))
+        if http_status >= 400:
+            raise urlerror.HTTPError(request.full_url, http_status, "error", {}, stream)
+        stream.status = http_status
+        return stream
+
+    monkeypatch.setattr(worker_client.urlrequest, "urlopen", fake_urlopen)
+    argv = ["send-command" if endpoint == "command" else "stop", "--port", "8765", "--json"]
+    if endpoint == "command":
+        argv += ["--command", "identify", "--job-id", "job-1"]
+    assert cli.main(argv) == exit_code
+    payload = json.loads(capsys.readouterr().out)
+    assert len(requests) == 1
+    assert payload["method"] == "POST"
+    assert payload["endpoint"] == f"/{endpoint}"
+    assert payload["url"] == requests[0].full_url
+    assert payload["timeout_ms"] > 0
+    assert payload["elapsed_ms"] >= 0
+    assert payload["request_sent"] is True
+    assert payload["reachable"] is True
+    assert payload["http_status"] == http_status
+    if exit_code == 0 or http_status >= 400:
+        assert payload["schema_version"] == 3
+        for key, value in response.items():
+            assert payload[key] == value
+        assert payload["error_phase"] == (None if exit_code == 0 else "response")
+    else:
+        assert payload["schema_version"] == 2
+        assert payload["ok"] is False
+        assert payload["error"]["type"] == "OscilloscopeError"
+        assert payload["error_phase"] == "response"
 
 
 @pytest.mark.parametrize(

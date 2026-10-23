@@ -61,6 +61,22 @@ def client_post(args: argparse.Namespace, path: str, body: dict[str, Any]) -> in
     try:
         response, status = _http_request(args, path, method="POST", body=body)
         response = _validate_client_response(response)
+        if 200 <= status < 300 and path in {"/command", "/stop"}:
+            if not (
+                isinstance(response.get("run_id"), str) and response["run_id"]
+                and response.get("status") == "accepted"
+                and "error" in response and response["error"] is None
+                and status in ({202} if path == "/command" else {200, 202})
+            ):
+                raise OscilloscopeError("invalid worker acknowledgement")
+            if path == "/command" and not (
+                response.get("kind") == "async_job"
+                and isinstance(response.get("worker_job_id"), str)
+                and response["worker_job_id"]
+                and response.get("command") == body["command"]
+                and "job_id" in response and response["job_id"] == body.get("job_id")
+            ):
+                raise OscilloscopeError("invalid worker command acceptance or correlation")
     except Exception as exc:
         return _client_error(args, 3, "worker request failed", exc)
     _client_print(args, response)

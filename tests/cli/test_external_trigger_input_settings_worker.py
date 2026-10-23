@@ -99,7 +99,8 @@ def test_worker_external_trigger_input_validation_happens_before_enqueue_or_arti
         status, payload = _post_command(runtime, body)
     assert status == 400
     assert payload["status"] == "error"
-    assert payload["error"] == "validation_error"
+    assert payload["error"]["category"] == "validation"
+    assert payload["error"]["code"] == "validation_error"
     assert runtime.accepted == 0
     assert runtime.queue.empty()
     assert runtime.jobs == {}

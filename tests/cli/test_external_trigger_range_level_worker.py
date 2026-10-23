@@ -99,7 +99,8 @@ def test_worker_external_command_validation_happens_before_enqueue_or_artifacts(
     assert status == 400
     assert payload["status"] == "error"
     assert payload["command"] == body["command"]
-    assert payload["error"] == "validation_error"
+    assert payload["error"]["category"] == "validation"
+    assert payload["error"]["code"] == "validation_error"
     assert runtime.accepted == 0
     assert runtime.queue.empty()
     assert runtime.jobs == {}

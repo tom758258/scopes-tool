@@ -241,7 +241,7 @@ jobs:
           tests/cli/test_sequence_cli.py tests/webui/test_webui_api.py
           tests/test_supported_operation_surface_consistency.py::test_declared_operations_have_acceptance_cases_and_adapter_routes
           tests/test_supported_operation_surface_consistency.py::test_legacy_tektronix_storage_is_rejected_by_public_adapters
-          tests/cli/test_worker_cli.py::test_worker_http_rejects_non_v2_requests_before_side_effects
+          tests/cli/test_worker_cli.py::test_worker_http_rejects_non_v3_requests_before_side_effects
           tests/cli/test_worker_cli.py::test_worker_stop_cancels_multiple_queued_jobs_safely
           tests/cli/test_worker_cli.py::test_worker_correlation_flows_through_events_and_memory
           tests/cli/test_worker_cli.py::test_worker_lifecycle_failure_before_ready_keeps_stderr_diagnostics
@@ -298,7 +298,7 @@ jobs:
           tests/core/test_output_files.py tests/packaging/test_windows_bundle.py
           tests/webui/test_desktop_host.py tests/webui/test_launcher.py
           tests/webui/test_job_manager_shutdown.py
-          tests/cli/test_worker_cli.py::test_worker_http_rejects_non_v2_requests_before_side_effects
+          tests/cli/test_worker_cli.py::test_worker_http_rejects_non_v3_requests_before_side_effects
           tests/cli/test_worker_cli.py::test_worker_stop_cancels_multiple_queued_jobs_safely
           tests/cli/test_worker_cli.py::test_worker_correlation_flows_through_events_and_memory
           tests/cli/test_worker_cli.py::test_worker_lifecycle_failure_before_ready_keeps_stderr_diagnostics

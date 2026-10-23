@@ -12,7 +12,7 @@ def _runtime(tmp_path):
 def test_segmented_memory_worker_routes_exact_query_payload(tmp_path):
     command, arguments, job_id = worker.validate_command_request(
         {
-            "schema_version": 2,
+            "schema_version": 3,
             "command": "segmented-memory",
             "arguments": {"query": True},
         }
@@ -57,7 +57,7 @@ def test_segmented_memory_worker_routes_canonical_configuration_payloads(
 ):
     command, normalized, job_id = worker.validate_command_request(
         {
-            "schema_version": 2,
+            "schema_version": 3,
             "command": "segmented-memory",
             "arguments": arguments,
         }
@@ -91,7 +91,7 @@ def test_segmented_memory_worker_rejects_noncanonical_arguments(tmp_path, argume
     with pytest.raises(OscilloscopeError, match="segmented-memory"):
         worker.validate_command_request(
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "command": "segmented-memory",
                 "arguments": arguments,
             }
