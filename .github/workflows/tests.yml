@@ -106,6 +106,8 @@ jobs:
               - 'pyproject.toml'
               - '.github/workflows/tests.yml'
             release_contracts:
+              - '.github/workflows/build-windows.yml'
+              - 'tests/tooling/test_ci_workflow_contracts.py'
               - 'scripts/build_release.ps1'
               - 'scripts/release-acceptance.ps1'
               - 'scripts/ci_packaging_smoke.py'
@@ -318,6 +320,7 @@ jobs:
         run: >-
           .\.venv\Scripts\python.exe -m pytest -q -rs
           --basetemp .tmp_tests/ci-release-contracts tests/packaging/test_release_acceptance.py
+          tests/tooling/test_ci_workflow_contracts.py
 
   windows-validation-shared:
     name: Windows validation shared Python 3.13

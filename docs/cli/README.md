@@ -40,6 +40,12 @@ availability depends on the operation and model. Agents and automation should us
 real hardware access. JSON payloads include `schema_version: 2` and
 `timestamp_utc`.
 
+Scopes Worker uses Common schema `3` with `v3-only` compatibility and
+`multi_job` / `startup` execution. Manifest and ordinary CLI JSON retain schema
+`2`; only `common.async_jobs` version `1` is declared. Integrations must migrate
+v2 requests and response handling to the [Worker contract](../contracts/scopes-worker-contract.md);
+there is no v2 fallback. Common cancellation and streaming are not advertised.
+
 Shared machine contracts remain at root:
 
 - `docs/contracts/common-cli-jsonl-contract.md`
@@ -747,7 +753,7 @@ channel's `_v` or `_a` suffix. The directory also contains a shared
 `scpi.log`. A timeout or later error returns non-zero while
 preserving completed CSVs and records `partial` or `failed` status. The command
 does not force a trigger, disable segmented mode, restore state, merge CSVs, or
-perform instrument-side save/export. The Common v2 Worker also
+perform instrument-side save/export. The Common v3 Worker also
 exposes the same series-specific polling and read-timeout semantics through
 its strict `segmented-capture` command contract.
 

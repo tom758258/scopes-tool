@@ -9,19 +9,12 @@ Contract revision: `3.0`
 Compatibility policy: `v3-only`
 
 The Common v3.0 specification is finalized, with its major contract design
-frozen. Specification, implementation, conformance, and release are distinct:
-
-| Status | Common v3.0 |
-| --- | --- |
-| Specification | Finalized |
-| Implementation | Pending across the five Tool projects and Orchestrator (six projects) |
-| Conformance | Pending test verification |
-| Release | No formal v3 cutover |
-
-The five Tools' existing v2 implementations continue under Common v2, contract
-revision `2.2`. These finalized requirements do not upgrade those runtimes or
-establish v3 implementation, conformance, or release. Implementation and
-no-hardware acceptance require separate authorization.
+frozen. Runtime adoption is tool-specific: consult each repository's
+implementation and tool-specific contracts, then inspect the actual executable's
+Manifest and runtime declarations. This specification does not claim that every
+Tool or Orchestrator has migrated. A runtime still using v2 remains governed by
+Common v2, contract revision `2.2`; document publication alone does not upgrade it.
+Implementation, conformance verification, and release are separate decisions.
 
 This document owns Worker event envelopes, terminal events, summary, EOF, and
 process exit. The [Worker protocol](common-worker-protocol.md) owns discovery,

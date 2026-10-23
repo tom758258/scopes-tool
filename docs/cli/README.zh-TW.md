@@ -40,6 +40,11 @@ Module 形式仍可作開發或備援入口：
 Agent／自動化應先 Dry-run、Simulate，再要求實機存取。
 JSON 含 `schema_version: 2` 與 `timestamp_utc`。
 
+Scopes Worker 使用 Common schema `3`、`v3-only` 相容性與
+`multi_job` / `startup` 執行模式。Manifest 與一般 CLI JSON 維持 schema `2`，
+僅宣告 `common.async_jobs` 版本 `1`。整合端須依[Worker 契約](../contracts/scopes-worker-contract.md)
+遷移 v2 請求與回應處理；不提供 v2 fallback，也不宣告 Common 取消或串流功能。
+
 共用機器契約仍在根目錄：
 
 - `docs/contracts/common-cli-jsonl-contract.md`
@@ -511,7 +516,7 @@ WAIT TRIG Bit 不必 Clear。Readiness Timeout 不查 Acquired Count，也不嘗
 CSV 欄位依 Channel Unit 使用 `_v`/`_a`；目錄另含共用 `manifest.json`（Schema Version `2` 與頂層 `vertical_unit`）、`scpi.log`。
 Timeout 或後續錯誤以非零結束，保留完整 CSV，記錄 `partial`/`failed`。
 不 Force Trigger、不停用 Segmented、不還原、不合併 CSV、不做儀器 Save/Export。
-Common v2 Worker 透過嚴格 `segmented-capture` 契約提供相同 Series-specific Polling 與 Read-timeout 語義。
+Common v3 Worker 透過嚴格 `segmented-capture` 契約提供相同 Series-specific Polling 與 Read-timeout 語義。
 
 Worker 僅接受下列精確 Arguments 物件：
 

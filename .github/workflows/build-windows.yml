@@ -12,8 +12,9 @@ on:
           - bundle
           - desktop
           - release
+          - release-acceptance
       create_draft:
-        description: Create GitHub Draft Release (release mode only, main only)
+        description: Create GitHub Draft Release (release-acceptance PASS only, main only)
         type: boolean
         required: true
         default: false
@@ -33,13 +34,15 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
       artifact_name: ${{ steps.meta.outputs.artifact_name }}
+      acceptance_passed: ${{ steps.acceptance.outputs.passed }}
+      source_commit: ${{ steps.acceptance.outputs.source_commit }}
     steps:
       - uses: actions/checkout@v6
       - name: Validate options
         shell: pwsh
         run: |
-          if ('${{ inputs.create_draft }}' -eq 'true' -and '${{ inputs.build_mode }}' -ne 'release') {
-            throw 'Draft Releases require build_mode=release.'
+          if ('${{ inputs.create_draft }}' -eq 'true' -and '${{ inputs.build_mode }}' -ne 'release-acceptance') {
+            throw 'Draft Releases require build_mode=release-acceptance.'
           }
           if ('${{ inputs.create_draft }}' -eq 'true' -and '${{ github.ref }}' -ne 'refs/heads/main') {
             throw 'Draft Releases can only be created from main.'
@@ -67,6 +70,7 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --python 3.13 --all-extras --locked --link-mode=copy
       - name: Build Windows output
+        if: inputs.build_mode != 'release-acceptance'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -79,6 +83,7 @@ jobs:
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script
           if ($LASTEXITCODE -ne 0) { throw "$script failed ($LASTEXITCODE)" }
       - name: Smoke actual packaged executables (no hardware)
+        if: inputs.build_mode != 'release-acceptance'
         shell: pwsh
         run: |
           if ('${{ inputs.build_mode }}' -eq 'release') {
@@ -88,8 +93,72 @@ jobs:
             & .\.venv\Scripts\python.exe scripts/ci_packaging_smoke.py --mode '${{ inputs.build_mode }}'
           }
           if ($LASTEXITCODE -ne 0) { throw "Windows packaging smoke failed ($LASTEXITCODE)" }
+      - name: Run and verify formal release acceptance (no hardware)
+        id: acceptance
+        if: inputs.build_mode == 'release-acceptance'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $outputRoot = '.tmp_tests/actions-release-acceptance'
+          if (Test-Path -LiteralPath $outputRoot) { throw 'Acceptance output must be fresh.' }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/release-acceptance.ps1 -OutputRoot $outputRoot
+          $acceptanceExitCode = $LASTEXITCODE
+          if ($acceptanceExitCode -ne 0) { throw "Release acceptance failed ($acceptanceExitCode)" }
+          $runs = @(Get-ChildItem -LiteralPath $outputRoot -Directory -Force)
+          if ($runs.Count -ne 1 -or $runs[0].Name -notlike 'run-*') { throw 'Expected exactly one acceptance run.' }
+          $runDirectory = $runs[0].FullName
+          $reportPath = Join-Path $runDirectory 'report.json'
+          if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) { throw 'Missing acceptance report.' }
+          $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+          $version = '${{ steps.meta.outputs.version }}'
+          $sourceCommit = '${{ github.sha }}'
+          if ($report.ok -isnot [bool] -or $report.ok -ne $true -or
+              $report.acceptance_mode -cne 'committed-clean-head' -or
+              $report.source_commit -cne $sourceCommit -or
+              $report.project_version -cne $version -or
+              $report.hardware_touched -isnot [bool] -or $report.hardware_touched -ne $false) {
+            throw 'Acceptance report does not match this clean, no-hardware release.'
+          }
+          $expectedSteps = @(
+            'git-source', 'required-tools', 'versions', 'build-release', 'release-layout',
+            'wheel-install', 'sdist-install', 'preflight', 'source-unchanged'
+          )
+          if (@($report.steps).Count -ne $expectedSteps.Count -or
+              @(Compare-Object -ReferenceObject $expectedSteps -DifferenceObject @($report.steps.name) -CaseSensitive).Count -ne 0 -or
+              @($report.steps | Where-Object { $_.result -cne 'PASS' -or $_.exit_code -ne 0 }).Count -ne 0) {
+            throw 'All nine acceptance steps must PASS.'
+          }
+          $expected = @(
+            "scopes-tool-$version-windows-x64.zip",
+            "scopes_tool-$version-py3-none-any.whl",
+            "scopes_tool-$version.tar.gz",
+            'checksums.txt'
+          )
+          $destination = '.tmp_tests/actions-artifacts'
+          New-Item -ItemType Directory -Path $destination | Out-Null
+          foreach ($name in $expected) {
+            $artifact = Join-Path $runDirectory "release/$version/$name"
+            if (-not (Test-Path -LiteralPath $artifact -PathType Leaf) -or (Get-Item -LiteralPath $artifact).Length -eq 0) {
+              throw "Missing or empty acceptance artifact: $name"
+            }
+            Copy-Item -LiteralPath $artifact -Destination $destination
+          }
+          "source_commit=$sourceCommit" >> $env:GITHUB_OUTPUT
+          'passed=true' >> $env:GITHUB_OUTPUT
+      - name: Upload acceptance evidence
+        if: always() && inputs.build_mode == 'release-acceptance'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}-evidence
+          path: |
+            .tmp_tests/actions-release-acceptance/run-*/report.json
+            .tmp_tests/actions-release-acceptance/run-*/summary.md
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
       - name: Stage downloadable ZIP
-        if: inputs.build_mode != 'release'
+        if: inputs.build_mode == 'bundle' || inputs.build_mode == 'desktop'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -132,7 +201,7 @@ jobs:
   draft-release:
     name: Create Draft Release
     needs: build
-    if: ${{ inputs.build_mode == 'release' && inputs.create_draft && github.ref == 'refs/heads/main' }}
+    if: ${{ inputs.build_mode == 'release-acceptance' && inputs.create_draft && github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.build.outputs.acceptance_passed == 'true' && needs.build.outputs.source_commit == github.sha }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

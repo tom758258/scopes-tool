@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import runpy
 import shutil
 import subprocess
@@ -18,6 +19,65 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SMOKE = runpy.run_path(str(ROOT / "scripts/ci_packaging_smoke.py"))
 WINDOWS = pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell required")
+
+
+def test_application_and_lockfile_versions_agree():
+    version = re.search(r'^version = "([^"]+)"',
+                        (ROOT / "pyproject.toml").read_text(), re.MULTILINE)[1]
+    core = (ROOT / "src/scopes_tool_core/__init__.py").read_text(encoding="utf-8")
+    assert re.search(r'^__version__ = "([^"]+)"', core, re.MULTILINE)[1] == version
+    assert json.loads((ROOT / "desktop/package.json").read_text())["version"] == version
+    lock = json.loads((ROOT / "desktop/package-lock.json").read_text())
+    assert lock["version"] == lock["packages"][""]["version"] == version
+    uv_lock = (ROOT / "uv.lock").read_text()
+    assert re.search(r'name = "scopes-tool"\nversion = "([^"]+)"', uv_lock)[1] == version
+
+
+@pytest.mark.parametrize("fault", [
+    None, "version", "manifest-schema", "manifest-schema-float", "worker-schema",
+    "worker-schema-float", "policy", "feature-missing", "feature-version", "feature-bool",
+])
+def test_packaged_cli_smoke_checks_common_v3_manifest(monkeypatch, tmp_path, fault):
+    manifest = {
+        "tool_version": "1.0.0", "schema_version": 2,
+        "worker_protocol": {"schema_versions": [3], "compatibility_policy": "v3-only"},
+        "features": {"common.async_jobs": {"contract_version": 1}},
+    }
+    if fault == "version":
+        manifest["tool_version"] = "0.1.0"
+    elif fault in ("manifest-schema", "manifest-schema-float"):
+        manifest["schema_version"] = 3 if fault == "manifest-schema" else 2.0
+    elif fault in ("worker-schema", "worker-schema-float"):
+        manifest["worker_protocol"]["schema_versions"] = [2 if fault == "worker-schema" else 3.0]
+    elif fault == "policy":
+        manifest["worker_protocol"]["compatibility_policy"] = "v2-only"
+    elif fault == "feature-missing":
+        manifest["features"] = {}
+    elif fault in ("feature-version", "feature-bool"):
+        manifest["features"]["common.async_jobs"]["contract_version"] = (
+            2 if fault == "feature-version" else True
+        )
+    commands = []
+
+    def run(*command, env=None):
+        commands.append(command)
+        assert command[0] == "packaged/scopes-tool.exe"
+        if command[1:] == ("manifest", "--json"):
+            return json.dumps(manifest)
+        if command[1] == "user-guide":
+            filename = "cli.zh-TW.html" if "zh-TW" in command else "cli.html"
+            return (tmp_path / filename).as_uri()
+        return '{"ok": true}'
+
+    smoke = SMOKE["_smoke_cli"]
+    monkeypatch.setitem(smoke.__globals__, "_run", run)
+    if fault:
+        with pytest.raises(AssertionError, match="Packaged Manifest"):
+            smoke("packaged/scopes-tool.exe", tmp_path, "1.0.0")
+    else:
+        smoke("packaged/scopes-tool.exe", tmp_path, "1.0.0")
+        assert commands[-1][1:] == ("identify", "--simulate", "--json")
+    assert ("packaged/scopes-tool.exe", "manifest", "--json") in commands
 
 
 def _bundle(directory):

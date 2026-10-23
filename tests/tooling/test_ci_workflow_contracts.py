@@ -5,8 +5,13 @@ with predicate-quantifier=some-with-excludes, without binding tests to YAML layo
 """
 
 from fnmatch import fnmatchcase
+import json
+import os
 from pathlib import Path
 import re
+import subprocess
+import sys
+from textwrap import dedent
 
 import pytest
 
@@ -161,6 +166,8 @@ def test_filters_and_conditional_gate_remain_safe():
 
 def test_release_changes_select_contracts_and_a_single_packaging_build():
     assert _changed_categories("scripts/release-acceptance.ps1") == {"release_contracts"}
+    assert "release_contracts" in _changed_categories(".github/workflows/build-windows.yml")
+    assert _changed_categories("tests/tooling/test_ci_workflow_contracts.py") == {"release_contracts"}
     assert _changed_categories("scripts/build_release.ps1") == {
         "packaging", "release_layout", "release_contracts",
     }
@@ -195,7 +202,7 @@ def test_manual_build_routes_outputs_and_gates_draft_releases():
     assert "type: choice" in mode
     assert "default: release" in mode
     assert {line[2:] for line in mode if line.startswith("- ")} == {
-        "bundle", "desktop", "release",
+        "bundle", "desktop", "release", "release-acceptance",
     }
     assert {"type: boolean", "default: false"}.issubset(draft_input)
 
@@ -232,12 +239,15 @@ def test_manual_build_routes_outputs_and_gates_draft_releases():
     assert "continue-on-error:" not in workflow
 
     assert "'${{ inputs.create_draft }}' -eq 'true'" in build
-    assert "'${{ inputs.build_mode }}' -ne 'release'" in build
+    assert "'${{ inputs.build_mode }}' -ne 'release-acceptance'" in build
     assert "'${{ github.ref }}' -ne 'refs/heads/main'" in build
     gate = next(line.strip() for line in draft.splitlines() if line.strip().startswith("if:"))
-    assert "inputs.build_mode == 'release'" in gate
+    assert "inputs.build_mode == 'release-acceptance'" in gate
     assert "inputs.create_draft" in gate
     assert "github.ref == 'refs/heads/main'" in gate
+    assert "needs.build.result == 'success'" in gate
+    assert "needs.build.outputs.acceptance_passed == 'true'" in gate
+    assert "needs.build.outputs.source_commit == github.sha" in gate
     assert "needs: build" in draft
     assert "ref: ${{ github.sha }}" in draft
     assert "actions/download-artifact@v4" in draft
@@ -258,3 +268,186 @@ def test_manual_build_routes_outputs_and_gates_draft_releases():
     assert "gh release edit" not in workflow
     assert "gh release upload" not in workflow
     assert "--clobber" not in workflow
+
+
+def _build_step(name):
+    workflow = BUILD_WORKFLOW.read_text(encoding="utf-8")
+    match = re.search(
+        rf"^      - name: {re.escape(name)}\n(.*?)(?=^      - |\n  [\w-]+:|\Z)",
+        workflow, re.MULTILINE | re.DOTALL,
+    )
+    assert match, name
+    return match[1]
+
+
+def _run_block(step):
+    return dedent(step.split("        run: |\n", 1)[1])
+
+
+def _powershell(tmp_path, script, **environment):
+    path = tmp_path / "workflow-step.ps1"
+    path.write_text(script, encoding="utf-8")
+    env = {key: value for key, value in os.environ.items() if key.upper() != "PSMODULEPATH"}
+    env.update(environment)
+    return subprocess.run(
+        ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(path)],
+        cwd=tmp_path, env=env, capture_output=True, text=True, encoding="utf-8", timeout=30,
+    )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell required")
+@pytest.mark.parametrize("mode", ["bundle", "desktop", "release", "release-acceptance"])
+@pytest.mark.parametrize("main", [False, True])
+@pytest.mark.parametrize("create_draft", [False, True])
+def test_manual_build_draft_input_validation(tmp_path, mode, main, create_draft):
+    script = _run_block(_build_step("Validate options"))
+    for key, value in {
+        "inputs.build_mode": mode,
+        "inputs.create_draft": str(create_draft).lower(),
+        "github.ref": "refs/heads/main" if main else "refs/heads/topic",
+    }.items():
+        script = script.replace("${{ " + key + " }}", value)
+    result = _powershell(tmp_path, script)
+    allowed = not create_draft or (mode == "release-acceptance" and main)
+    assert (result.returncode == 0) is allowed, result.stdout + result.stderr
+
+
+def test_acceptance_is_the_only_build_and_smoke_in_its_mode():
+    for name in ("Build Windows output", "Smoke actual packaged executables (no hardware)"):
+        assert "if: inputs.build_mode != 'release-acceptance'" in _build_step(name)
+    acceptance = _build_step("Run and verify formal release acceptance (no hardware)")
+    assert "if: inputs.build_mode == 'release-acceptance'" in acceptance
+    assert acceptance.count("& powershell.exe") == 1
+    assert "./scripts/release-acceptance.ps1 -OutputRoot $outputRoot" in acceptance
+    assert "build_release.ps1" not in acceptance
+    assert "ci_packaging_smoke.py" not in acceptance
+    assert "Join-Path $runDirectory" in acceptance
+    assert "Copy-Item -LiteralPath $artifact" in acceptance
+    assert "if: inputs.build_mode == 'bundle' || inputs.build_mode == 'desktop'" in _build_step(
+        "Stage downloadable ZIP"
+    )
+    assert "if: inputs.build_mode == 'release'" in _build_step("Stage release artifacts")
+    evidence = _build_step("Upload acceptance evidence")
+    assert "if: always() && inputs.build_mode == 'release-acceptance'" in evidence
+    assert "run-*/report.json" in evidence and "run-*/summary.md" in evidence
+    assert "actions-artifacts" not in evidence
+    workflow = BUILD_WORKFLOW.read_text(encoding="utf-8")
+    assert "acceptance_passed: ${{ steps.acceptance.outputs.passed }}" in workflow
+    assert "source_commit: ${{ steps.acceptance.outputs.source_commit }}" in workflow
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell required")
+@pytest.mark.parametrize("fault", [
+    "success", "exit", "missing-report", "invalid-json", "ok", "ok-string", "mode",
+    "commit", "version", "hardware", "hardware-string", "FAIL", "NOT RUN", "missing-step",
+    "duplicate-step", "unknown-step", "step-exit", "missing-asset", "multiple-runs", "stale",
+])
+def test_action_acceptance_report_gate_and_same_run_assets(tmp_path, fault):
+    version, commit = "1.0.0", "a" * 40
+    names = ["git-source", "required-tools", "versions", "build-release", "release-layout",
+             "wheel-install", "sdist-install", "preflight", "source-unchanged"]
+    report = {
+        "ok": True, "acceptance_mode": "committed-clean-head", "source_commit": commit,
+        "project_version": version, "hardware_touched": False,
+        "steps": [{"name": name, "result": "PASS", "exit_code": 0} for name in names],
+    }
+    fields = {
+        "ok": ("ok", False), "ok-string": ("ok", "true"),
+        "mode": ("acceptance_mode", "working-tree"), "commit": ("source_commit", "b" * 40),
+        "version": ("project_version", "9.9.9"), "hardware": ("hardware_touched", True),
+        "hardware-string": ("hardware_touched", "false"),
+    }
+    if fault in fields:
+        key, value = fields[fault]
+        report[key] = value
+    elif fault in ("FAIL", "NOT RUN"):
+        report["steps"][-1]["result"] = fault
+    elif fault == "missing-step":
+        report["steps"].pop()
+    elif fault == "duplicate-step":
+        report["steps"][-1] = report["steps"][0]
+    elif fault == "unknown-step":
+        report["steps"][-1]["name"] = "other"
+    elif fault == "step-exit":
+        report["steps"][-1]["exit_code"] = 7
+    fixture = tmp_path / "fixture"
+    run = fixture / "run-current"
+    artifacts = run / "release" / version
+    artifacts.mkdir(parents=True)
+    expected = [f"scopes-tool-{version}-windows-x64.zip", f"scopes_tool-{version}-py3-none-any.whl",
+                f"scopes_tool-{version}.tar.gz", "checksums.txt"]
+    for name in expected:
+        (artifacts / name).write_text("current acceptance: " + name, encoding="utf-8")
+    if fault == "missing-asset":
+        (artifacts / expected[0]).unlink()
+    if fault != "missing-report":
+        (run / "report.json").write_text(
+            "invalid{" if fault == "invalid-json" else json.dumps(report), encoding="utf-8",
+        )
+    (run / "summary.md").write_text("fixture evidence", encoding="utf-8")
+    if fault == "multiple-runs":
+        (fixture / "run-old").mkdir()
+    if fault == "stale":
+        (tmp_path / ".tmp_tests/actions-release-acceptance").mkdir(parents=True)
+    # A subprocess stub produces one synthetic run; no acceptance build is executed.
+    stub = r'''
+function powershell.exe {
+    Add-Content -LiteralPath calls.txt -Value ($args -join '|')
+    New-Item -ItemType Directory -Force -Path .tmp_tests | Out-Null
+    Copy-Item -LiteralPath $env:TEST_ACCEPTANCE_FIXTURE -Destination $args[-1] -Recurse
+    $global:LASTEXITCODE = [int]$env:TEST_ACCEPTANCE_EXIT
+}
+'''
+    script = _run_block(_build_step("Run and verify formal release acceptance (no hardware)"))
+    script = script.replace("${{ steps.meta.outputs.version }}", version)
+    script = script.replace("${{ github.sha }}", commit)
+    output = tmp_path / "outputs.txt"
+    result = _powershell(
+        tmp_path, stub + script, TEST_ACCEPTANCE_FIXTURE=str(fixture),
+        TEST_ACCEPTANCE_EXIT="7" if fault == "exit" else "0", GITHUB_OUTPUT=str(output),
+    )
+    if fault == "stale":
+        assert not (tmp_path / "calls.txt").exists()
+    else:
+        calls = (tmp_path / "calls.txt").read_text().splitlines()
+        assert len(calls) == 1
+        assert "./scripts/release-acceptance.ps1|-OutputRoot|" in calls[0]
+    if fault == "success":
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert output.read_text(encoding="utf-8").splitlines() == [
+            f"source_commit={commit}", "passed=true",
+        ]
+        staged = tmp_path / ".tmp_tests/actions-artifacts"
+        assert {path.name for path in staged.iterdir()} == set(expected)
+        assert all((staged / name).read_bytes() == (artifacts / name).read_bytes()
+                   for name in expected)
+    else:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert not output.exists()
+
+
+@pytest.mark.parametrize("mode, create_draft, ref, result, passed, same_commit, allowed", [
+    ("bundle", True, "main", "success", "true", True, False),
+    ("desktop", True, "main", "success", "true", True, False),
+    ("release", True, "main", "success", "true", True, False),
+    ("release-acceptance", False, "main", "success", "true", True, False),
+    ("release-acceptance", True, "topic", "success", "true", True, False),
+    ("release-acceptance", True, "main", "failure", "true", True, False),
+    ("release-acceptance", True, "main", "success", "", True, False),
+    ("release-acceptance", True, "main", "success", "false", True, False),
+    ("release-acceptance", True, "main", "success", "true", False, False),
+    ("release-acceptance", True, "main", "success", "true", True, True),
+])
+def test_draft_job_requires_verified_acceptance(mode, create_draft, ref, result, passed,
+                                               same_commit, allowed):
+    draft = BUILD_WORKFLOW.read_text(encoding="utf-8").split("  draft-release:", 1)[1]
+    expression = re.search(r"if: \$\{\{ (.+) \}\}", draft)[1]
+    values = {
+        "inputs.build_mode": mode, "inputs.create_draft": create_draft,
+        "github.ref": "refs/heads/" + ref, "needs.build.result": result,
+        "needs.build.outputs.acceptance_passed": passed,
+        "needs.build.outputs.source_commit": "a" if same_commit else "b", "github.sha": "a",
+    }
+    for key, value in values.items():
+        expression = expression.replace(key, repr(value))
+    assert eval(expression.replace("&&", "and"), {"__builtins__": {}}) is allowed

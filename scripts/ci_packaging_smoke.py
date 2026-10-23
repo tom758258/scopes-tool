@@ -72,8 +72,20 @@ def _check_bundle_contents(directory: Path) -> None:
         raise AssertionError("Missing or duplicate scopes-tool distribution metadata")
 
 
-def _smoke_cli(cli: str, help_root: Path) -> None:
+def _smoke_cli(cli: str, help_root: Path, version: str) -> None:
     _run(cli, "--help")
+    manifest = json.loads(_run(cli, "manifest", "--json"))
+    protocol = manifest.get("worker_protocol", {})
+    async_jobs = manifest.get("features", {}).get("common.async_jobs", {})
+    if (manifest.get("tool_version") != version
+            or type(manifest.get("schema_version")) is not int
+            or manifest["schema_version"] != 2
+            or protocol.get("schema_versions") != [3]
+            or type(protocol["schema_versions"][0]) is not int
+            or protocol.get("compatibility_policy") != "v3-only"
+            or async_jobs.get("contract_version") != 1
+            or type(async_jobs["contract_version"]) is not int):
+        raise AssertionError("Packaged Manifest must match the release version and Common v3")
     # Echo the browser URI from a child process instead of opening a GUI.
     browser = f'"{Path(sys.executable).as_posix()}" -c "print(__import__(\'sys\').argv[1])" %s'
     browser_env = {**os.environ, "BROWSER": browser}
@@ -179,7 +191,7 @@ for package, relative, guide in (('scopes_tool_cli', 'help', 'cli'), ('scopes_to
 print(json.dumps(str(files('scopes_tool_cli').joinpath('help'))))
 """
     help_root = Path(json.loads(_run(str(python), "-I", "-c", code, version)))
-    _smoke_cli(str(python.parent / "scopes-tool.exe"), help_root)
+    _smoke_cli(str(python.parent / "scopes-tool.exe"), help_root, version)
     _run(str(python.parent / "scopes-tool-webui.exe"), "--help")
     _require_file(python.parent, "scopes-tool-webui-launcher.exe")
 
@@ -207,7 +219,8 @@ def main() -> int:
                 parser.error("--extract-dir under .tmp_tests is required for release checks")
             target = _check_release(args.release_dir, args.expected_version, args.extract_dir)
             if not args.layout_only:
-                _smoke_cli(str(target / "scopes-tool.exe"), target / "_internal/scopes_tool_cli/help")
+                _smoke_cli(str(target / "scopes-tool.exe"), target / "_internal/scopes_tool_cli/help",
+                           args.expected_version)
         print("Release packaging smoke passed (no hardware)")
         return 0
 
@@ -218,7 +231,9 @@ def main() -> int:
         target = ROOT / "dist" / "desktop" / "win-unpacked"
         _check_desktop(target)
     if not args.layout_only:
-        _smoke_cli(str(target / "scopes-tool.exe"), target / "_internal/scopes_tool_cli/help")
+        version = re.search(r'^version = "([^"]+)"',
+                            (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.MULTILINE)[1]
+        _smoke_cli(str(target / "scopes-tool.exe"), target / "_internal/scopes_tool_cli/help", version)
     print(f"Windows {args.mode} packaging smoke passed (no hardware)")
     return 0
 

@@ -27,9 +27,15 @@ requirements are not bundled. Bluetooth (`@bt`) and explicit custom backends are
 not Product-open. Connection diagnostics do not imply Product authorization.
 Simulation and supported dry-run operations do not open real instrument sessions.
 
+Scopes Worker uses Common schema `3` with `v3-only` compatibility and
+`multi_job` / `startup` execution. Manifest and ordinary CLI JSON retain schema
+`2`; only `common.async_jobs` version `1` is declared. Integrations must migrate
+v2 requests and response handling to the [Worker contract](docs/contracts/scopes-worker-contract.md);
+there is no v2 fallback. Common cancellation and streaming are not advertised.
+
 ## Features
 
-- Operate through the CLI, Common v2 Worker, localhost-only browser WebUI, or
+- Operate through the CLI, Common v3 Worker, localhost-only browser WebUI, or
   Electron Desktop.
 - Use registered Keysight DSOX2004A, DSOX3024A, DSOX4024A, DSOX4034A and Tektronix
   TBS2074, TDS2024B, TBS1052B models within their documented support scope.
@@ -241,7 +247,18 @@ and does not commit, tag, or publish.
 
 Conditional packaging CI builds Desktop or the release
 layout once per job and runs packaged CLI smoke; it does not validate GUI
-interaction or real instruments. Full acceptance remains a manual release gate.
+interaction or real instruments. Full acceptance can run locally or through the manual Action.
+
+The manual **Build Windows** Action defaults to `release` with `create_draft=false`.
+Its `bundle`, `desktop`, and `release` modes keep their build and packaging smoke
+flows and upload artifacts only. The `release-acceptance` mode runs the same
+formal acceptance script once under `.tmp_tests/actions-release-acceptance/`.
+It requires exit code zero and a valid all-PASS report for all nine steps, clean
+committed HEAD, matching commit/version, and no hardware access before uploading
+the four release assets from that run. Reports are uploaded separately, including
+available failure reports. Only this mode with `create_draft=true` on `main` can
+create a Draft Release targeting that same commit. Existing tags/releases are
+rejected; publishing remains manual.
 
 ## Test
 

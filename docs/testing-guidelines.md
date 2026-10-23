@@ -91,8 +91,12 @@ examples, and internal structure require a clear maintenance benefit.
 - **Build Windows** is a separate, manual-only workflow for Bundle/Desktop ZIPs
   or versioned Release artifacts. It runs the corresponding hardware-free packaging
   smoke before uploading; Release mode checks distributions, checksums, and the
-  extracted Desktop/CLI. Optional Draft Releases require Release mode and `main`
-  and are never published automatically.
+  extracted Desktop/CLI. The fourth mode, `release-acceptance`, runs the full
+  nine-step acceptance once and verifies its report, commit, version, and
+  no-hardware result before staging assets from that same run. Reports are
+  uploaded separately, including available failure reports. Optional Draft
+  Releases require this mode, acceptance PASS, and `main`; they target the
+  accepted commit and are never published automatically.
 
 The operation matrix validates adapter admission for every registered model.
 Dry-run and simulator execution uses one representative per driver/capability

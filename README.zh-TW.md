@@ -24,9 +24,14 @@ Python 安裝與 Windows 套件已包含 PyVISA、`pyvisa-py`、`psutil` 與 `ze
 尚未開放產品支援。連線診斷成功不代表產品操作已獲授權。
 Simulation 與支援的 dry-run 操作不會開啟真實儀器連線。
 
+Scopes Worker 使用 Common schema `3`、`v3-only` 相容性與
+`multi_job` / `startup` 執行模式。Manifest 與一般 CLI JSON 維持 schema `2`，
+僅宣告 `common.async_jobs` 版本 `1`。整合端須依[Worker 契約](docs/contracts/scopes-worker-contract.md)
+遷移 v2 請求與回應處理；不提供 v2 fallback，也不宣告 Common 取消或串流功能。
+
 ## 功能特性
 
-- 透過 CLI、Common v2 Worker、僅限本機的瀏覽器 WebUI 或 Electron Desktop 操作。
+- 透過 CLI、Common v3 Worker、僅限本機的瀏覽器 WebUI 或 Electron Desktop 操作。
 - 在文件規定的範圍內支援已註冊的 Keysight DSOX2004A、DSOX3024A、DSOX4024A、
   DSOX4034A，以及 Tektronix TBS2074、TDS2024B、TBS1052B。
 - 設定擷取、類比通道、時基與顯示；擷取波形及螢幕截圖；查詢量測與統計資料。
@@ -221,7 +226,16 @@ metadata、校驗碼及解壓後的 Desktop 配置，再將 wheel 與 sdist 分�
 `build/` 與 `dist/`。驗收不會探索或開啟真實 Resource，也不會提交、標記或發布。
 
 條件式打包 CI 在每個 job 中僅建置一次 Desktop 或 Release 配置，並執行打包後
-CLI 檢查；這不代表已驗證 GUI 互動或真實儀器。完整驗收仍是手動發行關卡。
+CLI 檢查；這不代表已驗證 GUI 互動或真實儀器。完整驗收可在本機或手動 Action 執行。
+
+手動 **Build Windows** Action 預設使用 `release`，且 `create_draft=false`。
+`bundle`、`desktop`、`release` 保留原有建置與封裝檢查流程，只上傳產物。
+`release-acceptance` 模式在 `.tmp_tests/actions-release-acceptance/` 下執行一次
+相同正式驗收腳本，必須退出碼為零、報告九個步驟全數 PASS、來源為乾淨且已提交的 HEAD、
+Commit／版本一致且未接觸硬體，才上傳該次執行的四個發行產物。
+報告獨立上傳，亦盡可能保留失敗報告。只有此模式在 `main` 上指定
+`create_draft=true`，才能以相同 Commit 建立 Draft Release。
+既有 Tag／Release 會被拒絕；發布仍須手動操作。
 
 ## 測試
 
