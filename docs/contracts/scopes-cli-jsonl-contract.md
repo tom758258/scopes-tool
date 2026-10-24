@@ -239,7 +239,7 @@ Discovery and identification:
   canonical `model_id`, resolved by Core from the IDN already obtained.
   When existing identify policy permits an unknown or unregistered identity,
   `model_id` is `null`; existing rejection and exit-code behavior is unchanged.
-  These additions retain Common schema version `2` and all existing fields.
+  These additions retain ordinary CLI schema version `2` and all existing fields.
 - `check-error`: `drain`, `max_reads`, `entries`; top-level `system_error`
   records the latest queried entry.
 - `system-clear-status`: `operation: "clear"`, `command: "*CLS"`, and
@@ -922,9 +922,11 @@ transport restrictions remain validated by Core.
 Scopes artifact JSON is machine-readable and should be preferred over human
 text:
 
-- Worker JSONL runtime events are Common Worker machine data targeting exact
-  integer `schema_version: 2`; their Common envelope fields remain unchanged,
-  while command result fields follow the corresponding domain contract.
+- Worker HTTP responses and JSONL runtime events use exact integer
+  `schema_version: 3`; their envelopes follow the Common contracts, while
+  command result fields follow the corresponding domain contract. Manifest,
+  ordinary one-shot CLI JSON, CLI-owned errors, and dry-run previews retain
+  `schema_version: 2`. Domain artifacts retain their independent versions.
 - Capture metadata JSON records resource, IDN, waveform format, preamble, point
   counts, and `vertical_unit`; multi-channel metadata records the unit in each
   ordered channel entry. CSV waveform columns use `ch<n>_v` for volts and

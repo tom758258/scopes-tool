@@ -105,19 +105,31 @@ belongs only to this workflow and does not change standalone `capture`.
 
 Measure-until dry-run delegates one representative query and system-error
 check to `plan_measure_until()`. Runtime delegates timeout-bounded polling to
-`run_measure_until()`. Direct CLI may provide `--output-dir`; the Worker
-rejects `output_dir` and `log_scpi` and injects its owned job directory.
+`run_measure_until()`. Direct CLI may provide `--output-dir`. The Worker
+requires caller-supplied `output_dir` when `save_results` is `true` (the
+default); it may be omitted when `save_results` is `false`. The Worker
+rejects `log_scpi`.
 
 Triggered measurement dry-run delegates one representative cycle to
 `plan_triggered_measure_loop()`. Runtime delegates the finite acquisition loop
-to `run_triggered_measure_loop()`. Direct CLI may provide `--output-dir`; the
-Worker rejects that request field and injects its owned job directory.
+to `run_triggered_measure_loop()`. Direct CLI may provide `--output-dir`. The
+Worker requires caller-supplied `output_dir` when `save_results` is `true`
+(the default); it may be omitted when `save_results` is `false`. The Worker
+rejects `log_scpi`.
 
 Triggered capture dry-run delegates one representative cycle to
 `plan_triggered_capture_series()`. Runtime delegates the finite trigger and
 waveform loop to `run_triggered_capture_series()`. Direct CLI may provide
-`--output-dir`; the Worker rejects `output_dir` and `log_scpi` request fields
-and injects its owned job directory.
+`--output-dir`; the Worker requires caller-supplied `output_dir` and rejects
+`log_scpi` and `save_results` request fields.
+
+For these Worker workflows, artifact destinations are caller-owned. The
+Worker validates destinations and guards against overwriting existing
+artifacts; Core creates the output directory and writes domain artifacts
+inside it under the existing workflow contracts. The Worker never chooses
+a destination or allocates a job artifact directory. When `save_results` is
+`false`, `measure-until` and `triggered-measure-loop` create no output directory
+or domain artifacts and return an empty `files` list.
 
 `sequence` loads a strict JSON document before opening a scope, builds a
 `SequenceRequest`, and delegates planning or execution to Core. Dry-run uses
@@ -151,5 +163,8 @@ python -m scopes_tool_cli.cli
 ```
 
 CLI JSON behavior is documented by the root Scopes contract:
-`docs/contracts/scopes-cli-jsonl-contract.md`. One-shot and lifecycle JSON
-payloads include `schema_version: 2` and `timestamp_utc`.
+`docs/contracts/scopes-cli-jsonl-contract.md`. Ordinary one-shot CLI JSON,
+CLI-owned errors, and dry-run previews use `schema_version: 2`; forwarded
+Worker lifecycle responses retain `schema_version: 3`. Both envelope
+versions include `timestamp_utc`. A dry-run preview may embed a schema-3
+Worker request in `request`.
