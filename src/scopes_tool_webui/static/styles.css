@@ -245,9 +245,13 @@ button:disabled { cursor: default; opacity: .55; }
 
 .supported-devices-button { min-height: 32px; padding: 5px 10px; white-space: nowrap; }
 .device-options-panel.supported-devices-panel { width: min(440px, calc(100vw - 48px)); }
-.supported-devices-panel h2 { font-size: 14px; }
-.supported-devices-tabs { display: flex; gap: 6px; margin: 12px 0; }
-.supported-devices-tabs button { flex: 1; background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+.supported-devices-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.supported-devices-panel h2 { min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+.supported-devices-tabs { display: inline-flex; max-width: 100%; margin-left: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.supported-devices-tabs button { min-width: 0; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 0; background: var(--panel); color: var(--ink); font-size: 11px; overflow-wrap: anywhere; box-shadow: none; }
+.supported-devices-tabs button + button { border-left: 1px solid var(--line); }
+.supported-devices-tabs button:focus { outline: none; }
+.supported-devices-tabs button:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
 .supported-devices-tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-text, #fff); }
 .supported-devices-groups { display: grid; gap: 14px; max-height: min(55vh, 420px); overflow-y: auto; }
 .supported-devices-group h3 { margin: 0 0 4px; font-size: 13px; }

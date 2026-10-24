@@ -68,13 +68,15 @@
             <div class="supported-devices">
               <button id="supported-devices-toggle" class="secondary supported-devices-button" type="button" data-i18n="supported_devices.heading" data-i18n-title="supported_devices.heading" data-i18n-aria-label="supported_devices.heading" title="Supported devices" aria-label="Supported devices" aria-controls="supported-devices-panel" aria-expanded="false">Supported devices</button>
               <div id="supported-devices-panel" class="device-options-panel supported-devices-panel" role="dialog" aria-labelledby="supported-devices-heading" hidden>
-                <h2 id="supported-devices-heading" data-i18n="supported_devices.heading">Supported devices</h2>
+                <div class="supported-devices-header">
+                  <h2 id="supported-devices-heading" data-i18n="supported_devices.heading">Supported devices</h2>
+                  <div class="supported-devices-tabs" role="tablist" data-i18n-aria-label="device.visaBackend" aria-label="VISA backend">
+                    <button id="supported-system-tab" type="button" role="tab" aria-selected="true" aria-controls="supported-devices-content" data-backend="system_visa">System VISA</button>
+                    <button id="supported-py-tab" type="button" role="tab" aria-selected="false" aria-controls="supported-devices-content" tabindex="-1" data-backend="@py">PyVISA-py</button>
+                  </div>
+                </div>
                 <p class="compact-note" data-i18n="supported_devices.description">Connection display only; tabs do not change the selected VISA backend.</p>
                 <p id="supported-devices-status" class="compact-note" aria-live="polite" hidden></p>
-                <div class="supported-devices-tabs" role="tablist" data-i18n-aria-label="device.visaBackend" aria-label="VISA backend">
-                  <button id="supported-system-tab" type="button" role="tab" aria-selected="true" aria-controls="supported-devices-content" data-backend="system_visa">System VISA</button>
-                  <button id="supported-py-tab" type="button" role="tab" aria-selected="false" aria-controls="supported-devices-content" tabindex="-1" data-backend="@py">PyVISA-py</button>
-                </div>
                 <div id="supported-devices-content" role="tabpanel" aria-labelledby="supported-system-tab">
                   <p id="supported-devices-pending" class="compact-note pending-note" data-i18n="supported_devices.pending" hidden>Only the listed PyVISA-py connections are Product-open; other PyVISA-py connections remain unavailable.</p>
                   <div id="supported-devices-body" class="supported-devices-groups"></div>
