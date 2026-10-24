@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from scopes_tool_webui.command_catalog import command_catalog
 
@@ -23,6 +26,118 @@ def test_locale_key_parity() -> None:
         "missing_in_zh: " + str(sorted(en_keys - zh_keys))
         + " missing_in_en: " + str(sorted(zh_keys - en_keys))
     )
+
+
+@pytest.mark.frontend_node
+def test_locale_initialization_and_switching_with_unavailable_browser_storage() -> None:
+    script = r'''
+        import assert from "node:assert/strict";
+        import fs from "node:fs";
+
+        const root = process.argv[1];
+        const url = (source) => `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`;
+        let source = fs.readFileSync(`${root}/i18n.js`, "utf8");
+        for (const name of ["locale_en.js", "locale_zh_tw.js"]) {
+          source = source.replace(`/static/${name}`, url(fs.readFileSync(`${root}/${name}`, "utf8")));
+        }
+        const blocked = () => { throw new Error("browser access denied"); };
+        const blockedLanguages = Object.defineProperty({ language: "zh-TW" }, "languages", { get: blocked });
+        const blockedNavigator = Object.defineProperties({}, {
+          languages: { get: blocked }, language: { get: blocked },
+        });
+        const cases = [
+          ["en", { languages: ["zh-TW"] }, "en"],
+          ["zh-TW", { languages: ["en-US"] }, "zh-TW"],
+          ...[null, "", "fr", "EN", "zh-tw", "zh_TW", " zh-TW ", "toString", "__proto__"].map(
+            (saved) => [saved, { languages: ["zh-TW"] }, "zh-TW"]
+          ),
+          ...["zh-TW", " ZH_tw ", "zh-TW-x-test", "zh-Hant", "ZH_hAnT-HK"].map(
+            (language) => [null, { languages: [language], language: "en" }, "zh-TW"]
+          ),
+          ...["zh", "zh-CN", "zh-Hans-TW", "zh-twfoo", "zh-hantfoo", "en-US", "fr"].map(
+            (language) => [null, { languages: [language, "zh-TW"], language: "zh-TW" }, "en"]
+          ),
+          [null, { languages: [null, " ", "zh-Hant"], language: "en" }, "zh-TW"],
+          [null, { languages: [], language: "zh_TW" }, "zh-TW"],
+          [null, { languages: [null, " "], language: "zh-Hant-TW" }, "zh-TW"],
+          [null, { languages: "zh-TW", language: "en" }, "en"],
+          [null, {}, "en"],
+          [null, null, "en"],
+          [null, blockedLanguages, "zh-TW"],
+          [null, blockedNavigator, "en"],
+          [null, { language: "zh-TW" }, "zh-TW", "read"],
+          [null, { language: "zh-TW" }, "zh-TW", "write"],
+          [null, { language: "zh-TW" }, "zh-TW", "getter"],
+          [null, { language: "zh-TW" }, "zh-TW", "missing"],
+          [null, null, "en", "navigatorGetter"],
+        ];
+        globalThis.fetch = blocked;
+        globalThis.window = { location: { reload: blocked } };
+        for (const [index, [saved, navigatorLike, expected, failure]] of cases.entries()) {
+          const writes = [];
+          const storage = {
+            getItem(key) {
+              assert.equal(key, "scopes-tool-webui-locale");
+              if (failure === "read") blocked();
+              return saved;
+            },
+            setItem(key, value) {
+              if (failure === "write") blocked();
+              writes.push([key, value]);
+            },
+          };
+          Object.defineProperty(globalThis, "localStorage", {
+            configurable: true,
+            get: failure === "getter" ? blocked : () => failure === "missing" ? undefined : storage,
+          });
+          Object.defineProperty(globalThis, "navigator", {
+            configurable: true,
+            get: failure === "navigatorGetter" ? blocked : () => navigatorLike,
+          });
+          const label = { dataset: { i18n: "actions.refresh" } };
+          const input = { dataset: { i18nPlaceholder: "actions.refresh" }, value: "unsaved input" };
+          const button = { dataset: { i18nTitle: "actions.refresh", i18nAriaLabel: "actions.refresh" },
+            setAttribute(name, value) { this[name] = value; } };
+          const title = { dataset: { i18n: "page.title" } };
+          const doc = new EventTarget();
+          doc.documentElement = {};
+          doc.querySelectorAll = (selector) => ({
+            "[data-i18n]": [label, title], "[data-i18n-placeholder]": [input],
+            "[data-i18n-title]": [button], "[data-i18n-aria-label]": [button],
+          })[selector];
+          doc.querySelector = () => title;
+          globalThis.document = doc;
+          const events = [];
+          doc.addEventListener("localechange", (event) => events.push(event.detail));
+          const i18n = await import(`${url(source)}#${index}`);
+          assert.equal(i18n.locale(), expected);
+          i18n.initializeI18n();
+          assert.deepEqual(writes, [], "initial detection must not save a preference");
+          const switched = expected === "en" ? "zh-TW" : "en";
+          for (const [step, language] of [expected, switched, expected].entries()) {
+            if (step > 0) i18n.setLocale(language);
+            assert.equal(i18n.locale(), language);
+            assert.equal(doc.documentElement.lang, language);
+            assert.equal(label.textContent, i18n.translate("actions.refresh"));
+            assert.equal(input.placeholder, label.textContent);
+            assert.equal(button.title, label.textContent);
+            assert.equal(button["aria-label"], label.textContent);
+            assert.equal(doc.title, i18n.translate("page.title"));
+            assert.equal(input.value, "unsaved input");
+          }
+          assert.deepEqual(events, [expected, switched, expected]);
+          assert.deepEqual(writes, ["write", "getter", "missing"].includes(failure) ? [] : [
+            ["scopes-tool-webui-locale", switched], ["scopes-tool-webui-locale", expected],
+          ]);
+        }
+    '''
+    completed = subprocess.run(
+        ["node", "--input-type=module", "--eval", script, str(STATIC_ROOT)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
 
 
 # Fields that reach the generic result renderer (results.js resultFieldLabel /
