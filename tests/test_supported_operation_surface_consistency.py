@@ -125,7 +125,7 @@ def test_declared_operations_have_acceptance_cases_and_adapter_routes(model, tmp
                 "schema_version": WORKER_SCHEMA_VERSION, "command": cli_command, "arguments": cli_args,
             })
             parsed = parse_domain_command(command, arguments, SimpleNamespace(
-                mode="simulate", model=model.model_id, resource=None,
+                mode="simulate", model=model.model_id, resource=None, visa_library=None,
             ))
             assert parsed.command == cli_command
         if operation not in CLI_ONLY:
@@ -255,4 +255,4 @@ def test_legacy_tektronix_storage_is_rejected_by_public_adapters(model_id, opera
         "schema_version": WORKER_SCHEMA_VERSION, "command": operation, "arguments": cli_args,
     })
     with pytest.raises(OscilloscopeError):
-        parse_domain_command(command, arguments, SimpleNamespace(mode="simulate", model=model_id, resource=None))
+        parse_domain_command(command, arguments, SimpleNamespace(mode="simulate", model=model_id, resource=None, visa_library=None))
