@@ -116,13 +116,16 @@ def test_worker_serial_uart_set_execution_preserves_command_result(tmp_path):
     ]
 
 
+@pytest.mark.parametrize("visa_library", [None, "@py"])
 def test_worker_serial_uart_trigger_configure_execution_uses_shared_core_path(
-    tmp_path,
+    tmp_path, visa_library,
 ):
+    runtime = _runtime(tmp_path)
+    runtime.visa_library = visa_library
     parsed = worker.parse_domain_command(
         "serial-trigger-uart-set",
         {"bus": 1, "type": "rx-data", "data": 85, "qualifier": "equal"},
-        _runtime(tmp_path),
+        runtime,
     )
 
     assert parsed.command == "serial-trigger-uart-set"

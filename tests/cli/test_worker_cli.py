@@ -2702,14 +2702,20 @@ class _FakeScope:
         return idn
 
 
-def test_live_worker_identity_mismatch_fails_before_domain_scpi(monkeypatch):
+@pytest.mark.parametrize("visa_library", [None, "@py"])
+@pytest.mark.parametrize("command, arguments", [
+    ("run", {}),
+    ("serial-trigger-uart-set", {"bus": 1, "type": "rx-start"}),
+])
+def test_live_worker_identity_mismatch_fails_before_domain_scpi(
+    monkeypatch, visa_library, command, arguments,
+):
     fake_scope = _FakeScope("KEYSIGHT,DSOX3024A,MY0000,1.0")
     monkeypatch.setattr(cli_runtime.Oscilloscope, "open", lambda *args, **kwargs: fake_scope)
-    parsed = worker.parse_domain_command(
-        "capture",
-        {"channel": [1], "csv": "out/capture.csv", "meta": "out/capture_meta.json"},
-        _live_runtime(),
-    )
+    runtime = _live_runtime()
+    runtime.resource = "TCPIP0::scope.invalid::INSTR"
+    runtime.visa_library = visa_library
+    parsed = worker.parse_domain_command(command, arguments, runtime)
 
     payload, exit_code = cli._execute_json_command(parsed)
 
@@ -3316,12 +3322,13 @@ def test_simulation_worker_retains_settings_with_independent_sessions(monkeypatc
 
 
 @contextmanager
-def _simulation_worker_process(command=None):
+def _simulation_worker_process(command=None, visa_library=None):
     import os
     import time
     command = command or [sys.executable, "-m", "scopes_tool_cli"]
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2] / "src"))
-    process = subprocess.Popen(command + ["worker", "--simulate", "--port", "0", "--format", "jsonl"],
+    backend_args = [] if visa_library is None else ["--visa-library", visa_library]
+    process = subprocess.Popen(command + ["worker", *backend_args, "--simulate", "--port", "0", "--format", "jsonl"],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
     events = queue.Queue()
     records = []
@@ -3414,8 +3421,10 @@ def _assert_simulation_defaults(ready):
     assert units["result"]["units"] == "volt"
 
 
-def test_real_simulation_worker_retains_settings_isolates_and_restarts():
-    with _simulation_worker_process() as (first, records):
+@pytest.mark.parametrize("visa_library", [None, "@py"])
+def test_real_simulation_worker_retains_settings_isolates_and_restarts(visa_library):
+    with _simulation_worker_process(visa_library=visa_library) as (first, records):
+        assert "visa_library" not in first
         for index, (command, arguments) in enumerate((
             ("acquisition", {"type": "average", "count": 16}),
             ("channel-invert", {"channel": 1, "on": True}),
@@ -3788,3 +3797,132 @@ def test_wait_ready_rejects_identity_change_between_polls(monkeypatch, capsys):
     assert worker.client_wait_ready(args) == 3
     payload = json.loads(capsys.readouterr().out)
     assert "run_id changed" in payload["error"]["message"]
+
+
+@pytest.mark.parametrize("visa_library", [None, "@py"])
+@pytest.mark.parametrize("command, arguments", [
+    ("run", {}),
+    ("serial-trigger-uart-set", {"bus": 1, "type": "rx-start"}),
+])
+@pytest.mark.parametrize("mode", ["live", "simulate"])
+def test_worker_backend_selection_execution(monkeypatch, visa_library, command, arguments, mode):
+    from scopes_tool_core.simulator_backend import SimulatorBackend
+
+    backend = SimulatorBackend()
+    opened = []
+
+    def open_scope(resource, *, visa_library):
+        opened.append((resource, visa_library))
+        return cli_runtime.Oscilloscope(backend)
+
+    monkeypatch.setattr(cli_runtime.Oscilloscope, "open", open_scope)
+    runtime = _live_runtime()
+    runtime.resource = "TCPIP0::scope.invalid::INSTR"
+    runtime.mode = mode
+    runtime.visa_library = visa_library
+    parsed = worker.parse_domain_command(command, arguments, runtime)
+    payload, exit_code = cli._execute_json_command(parsed)
+
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert opened == ([(runtime.resource, visa_library)] if mode == "live" else [])
+    assert any(item.startswith(":") for item in payload["scpi"]["sent"])
+    if mode == "live":
+        assert payload["scpi"]["sent"][0] == "*IDN?"
+        assert backend.closed
+
+
+@pytest.mark.parametrize("field", ["visa_library", "visa-library", "visa_lib", "visa-library=@py"])
+@pytest.mark.parametrize("command, arguments", [
+    ("run", {}),
+    ("serial-trigger-uart-set", {"bus": 1, "type": "rx-start"}),
+])
+def test_worker_http_rejects_backend_override_before_enqueue(monkeypatch, field, command, arguments):
+    monkeypatch.setattr(cli_runtime.Oscilloscope, "open",
+                        lambda *a, **kw: pytest.fail("unexpected instrument open"))
+    runtime = _live_runtime()
+    runtime.visa_library = "@py"
+    body = json.dumps({
+        "schema_version": 3, "command": command,
+        "arguments": {**arguments, field: "system_visa"},
+    }).encode()
+    request = (b"POST /command HTTP/1.0\r\nContent-Type: application/json\r\n"
+               + f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+    response = io.BytesIO()
+
+    class Connection:
+        def makefile(self, *args, **kwargs):
+            return io.BytesIO(request)
+
+        def sendall(self, data):
+            response.write(data)
+
+    worker._make_handler(runtime)(Connection(), ("127.0.0.1", 0), None)
+    headers, data = response.getvalue().split(b"\r\n\r\n", 1)
+    assert headers.splitlines()[0].split()[1] == b"400"
+    payload = json.loads(data)
+    assert payload["error"]["category"] == "validation"
+    assert payload["worker_job_id"] is None
+    assert runtime.accepted == 0
+    assert runtime.jobs == {}
+    assert runtime.queue.empty()
+
+
+@pytest.mark.parametrize("resource, model, opens", [
+    ("USB0::FAKE::INSTR", "keysight-dsox4024a", False),
+    ("TCPIP0::scope.invalid::INSTR", "keysight-dsox3024a", True),
+])
+def test_worker_py_backend_preserves_product_policy(monkeypatch, resource, model, opens):
+    from scopes_tool_core.simulator_backend import SimulatorBackend
+
+    backend = SimulatorBackend(physical_model_id=model)
+    opened = []
+
+    def open_scope(*args, **kwargs):
+        opened.append(args)
+        return cli_runtime.Oscilloscope(backend)
+
+    monkeypatch.setattr(cli_runtime.Oscilloscope, "open", open_scope)
+    runtime = make_worker_runtime(mode="live", resource=resource, model=model)
+    runtime.visa_library = "@py"
+    parsed = worker.parse_domain_command("run", {}, runtime)
+    payload, exit_code = cli._execute_json_command(parsed)
+
+    assert exit_code != 0
+    assert payload["ok"] is False
+    assert bool(opened) is opens
+    assert backend.history == (["*IDN?"] if opens else [])
+
+
+@pytest.mark.parametrize("visa_library", [None, "@py"])
+@pytest.mark.parametrize("mode", ["simulate", "live"])
+def test_worker_startup_backend_option(monkeypatch, capsys, visa_library, mode):
+    from types import SimpleNamespace
+    from scopes_tool_cli.parser import _build_parser
+
+    argv = ["worker", f"--{mode}"]
+    if mode == "live":
+        argv += ["--resource", "TCPIP0::scope.invalid::INSTR"]
+    if visa_library is not None:
+        argv += ["--visa-library", visa_library]
+    args = _build_parser().parse_args(argv)
+    runtimes = []
+    monkeypatch.setattr(worker, "_make_handler", lambda runtime: runtimes.append(runtime))
+    monkeypatch.setattr(worker, "_job_loop", lambda runtime: None)
+    server = SimpleNamespace(server_port=8765, serve_forever=lambda: None, server_close=lambda: None)
+    monkeypatch.setattr(worker, "ThreadingHTTPServer", lambda *a, **kw: server)
+    monkeypatch.setattr(cli_runtime.Oscilloscope, "open",
+                        lambda *a, **kw: pytest.fail("startup must not open instrument"))
+
+    assert worker.run_worker(args) == 0
+    runtime = runtimes[0]
+    assert runtime.visa_library == visa_library
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [item["event"] for item in events] == ["ready", "summary"]
+    status = runtime.status_payload()
+    for payload in (events[0], status):
+        assert payload["schema_version"] == 3
+        assert payload["features"] == {"common.async_jobs": {"contract_version": 1}}
+        assert payload["run_id"] == runtime.run_id
+        assert "visa_library" not in payload
+        assert "backend" not in payload

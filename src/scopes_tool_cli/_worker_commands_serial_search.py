@@ -30,6 +30,8 @@ from scopes_tool_core.serial import (
     validate_serial_uart_trigger_request,
 )
 
+from . import preflight, runtime as cli_runtime
+
 
 if TYPE_CHECKING:
     from .worker import WorkerRuntime
@@ -565,6 +567,10 @@ def _serial_uart_trigger_worker_namespace(
         resource=runtime.resource,
         json=True,
         log_scpi=False,
-        visa_library=None,
+        visa_library=runtime.visa_library,
     )
+    if runtime.mode == "live":
+        namespace._worker_live_validation = True
+    cli_runtime._resolve_cli_mode(namespace)
+    preflight.validate_pre_open_args(namespace)
     return namespace

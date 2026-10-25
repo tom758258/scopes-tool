@@ -330,6 +330,12 @@ def parse_domain_command(
     arguments: dict[str, Any],
     runtime: WorkerRuntime,
 ) -> argparse.Namespace:
+    # argparse also accepts abbreviated options and --option=value spellings.
+    if any(
+        "visa-library".startswith(key.replace("_", "-").split("=", 1)[0])
+        for key in arguments
+    ):
+        raise OscilloscopeError("Worker requests cannot override the startup VISA backend")
     forbidden = {
         "support_policy_mode",
         "validation_allow_pending_live_support",
@@ -403,6 +409,8 @@ def parse_domain_command(
     arguments = _normalize_trigger_common_worker_arguments(command, arguments)
     _validate_required_worker_outputs(command, arguments)
     argv = [command, *arguments_to_argv(arguments)]
+    if runtime.visa_library is not None:
+        argv += ["--visa-library", runtime.visa_library]
     if runtime.mode == "simulate":
         argv += ["--simulate", "--model", runtime.model]
     else:

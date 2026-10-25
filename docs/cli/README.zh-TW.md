@@ -180,6 +180,11 @@ New-Item -ItemType Directory -Force .tmp_tests | Out-Null
 `pyvisa.ResourceManager("@ivi")` 並驗證 IVI；缺少／失敗即拒絕，`PYVISA_LIBRARY=@py` 不改選擇。
 其他明確選擇器原樣傳 PyVISA，`@py` 為 `pyvisa_py`、`@bt` 為 `pyvisa_bt`，其餘非空為 `custom_visa`。
 
+Worker 啟動時可指定 `--visa-library`，例如 `--visa-library @py`。
+選定 Backend 固定供所有 Job 使用，包含 Serial Trigger；Request 不可覆寫。
+未指定時維持 System VISA。Worker Live 身分驗證與 Core Product Support Policy 維持不變，
+Ready 與 Status 不新增 Backend 欄位。
+
 一般安裝與 Windows 封裝內含 pyvisa-py 與 LAN Discovery 相依性，見[安裝前提](../../README.md#install)。
 Product Live 要求核准的偵測型號／Transport／Backend。System VISA 支援表列 USB/TCPIP；
 `@py` 只開放 DSOX4024A、DSOX4034A、TBS2074 的 TCPIP/LAN，其他 @py、@bt、自訂選擇器

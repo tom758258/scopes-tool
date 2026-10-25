@@ -273,6 +273,12 @@ library is an IVI backend. A missing or failed IVI runtime fails closed;
 `@py` is recognized as the `pyvisa_py` identity, `@bt` as `pyvisa_bt`, and
 other non-empty selectors as `custom_visa`.
 
+Workers accept `--visa-library` at startup, including `--visa-library @py`.
+The selected backend is fixed for all jobs, including Serial Trigger jobs;
+requests cannot override it. Omitting it retains System VISA. Worker Live
+identity checks and Core Product Support Policy apply unchanged. Ready and
+Status do not add a backend field.
+
 Ordinary installations and Windows packages include `pyvisa-py` and its LAN
 discovery dependencies (see [installation prerequisites](../../README.md#install)).
 Product Live requires an explicitly approved detected model, transport, and

@@ -120,6 +120,10 @@ def _build_parser() -> argparse.ArgumentParser:
     mode_group.add_argument("--live", action="store_true")
     worker_parser.add_argument("--model", default="keysight-dsox4024a")
     worker_parser.add_argument("--resource", default=None)
+    worker_parser.add_argument(
+        "--visa-library", default=None,
+        help="optional PyVISA library argument, such as @py",
+    )
     worker_parser.add_argument("--queue-max", type=_positive_int, default=32)
     worker_parser.add_argument("--format", choices=("jsonl", "text"), default="jsonl")
 

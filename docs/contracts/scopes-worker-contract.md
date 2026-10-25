@@ -92,12 +92,18 @@ Arguments:
   Unknown IDs, raw model names, and unregistered values are rejected during
   validation.
 - `--resource`: live resource string, required with `--live`.
+- `--visa-library`: optional PyVISA backend selector, such as `@py`; omitted,
+  blank, or `system_visa` retains System VISA. Core Product Support Policy
+  still governs backend/model/transport combinations.
 - `--queue-max`: accepted queued-job limit, default `32`.
 - `--format`: `jsonl` or `text`, default `jsonl`.
 
 The worker fixes run context at startup. Every accepted job opens its own
 simulator or VISA session. Live jobs always use the startup `--resource` and
-`--model`; command arguments cannot override them. Request validation happens
+`--model` and optional `--visa-library`; command arguments cannot override them.
+The backend also applies to Serial Trigger jobs, which use the same Worker
+Live expected-model and detected `*IDN?` identity checks as other jobs.
+Ready and Status output fields remain unchanged. Request validation happens
 before enqueue, artifact creation, session open, or SCPI.
 
 Each simulator job closes its independent session after execution. Successful
@@ -115,8 +121,8 @@ Scopes uses a startup-bound execution context. For live workers, startup
 `--model` maps to Common `expected_model_id`; for simulator workers, startup
 `--model` maps to Common `planning_model_id`. Detected live identity remains
 authoritative. Scopes does not send request-level `context` in `/command`
-requests, and command arguments cannot override startup mode, model, or
-resource.
+requests, and command arguments cannot override startup mode, model, resource,
+or VISA backend.
 
 ## Endpoints
 
@@ -150,7 +156,8 @@ it is not a status snapshot and cannot establish readiness.
 
 Allowed top-level fields are `schema_version`, `command`, `arguments`, and
 `job_id`. Startup-bound context forbids request-level `context`; command
-arguments cannot override mode, model, or resource. `command` must be a known
+arguments cannot override mode, model, resource, or VISA backend
+(including `visa_library` and `visa-library`). `command` must be a known
 non-empty command string, `arguments` may be omitted or an object, and
 `job_id` may be omitted or a string. Malformed JSON, non-object bodies,
 unknown fields, and invalid parameters return HTTP `400` before enqueue,

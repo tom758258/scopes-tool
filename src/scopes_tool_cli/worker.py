@@ -74,6 +74,7 @@ class WorkerRuntime:
     resource: str | None
     queue_max: int
     output_format: str
+    visa_library: str | None = None
     run_id: str = field(default_factory=lambda: uuid4().hex)
     queue: Queue[WorkerJob] = field(init=False)
     jobs: dict[str, WorkerJob] = field(default_factory=dict)
@@ -175,6 +176,7 @@ def run_worker(args: argparse.Namespace) -> int:
         resource=args.resource,
         queue_max=args.queue_max,
         output_format=args.format,
+        visa_library=args.visa_library,
     )
     handler = _make_handler(runtime)
     try:
