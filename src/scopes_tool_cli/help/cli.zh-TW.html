@@ -216,7 +216,7 @@ Stop 取消佇列工作並要求執行中的工作合作式取消；請等待清
 </tbody>
 </table>
 <p>支援的命令可加上 <code>--json</code>。機器模式 stdout 僅含結構化 JSON/JSONL；
-<code>--log-scpi</code> 將診斷寫到 stderr。請檢查程序回傳碼、<code>ok</code> 與命令專屬狀態。
+<code>--log-scpi</code> 將診斷寫到 stderr。請檢查程式結束碼、<code>ok</code> 與命令專屬狀態。
 單次儀器錯誤通常回傳 <code>1</code>；Parser 使用錯誤回傳 <code>2</code>；單次 JSON 身分不符回傳 <code>3</code>。
 Worker Client 的驗證失敗回傳 <code>2</code>，執行、連線與受理失敗回傳 <code>3</code>。
 不要從受理結果推論工作成功。<code>user-guide</code> 是本地文字模式工具，不接受 <code>--json</code>。</p>

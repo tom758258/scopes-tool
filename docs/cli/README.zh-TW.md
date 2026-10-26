@@ -819,7 +819,7 @@ Units Readback 接受 `VOLT`、`AMP`、`AMPere`；保留未知 Readback，不將
 `external-trigger-probe` Worker 為 `{"query":true}` 或 `{"attenuation":10}`；`external-trigger-units` 為 `{"query":true}` 或 `{"units":"volts"}`；`external-trigger-settings` 只接受 `{"query":true}`。
 空 Arguments、`query: false`、混合操作、Alias、未知 Key、錯誤 JSON Type、非有限值、過大整數在 Enqueue、Artifact、Simulator/VISA Open 或 SCPI 前拒絕。
 不設定 External BWLimit（Aggregate BWL 僅相容性 Readback；共同 HF Rejection 用 `trigger-hf-reject`）、不偵測 AutoProbe/Probe Type、不換算 Range/Level、不改 Trigger Source/Mode、不控制 Acquisition。
-真實韌體可能連動這些設定，但程式不送補償 Write；Simulator 分別保存 Probe、Units、Range、External Edge Level，以發現意外副作用。
+真實韌體可能連動這些設定，但程式不送補償 Write；Simulator 分別保留 Probe、Units、Range、External Edge Level，以發現意外副作用。
 
 設／查共用觸發設定：
 
