@@ -1702,9 +1702,9 @@ Source2 is mainly meaningful for two-source measurements such as delay and
 phase.
 
 `measure-window` accepts `main`, `zoom`, `auto`, or `gate`. `zoom` is
-conditional on the oscilloscope already displaying the zoomed timebase. On
-DSO-X 4034A firmware 07.20, setting `zoom` while that timebase is not displayed
-may return `-221,"Settings conflict"`. Use `auto` as the safer portable choice
+conditional on the oscilloscope already displaying the zoomed timebase.
+Setting `zoom` while that timebase is not displayed may return
+`-221,"Settings conflict"`. Use `auto` as the safer portable choice
 when the current zoom state is unknown.
 
 Control or query DVM:

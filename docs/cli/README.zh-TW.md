@@ -1154,7 +1154,7 @@ Worker 用法：
 需要明確雙 Source Default 時，同時使用 `--source-channel <n>`、`--source2-channel <m>`。Source2 主要用於 Delay/Phase 等雙來源量測。
 
 `measure-window` 接受 `main`、`zoom`、`auto`、`gate`。
-`zoom` 要求儀器已顯示 Zoomed Timebase；DSO-X 4034A 韌體 07.20 未顯示時可能回 `-221,"Settings conflict"`。
+`zoom` 要求儀器已顯示 Zoomed Timebase；未顯示時設定 `zoom` 可能回 `-221,"Settings conflict"`。
 未知 Zoom 狀態時，`auto` 是較安全可攜選擇。
 
 查詢或設定內建 DVM：

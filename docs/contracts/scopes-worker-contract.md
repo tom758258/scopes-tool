@@ -894,9 +894,8 @@ It maps to `external-trigger-range --query` or
 non-boolean finite positive JSON number. Empty arguments, `query: false`,
 query/range mixes, zero or negative values, non-numeric/non-finite values, and
 unknown or alias keys are rejected before enqueue, counters, artifacts,
-simulator/VISA open, or SCPI. No probe attenuation is queried; 1:1 manual
-observations are 8 V for 2000X/3000X and 1.6 V or 8 V for 4000X, but actual
-probe/model/firmware acceptance remains instrument/error-queue authority.
+simulator/VISA open, or SCPI. No probe attenuation is queried; actual
+probe/model/firmware range acceptance remains instrument/error-queue authority.
 
 `trigger-edge-external-level` accepts only:
 
@@ -1634,8 +1633,8 @@ required. Source2 is mainly meaningful for two-source measurements such as
 delay and phase.
 
 The `zoom` window is conditional on the oscilloscope already displaying the
-zoomed timebase. On DSO-X 4034A firmware 07.20, selecting it without that
-display state may return `-221,"Settings conflict"`. Callers that do not know
+zoomed timebase. Selecting it without that display state may return
+`-221,"Settings conflict"`. Callers that do not know
 the current zoom state should prefer `auto`.
 
 The worker also accepts the common reference waveform commands:
