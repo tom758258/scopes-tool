@@ -26,7 +26,7 @@ Desktop 啟動 `Scopes Tool.exe`；瀏覽器 Launcher 啟動
 ## 語言、主題與離線 Help
 
 使用頁首切換 English／繁體中文，以及 System／Light／Dark 主題。
-語言保存在瀏覽器 Local Storage，主題使用既有本地 Cookie。
+語言偏好儲存在瀏覽器 Local Storage，主題使用既有本地 Cookie。
 Launcher 本身僅提供英文。Command ID、Model ID、SCPI、VISA Resource、JSON Key
 與原始診斷保持原文。
 

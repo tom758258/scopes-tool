@@ -208,7 +208,7 @@ release/<version>/
 
 腳本讀取專案版本，要求 Electron 版本一致，建置一次 Python 發行套件及 Desktop，
 再將合併後的 Desktop 包裝成僅含 `scopes-tool-<version>/` 根目錄的 ZIP。
-SHA-256 校驗碼涵蓋三個發行產物。若版本目錄已存在，腳本會拒絕覆寫；
+SHA-256 檢查碼涵蓋三個發行產物。若版本目錄已存在，腳本會拒絕覆寫；
 再次建置時可指定專案內新的 `-ReleaseRoot`。腳本不會發布產物。
 
 在乾淨且所有變更均已提交至 HEAD 的工作樹中，執行無硬體驗收：
@@ -218,14 +218,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\release-accept
 ```
 
 驗收會檢查工具、lock 一致性與應用程式版本，呼叫一次 Release Build，驗證產物名稱、
-metadata、校驗碼及解壓後的 Desktop 配置，再將 wheel 與 sdist 分別安裝至乾淨環境。
+metadata、檢查碼及解壓後的 Desktop 目錄結構，再將 wheel 與 sdist 分別安裝至乾淨環境。
 接著檢查 import、CLI help、模擬及雙語離線說明，執行既有的無硬體 CLI preflight，
 並確認 HEAD 與來源工作樹未改變。各步驟結果、失敗原因、退出碼、耗時與命令輸出
 會寫入 `.tmp_tests/release_acceptance/` 下的獨立執行目錄。
 自訂 `-OutputRoot` 必須位於專案 `.tmp_tests` 內；建置中間產物沿用既有的
 `build/` 與 `dist/`。驗收不會探索或開啟真實 Resource，也不會提交、標記或發布。
 
-條件式打包 CI 在每個 job 中僅建置一次 Desktop 或 Release 配置，並執行打包後
+條件式打包 CI 在每個 job 中僅執行一次 Desktop 或 Release 建置，並執行打包後
 CLI 檢查；這不代表已驗證 GUI 互動或真實儀器。完整驗收可在本機或手動 Action 執行。
 
 手動 **Build Windows** Action 預設使用 `release`，且 `create_draft=false`。

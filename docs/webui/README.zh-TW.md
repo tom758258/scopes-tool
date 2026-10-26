@@ -351,7 +351,7 @@ Live 要求已選且確認身分的 Resource，Simulate 用 Core，Dry-run 顯�
 high_resolution、unknown。失敗只影響自身欄位，不依廠商或另一欄推論。
 
 Mode、Resource、偵測／規劃型號變更時清摘要。相同情境 Read 失敗保留前次成功摘要。
-Live State 以瀏覽器本地時間顯示最近成功完成時間；失敗刷新保留，情境變更隨摘要清除。
+Live State 以瀏覽器本地時間顯示最近成功完成時間；更新失敗時保留前次成功時間，情境變更時隨摘要清除。
 不自動輪詢或串流波形。
 
 <a id="jobs-results-and-artifacts"></a>

@@ -70,14 +70,14 @@ Dry-run 與模擬不開啟 Live VISA Session。
 
 Measurement Log、Triggered Measurement Loop、Periodic Capture、Triggered
 Capture Series、Segmented Capture、Capture Until 與 Generic Sequence 將每筆
-已提交歷史附加至內部 JSONL Journal。執行中的 `manifest.json` 保存精簡進度與
+已提交歷史附加至內部 JSONL Journal。執行中的 `manifest.json` 儲存精簡進度與
 狀態，不包含累積歷史或 Artifact 清單。先寫入 CSV 資料列與擷取檔案；歷史與進度
-快照都成功保存後，才增加完成計數並通知 Sample／Progress Callback。
+快照都成功儲存後，才增加完成計數並通知 Sample／Progress Callback。
 
 正常完成、合作式取消或可處理的錯誤／中斷時，已提交紀錄會整合為完整的最終
 `manifest.json`，維持既有 Schema、欄位、歷史順序與 Artifact 路徑。
 最終 Manifest 經原子替換成功發布後，才移除 Journal。若最終發布失敗，流程不得
-回報成功，並盡可能保留已寫入資料與 Journal。程序強制終止或斷電後的自動復原
+回報成功，並盡可能保留已寫入資料與 Journal。行程遭強制終止或斷電後的自動復原
 不在此契約範圍內。原本支援 No-save 的流程不會建立 Journal 或 Manifest。
 
 ## 功能領域
