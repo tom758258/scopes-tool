@@ -142,19 +142,6 @@ Desktop 呈現既有 WebUI，結束時會等待 Host 清理完成。
 實機存取必須明確指定：單次實機命令需要 `--resource` 或 `SCOPES_TOOL_RESOURCE`；
 實機 Worker 同時需要 `--live` 與 `--resource`。請勿從模擬範例推測 VISA Resource。
 
-## 內建說明
-
-開啟內建離線 CLI 使用指南：
-
-```powershell
-.\.venv\Scripts\scopes-tool.exe user-guide
-.\.venv\Scripts\scopes-tool.exe user-guide --lang zh-TW
-```
-
-WebUI/Desktop 的 **Help** 按鈕會依所選語言開啟離線使用指南。
-指南包含支援型號參考，不需網際網路連線。
-建置套件前請參閱[說明文件維護](docs/help/README.md)。
-
 ## 建置
 
 使用開發環境建置 wheel 與 sdist：

@@ -155,19 +155,6 @@ Real hardware access is explicit: one-shot live commands require `--resource`
 or `SCOPES_TOOL_RESOURCE`; live Workers require both `--live` and `--resource`.
 Do not infer a VISA resource from these simulator examples.
 
-## Built-in Help
-
-Open the bundled offline CLI User Guide:
-
-```powershell
-.\.venv\Scripts\scopes-tool.exe user-guide
-.\.venv\Scripts\scopes-tool.exe user-guide --lang zh-TW
-```
-
-The WebUI/Desktop **Help** button opens its offline User Guide in the selected
-language. Guides include the supported-model reference and require no internet
-connection. See [Help Maintenance](docs/help/README.md) before building packages.
-
 ## Build
 
 Build the wheel and sdist with the development environment:
