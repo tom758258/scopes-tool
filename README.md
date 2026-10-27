@@ -14,7 +14,9 @@ a planning model does not override detected identity.
 
 **VISA backend:** System VISA is the default and requires a separately installed
 IVI runtime, such as Keysight IO Libraries or NI-VISA. Scopes Tool does not bundle
-these runtimes or fall back to `@py`. Python installations and Windows packages
+these runtimes or fall back to `@py`. The default or `system_visa` selector
+loads IVI; explicitly specifying `@ivi` is treated as a custom backend, not a
+Product-open System VISA connection. Python installations and Windows packages
 include PyVISA, `pyvisa-py`, `psutil`, and `zeroconf`. The latter two support
 TCPIP/VXI-11 interface discovery and HiSLIP mDNS discovery; discovery depends on
 the instrument and network.
@@ -27,11 +29,11 @@ requirements are not bundled. Bluetooth (`@bt`) and explicit custom backends are
 not Product-open. Connection diagnostics do not imply Product authorization.
 Simulation and supported dry-run operations do not open real instrument sessions.
 
-Scopes Worker uses Common schema `3` with `v3-only` compatibility and
+Scopes Worker uses Common Worker Protocol v3 only (`schema 3`, `v3-only`) with
 `multi_job` / `startup` execution. Manifest and ordinary CLI JSON retain schema
-`2`; only `common.async_jobs` version `1` is declared. Integrations must migrate
-v2 requests and response handling to the [Worker contract](docs/contracts/scopes-worker-contract.md);
-there is no v2 fallback. Common cancellation and streaming are not advertised.
+`2`; v2 integrations must migrate without fallback. See the
+[Worker contract](docs/contracts/scopes-worker-contract.md) and
+[CHANGELOG](CHANGELOG.md) for feature declarations and migration details.
 
 ## Features
 
@@ -186,12 +188,10 @@ resources\
 ... Electron runtime files
 ```
 
-The three Python executables share a single root `_internal` directory. The
-Electron Desktop resides in the same application directory, has its own
-Electron/Chromium runtime, and uses the shared Python backend through the private
-Desktop Host. The private Host is not a public CLI entry point. Builds replace
-their existing bundle/Desktop output directories. Check the packaged CLI without
-hardware using
+The three Python executables share one root `_internal`; Electron has its own
+runtime and uses the common Python backend through the private Desktop Host.
+The Host is not a public CLI entry point. Builds replace existing output
+directories. Smoke the packaged CLI without hardware using
 `.\dist\scopes-tool\scopes-tool.exe identify --simulate --json`.
 
 Build the versioned release artifacts:
@@ -208,12 +208,10 @@ release/<version>/
   checksums.txt
 ```
 
-The script reads the project version, requires the Electron version to match,
-builds Python distributions and Desktop once, and wraps the merged Desktop in a
-single `scopes-tool-<version>/` ZIP root. SHA-256 checksums cover the three
-distributables. An existing version directory is rejected; use a fresh
-`-ReleaseRoot` inside the repository for another build. The script does not
-publish artifacts.
+The script checks matching Python/Electron versions, builds Python
+distributions and Desktop once, and packages one `scopes-tool-<version>/` ZIP
+root. SHA-256 covers the ZIP, wheel, and sdist. An existing version directory
+fails; use a fresh repository-local `-ReleaseRoot`. Nothing is published.
 
 From a clean, fully committed HEAD, run the no-hardware acceptance gate:
 
@@ -221,31 +219,28 @@ From a clean, fully committed HEAD, run the no-hardware acceptance gate:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\release-acceptance.ps1
 ```
 
-Acceptance checks tools, lock consistency and application versions, invokes the
-release build once, verifies artifact names, metadata, checksums and extracted
-Desktop layout, installs wheel and sdist into separate clean environments,
-checks imports, CLI help, simulation and bilingual offline Help, runs the existing
-no-hardware CLI preflight, and verifies unchanged HEAD and source worktree.
-It writes step results, failures, exit codes, timings, and captured command output
-to a unique run under `.tmp_tests/release_acceptance/`. A custom `-OutputRoot`
-must remain under repository `.tmp_tests`. Build intermediates use the existing
-`build/` and `dist/` locations. Acceptance never discovers or opens live resources
-and does not commit, tag, or publish.
+Acceptance checks tools, `uv.lock`, versions, artifact metadata, checksums,
+and Desktop layout, builds once, and installs the final wheel/sdist in separate
+clean environments. It verifies imports, CLI Help, bilingual offline Help,
+simulation, no-hardware CLI preflight, and unchanged HEAD/worktree. Reports
+record step results, failures, exit codes, timings, and command output under
+`.tmp_tests/release_acceptance/`. `-OutputRoot` must stay inside `.tmp_tests/`;
+intermediates use `build/` and `dist/`. No live VISA access, commits, tags,
+or publication occur.
 
-Conditional packaging CI builds Desktop or the release
-layout once per job and runs packaged CLI smoke; it does not validate GUI
-interaction or real instruments. Full acceptance can run locally or through the manual Action.
+Conditional packaging CI builds Desktop or the release layout once per job and
+runs packaged CLI smoke, not GUI or live-instrument validation. Full acceptance
+is available locally or through the manual Action.
 
-The manual **Build Windows** Action defaults to `release` with `create_draft=false`.
-Its `bundle`, `desktop`, and `release` modes keep their build and packaging smoke
-flows and upload artifacts only. The `release-acceptance` mode runs the same
-formal acceptance script once under `.tmp_tests/actions-release-acceptance/`.
-It requires exit code zero and a valid all-PASS report for all nine steps, clean
-committed HEAD, matching commit/version, and no hardware access before uploading
-the four release assets from that run. Reports are uploaded separately, including
-available failure reports. Only this mode with `create_draft=true` on `main` can
-create a Draft Release targeting that same commit. Existing tags/releases are
-rejected; publishing remains manual.
+The manual **Build Windows** Action defaults to `release` with
+`create_draft=false`. Its `bundle`, `desktop`, and `release` modes upload build
+and packaging-smoke artifacts only. `release-acceptance` runs the same nine-step
+no-hardware gate once under `.tmp_tests/actions-release-acceptance/`. Only a
+zero-exit, all-PASS report with clean committed HEAD and matching commit/version
+allows upload of that run's four original release assets; reports are uploaded
+separately, including available failure reports. Only this mode with
+`create_draft=true` on `main` may create a Draft Release for that commit.
+Existing tags/releases are rejected; publishing remains manual.
 
 ## Test
 
@@ -266,6 +261,7 @@ user-supplied VISA resource.
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md)
 - [Core README](docs/core/README.md)
 - [Supported Models](docs/core/supported-models.md)
 - [CLI User Guide](docs/cli/USER_GUIDE.md)
