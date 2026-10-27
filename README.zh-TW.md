@@ -13,7 +13,8 @@ import package。CLI、Worker、瀏覽器 WebUI 與 Electron Desktop 共用相�
 
 **VISA 後端：** 預設使用 System VISA，需另外安裝 Keysight IO Libraries、NI-VISA
 等 IVI 執行環境。Scopes Tool 不隨附這些執行環境，也不會自動改用 `@py`。
-Python 安裝與 Windows 套件已包含 PyVISA、`pyvisa-py`、`psutil` 與 `zeroconf`。
+預設或 `system_visa` 選擇器會載入 IVI；明確指定 `@ivi` 則會被歸類為自訂
+Backend，不屬於 Product-open 的 System VISA 連線。Python 安裝與 Windows 套件已包含 PyVISA、`pyvisa-py`、`psutil` 與 `zeroconf`。
 後兩者分別支援跨網路介面的 TCPIP/VXI-11 探索與 HiSLIP mDNS 探索；
 是否能找到儀器仍取決於儀器與網路環境。
 
@@ -24,10 +25,10 @@ Python 安裝與 Windows 套件已包含 PyVISA、`pyvisa-py`、`psutil` 與 `ze
 尚未開放產品支援。連線診斷成功不代表產品操作已獲授權。
 Simulation 與支援的 dry-run 操作不會開啟真實儀器連線。
 
-Scopes Worker 使用 Common schema `3`、`v3-only` 相容性與
-`multi_job` / `startup` 執行模式。Manifest 與一般 CLI JSON 維持 schema `2`，
-僅宣告 `common.async_jobs` 版本 `1`。整合端須依[Worker 契約](docs/contracts/scopes-worker-contract.md)
-遷移 v2 請求與回應處理；不提供 v2 fallback，也不宣告 Common 取消或串流功能。
+Scopes Worker 僅支援 Common Worker Protocol v3（`schema 3`、`v3-only`），
+使用 `multi_job`／`startup` 執行模式；Manifest 與一般 CLI JSON 仍維持 schema `2`。
+v2 整合端必須遷移，不提供 fallback。Feature 宣告與遷移細節請參閱
+[Worker 契約](docs/contracts/scopes-worker-contract.md)及[版本紀錄](CHANGELOG.md)。
 
 ## 功能特性
 
@@ -173,11 +174,10 @@ resources\
 ... Electron runtime files
 ```
 
-三個 Python 執行檔共用根目錄唯一的 `_internal`。Electron Desktop 與這些執行檔
-位於同一個應用程式目錄，具有自己的 Electron/Chromium 執行環境，並透過私有
-Desktop Host 使用共用的 Python Backend。私有 Host 並非公開 CLI 入口。
-建置會取代既有的 Bundle/Desktop 輸出目錄。可使用
-`.\dist\scopes-tool\scopes-tool.exe identify --simulate --json` 進行無硬體 CLI 檢查。
+三個 Python 執行檔共用根目錄唯一的 `_internal`；Electron 使用獨立 Runtime，
+並透過私有 Desktop Host 使用共用 Python Backend。Host 不是公開 CLI 入口；
+建置會取代原有輸出目錄。可用
+`.\dist\scopes-tool\scopes-tool.exe identify --simulate --json` 進行無硬體檢查。
 
 建置版本化發行產物：
 
@@ -193,10 +193,10 @@ release/<version>/
   checksums.txt
 ```
 
-腳本讀取專案版本，要求 Electron 版本一致，建置一次 Python 發行套件及 Desktop，
-再將合併後的 Desktop 包裝成僅含 `scopes-tool-<version>/` 根目錄的 ZIP。
-SHA-256 檢查碼涵蓋三個發行產物。若版本目錄已存在，腳本會拒絕覆寫；
-再次建置時可指定專案內新的 `-ReleaseRoot`。腳本不會發布產物。
+腳本檢查 Python／Electron 版本一致，各建置一次 Python 發行套件及 Desktop，
+以單一 `scopes-tool-<version>/` 根目錄封裝 ZIP。SHA-256 涵蓋 ZIP、Wheel、
+Sdist；已有版本目錄時會拒絕覆寫，需使用專案內新的 `-ReleaseRoot`。
+腳本不會發布產物。
 
 在乾淨且所有變更均已提交至 HEAD 的工作樹中，執行無硬體驗收：
 
@@ -204,25 +204,24 @@ SHA-256 檢查碼涵蓋三個發行產物。若版本目錄已存在，腳本會
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\release-acceptance.ps1
 ```
 
-驗收會檢查工具、lock 一致性與應用程式版本，呼叫一次 Release Build，驗證產物名稱、
-metadata、檢查碼及解壓後的 Desktop 目錄結構，再將 wheel 與 sdist 分別安裝至乾淨環境。
-接著檢查 import、CLI help、模擬及雙語離線說明，執行既有的無硬體 CLI preflight，
-並確認 HEAD 與來源工作樹未改變。各步驟結果、失敗原因、退出碼、耗時與命令輸出
-會寫入 `.tmp_tests/release_acceptance/` 下的獨立執行目錄。
-自訂 `-OutputRoot` 必須位於專案 `.tmp_tests` 內；建置中間產物沿用既有的
-`build/` 與 `dist/`。驗收不會探索或開啟真實 Resource，也不會提交、標記或發布。
+驗收檢查工具、`uv.lock`、版本、產物 Metadata／Checksum 與 Desktop 結構，
+只建置一次，並分別在乾淨環境安裝最終 Wheel／Sdist；再確認 Import、CLI Help、
+雙語離線 Help、模擬、無硬體 CLI Preflight 及 HEAD／工作樹未改變。
+步驟結果、失敗原因、Exit Code、耗時與命令輸出記錄於
+`.tmp_tests/release_acceptance/`。`-OutputRoot` 必須位於 `.tmp_tests/`，
+中間產物仍位於 `build/`、`dist/`；不會存取實機、提交、建立 Tag 或發布。
 
-條件式打包 CI 在每個 job 中僅執行一次 Desktop 或 Release 建置，並執行打包後
-CLI 檢查；這不代表已驗證 GUI 互動或真實儀器。完整驗收可在本機或手動 Action 執行。
+條件式打包 CI 每個 Job 只建置一次 Desktop 或 Release，並執行已封裝 CLI Smoke；
+不代表已驗證 GUI 或實機。完整驗收可從本機或手動 Action 執行。
 
-手動 **Build Windows** Action 預設使用 `release`，且 `create_draft=false`。
-`bundle`、`desktop`、`release` 保留原有建置與封裝檢查流程，只上傳產物。
-`release-acceptance` 模式在 `.tmp_tests/actions-release-acceptance/` 下執行一次
-相同正式驗收腳本，必須退出碼為零、報告九個步驟全數 PASS、來源為乾淨且已提交的 HEAD、
-Commit／版本一致且未接觸硬體，才上傳該次執行的四個發行產物。
-報告獨立上傳，亦盡可能保留失敗報告。只有此模式在 `main` 上指定
-`create_draft=true`，才能以相同 Commit 建立 Draft Release。
-既有 Tag／Release 會被拒絕；發布仍須手動操作。
+手動 **Build Windows** Action 預設使用 `release` 且 `create_draft=false`；
+`bundle`、`desktop`、`release` 模式僅執行建置、封裝 Smoke 並上傳產物。
+`release-acceptance` 會在 `.tmp_tests/actions-release-acceptance/` 執行一次相同的
+九步驟無硬體驗收。只有 Exit Code 為零、九步驟全數 PASS、HEAD 乾淨且已提交、
+Commit／版本相符，才能上傳該次驗收的四個原始發行產物；報告獨立上傳，
+包括可取得的失敗報告。只有此模式在 `main` 設定 `create_draft=true`，
+才能針對同一 Commit 建立 Draft Release。既有 Tag／Release 不可覆寫，
+正式發布仍需人工操作。
 
 ## 測試
 
@@ -241,6 +240,7 @@ VISA Resource。
 
 ## 文件
 
+- [版本紀錄](CHANGELOG.md)
 - [Core README](docs/core/README.zh-TW.md)
 - [支援型號](docs/core/supported-models.zh-TW.md)
 - [CLI 使用指南](docs/cli/USER_GUIDE.zh-TW.md)
