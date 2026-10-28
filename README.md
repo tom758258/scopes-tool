@@ -89,6 +89,24 @@ docs/
 scripts/
 ```
 
+## Key Dependencies
+
+Scopes Tool uses these principal open-source components (not a complete inventory
+of transitive dependencies):
+
+| Component | Purpose |
+| --- | --- |
+| [PyVISA](https://pyvisa.readthedocs.io/) | VISA instrument communication |
+| [PyVISA-py](https://pyvisa-py.readthedocs.io/) | Python VISA backend for supported connections |
+| [psutil](https://github.com/giampaolo/psutil) / [zeroconf](https://github.com/python-zeroconf/python-zeroconf) | TCPIP interface / HiSLIP mDNS resource discovery |
+| [FastAPI](https://fastapi.tiangolo.com/) / [Uvicorn](https://www.uvicorn.org/) | Local browser WebUI service |
+| [Electron](https://www.electronjs.org/) | Desktop application shell |
+
+The Python dependency declarations and locked versions are in
+[pyproject.toml](pyproject.toml) and [uv.lock](uv.lock). Desktop dependencies
+are declared in [desktop/package.json](desktop/package.json) and locked in
+[desktop/package-lock.json](desktop/package-lock.json).
+
 ## Install
 
 Python source development requires Python `>=3.10`. In PowerShell, enter the
@@ -290,6 +308,8 @@ tracked public documentation.
 ## License and Disclaimer
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
+Bundled third-party license information is in
+[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
 
 The Scopes Tool application icon was generated with OpenAI image generation in
 ChatGPT, then reviewed and selected by the project maintainer.

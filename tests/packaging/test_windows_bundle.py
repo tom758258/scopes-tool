@@ -1,6 +1,7 @@
 """Focused checks for the shared Windows bundle specification and entries."""
 
 from pathlib import Path
+import re
 import runpy
 import sys
 from types import ModuleType, SimpleNamespace
@@ -99,3 +100,33 @@ def test_pyvisa_py_backend_loads_without_resource_or_network_io(monkeypatch):
     assert wrapper.TCPIPInstrSession is tcpip.TCPIPInstrSession
     assert tcpip.psutil is psutil
     assert tcpip.zeroconf is zeroconf
+
+
+def test_zeroconf_notice_tracks_locked_version_and_bundled_license() -> None:
+    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    match = re.search(
+        r'\[\[package\]\]\s*\nname = "zeroconf"\s*\nversion = "([^"]+)"', lock
+    )
+    assert match is not None
+    version = match.group(1)
+    notice = (ROOT / "THIRD_PARTY_NOTICES.txt").read_text(encoding="utf-8")
+    assert f"zeroconf {version}" in notice
+    assert "LGPL-2.1-or-later" in notice
+    assert f"_internal/zeroconf-{version}.dist-info/licenses/COPYING" in notice
+    for readme in ("README.md", "README.zh-TW.md"):
+        assert "[THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)" in (
+            ROOT / readme
+        ).read_text(encoding="utf-8")
+
+
+def test_windows_bundle_builder_requires_redistribution_notices() -> None:
+    script = (ROOT / "scripts" / "build_windows_bundle.ps1").read_text(
+        encoding="utf-8"
+    )
+    # These are redistribution artifacts, not an incidental implementation detail.
+    assert '"LICENSE"' in script
+    assert '"THIRD_PARTY_NOTICES.txt"' in script
+    assert "zeroconf-0.151.5.dist-info\\licenses\\COPYING" in script
+    assert "from importlib.metadata import version" in script
+    assert "Test-Path -LiteralPath $CopyingPath -PathType Leaf" in script
+    assert script.index("$CopyingPath =") > script.index("& $Python -m PyInstaller --noconfirm")
