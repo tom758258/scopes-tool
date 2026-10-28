@@ -1,0 +1,46 @@
+Scopes Tool - Third-Party Notices
+
+Scopes Tool itself is licensed under the MIT License; see LICENSE.
+
+zeroconf 0.151.5 (python-zeroconf)
+-----------------------------------
+License: GNU Lesser General Public License, version 2.1 or later
+         (LGPL-2.1-or-later).
+Upstream project: https://github.com/python-zeroconf/python-zeroconf
+Corresponding source: https://github.com/python-zeroconf/python-zeroconf/tree/0.151.5
+Copyright notices and the complete upstream LGPL license text are included in
+the Windows distribution at:
+    _internal/zeroconf-0.151.5.dist-info/licenses/COPYING
+
+The Windows application bundles zeroconf, including compiled Python extensions.
+You can obtain the corresponding zeroconf source, modify the LGPL library, and
+rebuild Scopes Tool using a modified version. The Scopes Tool source and Windows
+build scripts are available at https://github.com/tom758258/scopes-tool.
+
+Rebuilding the Windows application with a modified zeroconf
+-----------------------------------------------------------
+Use a Windows x64 development environment with Python 3.13 and Node.js 22,
+matching the GitHub Actions Windows release toolchain.
+
+1. Get the Scopes Tool source matching your distributed application version,
+   and the zeroconf 0.151.5 source from the upstream tag above. Build your
+   modified zeroconf into a compatible Windows wheel. Keep its package
+   metadata version at 0.151.5 to match this notice and the build version check.
+2. From the Scopes Tool source root, install the locked development environment:
+
+       uv sync --python 3.13 --all-extras --locked --link-mode=copy
+
+3. Replace the installed zeroconf with your modified wheel:
+
+       uv pip install --python .venv/Scripts/python.exe --no-deps --reinstall <MODIFIED_ZEROCONF_WHEEL>
+
+4. Rebuild the Windows release with that modified installed library:
+
+       powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/build_release.ps1
+
+   Do not run "uv sync" between steps 3 and 4; it may restore the unmodified
+   locked wheel. Your rebuilt distribution is not an official Scopes Tool build.
+
+This file highlights the bundled LGPL library; it is not a complete inventory
+of indirect dependencies. Electron and Chromium license files are already
+included in the Desktop package and must be preserved.
