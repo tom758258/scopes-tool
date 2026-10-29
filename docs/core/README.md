@@ -78,11 +78,27 @@ DSOX4034A, and TBS2074 over TCPIP. The `@py` USB pairs are not Product-open.
 `@ivi` selector) are not Product-open; use the default System VISA selector
 to request the verified IVI backend.
 
-Contributor Validation Mode is an explicit CLI-only option for registered
-validation-only `@py` USB connections and supported `@py` TCPIP scopes. It still requires
-actual `*IDN?` identity and does not grant Product access. WebUI and Worker
-cannot select Validation Mode. Identification and resource discovery remain
-diagnostics; dry-run and simulation do not open a live VISA session.
+Contributor validation is an explicit CLI-only option. Core admits exact detected
+model, transport, and backend combinations that are either formally supported or
+registered for validation only. It is not restricted to `@py`: System VISA uses
+its existing supported connections, with no additional validation-only pairs.
+`@bt` and custom backends have no registered validation connections. A backend
+and transport without a registered combination are rejected before VISA opens;
+the actual `*IDN?` model is checked again before instrument operations.
+Validation preserves model capabilities, installed-option checks, instrument
+status checks, and safety limits. WebUI and Worker cannot select this mode.
+Identification and resource discovery remain diagnostics; dry-run and simulation
+do not open a live VISA session.
+
+New validation-only features must have an implementation and safety checks,
+an exact Core registration for model, transport, backend, and feature, and a
+Core admission check at the operation entry. Normal operation must
+reject those features; metadata alone must not authorize execution.
+Validation results do not expand formal support. Extending formal support
+requires maintainer review of hardware evidence, explicit operator approval,
+updates to Core support declarations and public documentation, and relevant
+policy tests. Keep hardware evidence in private or separately shared review
+artifacts.
 Direct Python use of `Oscilloscope.open()` is a low-level session interface,
 not a Product support entry point. See [Supported Models](supported-models.md)
 for the exact connections and model-specific feature limits.

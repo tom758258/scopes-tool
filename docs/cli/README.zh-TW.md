@@ -194,12 +194,19 @@ Product Live 要求核准的偵測型號／Transport／Backend。System VISA 支
 Product 在開 VISA 前查 Transport，在業務 SCPI 前用真實 `*IDN?`，型號能力與選配另行限制。
 確切範圍見[支援型號](../core/supported-models.zh-TW.md)。
 
-針對已註冊、僅供驗證的 `@py` USB 連線或已核准的 `@py` TCPIP 組合，維護中的 `scripts/live-*.ps1` Wrapper 選擇 `@py` 並傳入隱藏 `--validation-allow-pending-live-support` CLI Switch。
-此 Switch 不是通用 `--force`：限 `@py`，驗證操作人員提供的 USB/TCPIP/LAN Resource 與連接儀器的 `*IDN?` Model，保留既有 Model、Capability 與 Cleanup Guard。
-Worker/WebUI 不能選 Validation Mode；驗證不提升 Product Support。
-僅供驗證的 `@py` USB 型號為 `keysight-dsox2004a`、`keysight-dsox3024a`、
-`keysight-dsox4024a`、`keysight-dsox4034a`、`tektronix-tbs1052b`。
-Product 連線矩陣仍以[支援型號](../core/supported-models.zh-TW.md)為準。
+貢獻者硬體驗證使用隱藏的 `--validation-allow-pending-live-support` CLI 選項；
+維護中的 `scripts/live-*.ps1` 在選用 `-Backend "@py"` 時傳入此選項。
+此選項只允許 Core 已正式支援或明確登記為僅供驗證的精確型號、傳輸方式與後端組合，
+不限 `@py`。System VISA 沿用既有正式支援連線，未增加任何僅供驗證的組合；
+`@bt` 與自訂後端沒有已登記的驗證連線。
+僅供驗證的 `@py` USB 型號為 `keysight-dsox4024a`、`keysight-dsox4034a`、
+`tektronix-tbs2074`；一般操作仍不開放這三組連線。
+其他連線仍以[支援型號](../core/supported-models.zh-TW.md)的正式連線矩陣為準。
+
+Core 在開啟 VISA 前拒絕未登記的後端／傳輸方式組合，儀器操作前再核對實際 `*IDN?` 型號。
+`--model` 不能覆寫偵測身分。既有型號能力、已安裝選配、儀器狀態、安全與清理檢查繼續生效；
+此選項不允許不支援的操作。Worker 與 WebUI 不能選用貢獻者驗證。
+驗證結果不會改變正式支援，必須經過審查與明確核准，詳見 [Core README](../core/README.zh-TW.md)。
 直接呼叫 Python `Oscilloscope.open()` 不受 Product Policy Gate 管理。
 
 <a id="agent-safe-automation"></a>

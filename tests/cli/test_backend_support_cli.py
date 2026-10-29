@@ -1,4 +1,4 @@
-"""CLI backend-only Product and contributor policy acceptance tests."""
+"""CLI Product and contributor connection policy acceptance tests."""
 
 from __future__ import annotations
 
@@ -20,18 +20,27 @@ def test_product_live_rejects_backend_without_opening_visa(monkeypatch, capsys, 
 
 
 @pytest.mark.parametrize(
-    ("command", "resource", "expected_scpi"),
+    ("command", "resource", "idn_model", "expected_scpi"),
     [
-        ("run", "TCPIP0::FAKE::INSTR", ["*IDN?", ":RUN", ":SYSTem:ERRor?"]),
-        ("check-error", "TCPIP::FAKE::INSTR", ["*IDN?", ":SYSTem:ERRor?"]),
+        ("run", "USB0::FAKE::INSTR", "KEYSIGHT TECHNOLOGIES,DSOX4024A",
+         ["*IDN?", ":RUN", ":SYSTem:ERRor?"]),
+        ("run", "USB0::FAKE::INSTR", "KEYSIGHT TECHNOLOGIES,DSOX4034A",
+         ["*IDN?", ":RUN", ":SYSTem:ERRor?"]),
+        ("run", "USB0::FAKE::INSTR", "TEKTRONIX,TBS2074",
+         ["*IDN?", "ACQuire:STOPAfter RUNSTop", "ACQuire:STATE ON", "*ESR?"]),
+        ("run", "TCPIP0::FAKE::INSTR", "KEYSIGHT TECHNOLOGIES,DSOX4024A",
+         ["*IDN?", ":RUN", ":SYSTem:ERRor?"]),
+        ("check-error", "TCPIP::FAKE::INSTR", "KEYSIGHT TECHNOLOGIES,DSOX4024A",
+         ["*IDN?", ":SYSTem:ERRor?"]),
     ],
 )
 def test_registered_pyvisa_py_validation_uses_detected_idn(
-    monkeypatch, capsys, command, resource, expected_scpi
+    monkeypatch, capsys, command, resource, idn_model, expected_scpi
 ):
     backend = FakeBackend(responses={
-        "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,SN1,1.0",
+        "*IDN?": f"{idn_model},SN1,1.0",
         ":SYSTem:ERRor?": '+0,"No error"',
+        "*ESR?": "0",
     })
     selectors = []
 
@@ -46,37 +55,61 @@ def test_registered_pyvisa_py_validation_uses_detected_idn(
     ]) == 0
     assert selectors == [(resource, "@py")]
     assert backend.history == expected_scpi
+    assert backend.closed is True
     capsys.readouterr()
 
 
-def test_pyvisa_py_validation_rejects_unregistered_idn_without_business_scpi(monkeypatch, capsys):
-    backend = FakeBackend(responses={"*IDN?": "TEKTRONIX,TBS2074,SN1,1.0"})
+@pytest.mark.parametrize("command, selector, resource, idn_model, error", [
+    ("run", "@py", "USB0::FAKE::INSTR", "KEYSIGHT TECHNOLOGIES,DSOX2004A",
+     "no registered scope"),
+    ("run", "@py", "USB0::FAKE::INSTR", "KEYSIGHT TECHNOLOGIES,DSOX3024A",
+     "no registered scope"),
+    ("run", "@py", "USB0::FAKE::INSTR", "TEKTRONIX,TBS1052B", "no registered scope"),
+    ("run", "@py", "USB0::FAKE::INSTR", "TEKTRONIX,TDS2024B", "no registered scope"),
+    ("run", "system_visa", "TCPIP0::FAKE::INSTR", "KEYSIGHT TECHNOLOGIES,DSOX2004A",
+     "no registered scope"),
+    ("measure-results", "@py", "USB0::FAKE::INSTR", "TEKTRONIX,TBS2074", "unsupported"),
+])
+def test_validation_rejects_unsupported_scope_or_operation_without_business_scpi(
+    monkeypatch, capsys, command, selector, resource, idn_model, error
+):
+    backend = FakeBackend(responses={"*IDN?": f"{idn_model},SN1,1.0"})
     monkeypatch.setattr(
         runtime.Oscilloscope, "open",
         staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
     )
     assert cli.main([
-        "run", "--resource", "USB0::FAKE::INSTR",
-        "--visa-library", "@py", "--validation-allow-pending-live-support",
+        command, "--resource", resource, "--model", "keysight-dsox4024a",
+        "--visa-library", selector, "--validation-allow-pending-live-support",
     ]) == 1
-    assert "no registered scope" in capsys.readouterr().err
+    assert error in capsys.readouterr().err
     assert backend.history == ["*IDN?"]
     assert backend.closed is True
 
 
-def test_pyvisa_py_unregistered_transport_rejects_before_open(monkeypatch, capsys):
+@pytest.mark.parametrize("selector, resource", [
+    ("@py", "ASRL1::INSTR"),
+    ("system_visa", "ASRL1::INSTR"),
+    ("@bt", "USB0::FAKE::INSTR"),
+    ("@ivi", "USB0::FAKE::INSTR"),
+    ("custom", "USB0::FAKE::INSTR"),
+])
+def test_validation_unregistered_backend_or_transport_rejects_before_open(
+    monkeypatch, capsys, selector, resource
+):
     def unexpected_open(*_args, **_kwargs):
         pytest.fail("unregistered validation transport must not open VISA")
 
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(unexpected_open))
     assert cli.main([
-        "run", "--resource", "ASRL1::INSTR",
-        "--visa-library", "@py", "--validation-allow-pending-live-support",
+        "run", "--resource", resource,
+        "--visa-library", selector, "--validation-allow-pending-live-support",
     ]) == 1
-    assert "no registered transport" in capsys.readouterr().err
+    assert "no registered" in capsys.readouterr().err
 
 
-def test_system_visa_live_remains_unchanged(monkeypatch, capsys):
+@pytest.mark.parametrize("validation_args", ([], ["--validation-allow-pending-live-support"]))
+def test_system_visa_live_remains_unchanged(monkeypatch, capsys, validation_args):
     backend = FakeBackend(responses={
         "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,SN1,1.0",
         ":SYSTem:ERRor?": '+0,"No error"',
@@ -85,13 +118,17 @@ def test_system_visa_live_remains_unchanged(monkeypatch, capsys):
         runtime.Oscilloscope, "open",
         staticmethod(lambda resource, visa_library=None: Oscilloscope(backend)),
     )
-    assert cli.main(["run", "--resource", "USB0::FAKE::INSTR"]) == 0
+    assert cli.main(["run", "--resource", "USB0::FAKE::INSTR", *validation_args]) == 0
     assert backend.history == ["*IDN?", ":RUN", ":SYSTem:ERRor?"]
+    assert backend.closed is True
     capsys.readouterr()
 
 
 @pytest.mark.parametrize("selector", ("@py", "@bt"))
-def test_identity_diagnostic_keeps_optional_backend_selector(monkeypatch, capsys, selector):
+@pytest.mark.parametrize("validation_args", ([], ["--validation-allow-pending-live-support"]))
+def test_identity_diagnostic_keeps_optional_backend_selector(
+    monkeypatch, capsys, selector, validation_args
+):
     backend = FakeBackend(responses={
         "*IDN?": "KEYSIGHT TECHNOLOGIES,DSOX4024A,SN1,1.0",
     })
@@ -103,8 +140,11 @@ def test_identity_diagnostic_keeps_optional_backend_selector(monkeypatch, capsys
     monkeypatch.setattr(runtime.Oscilloscope, "open", staticmethod(open_fake))
     assert cli.main([
         "identify", "--resource", "USB0::FAKE::INSTR", "--visa-library", selector,
+        *validation_args,
     ]) == 0
     assert selectors == [selector]
+    assert backend.history == ["*IDN?"]
+    assert backend.closed is True
     capsys.readouterr()
 
 

@@ -295,17 +295,27 @@ identity before business SCPI. Model capabilities and available instrument
 options remain separately enforced. See
 [Supported Models](../core/supported-models.md) for the exact supported paths.
 
-For contributor hardware validation of a registered validation-only `@py` USB connection
-or approved `@py` TCPIP pair, the maintained `scripts/live-*.ps1` wrappers select
-`@py` and pass the hidden `--validation-allow-pending-live-support` CLI
-switch. The switch is not a general `--force`: it is restricted to `@py`,
-checks the operator-provided USB or TCPIP/LAN resource and the connected
-`*IDN?` model, and preserves existing model, capability, and cleanup guards.
-Worker and WebUI requests cannot select Validation Mode. Validation does not
-promote Product support. The validation-only `@py` USB targets are
-`keysight-dsox2004a`, `keysight-dsox3024a`, `keysight-dsox4024a`,
-`keysight-dsox4034a`, and `tektronix-tbs1052b`. The Product connection
-matrix remains in [Supported Models](../core/supported-models.md).
+Contributor hardware validation uses the hidden
+`--validation-allow-pending-live-support` CLI switch; the maintained
+`scripts/live-*.ps1` wrappers pass it when `-Backend "@py"` is selected.
+The switch admits only exact model, transport, and backend combinations that
+Core already supports for normal operation or explicitly registers for
+validation. It is not restricted to `@py`. System VISA retains its existing
+supported connections, with no additional validation-only pairs; `@bt` and
+custom backends have no registered validation connections.
+The validation-only `@py` USB targets are `keysight-dsox4024a`,
+`keysight-dsox4034a`, and `tektronix-tbs2074`; they remain closed to normal
+operation. All other connections remain subject to the published connection
+matrix in [Supported Models](../core/supported-models.md).
+
+Core rejects unregistered backend/transport combinations before VISA opens,
+then checks the actual `*IDN?` model before instrument operations. `--model`
+cannot override detected identity. Existing capability, installed-option,
+instrument-status, safety, and cleanup checks remain in force. The switch
+does not grant access to unsupported operations. Worker and WebUI requests
+cannot select contributor validation. Validation results do not change formal
+support; review and explicit approval are required as described in the
+[Core README](../core/README.md).
 Direct Python calls to `Oscilloscope.open()` are not Product policy-gated.
 
 ## Agent-safe Automation

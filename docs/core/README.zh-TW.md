@@ -59,10 +59,18 @@ System VISA Product 支援限核准的型號／USB 或型號／TCPIP 組合；
 `@bt` 與明確自訂 VISA Backend（包括明確 `@ivi`）未開放 Product Live；
 請使用預設 System VISA 選擇器要求已驗證的 IVI Backend。
 
-Contributor Validation Mode 是明確的 CLI-only 選項，適用於僅限驗證的 `@py` USB
-連線及支援的 `@py` TCPIP 範圍；仍要求實際 `*IDN?`，不授予 Product 存取。
-WebUI 與 Worker 不可選此模式。Identify 與 Resource Discovery 仍是診斷；
-Dry-run 與模擬不開啟 Live VISA Session。
+貢獻者驗證模式必須在 CLI 明確選用。Core 只允許已正式支援或已登記為僅供驗證的
+精確偵測型號、傳輸方式與後端組合。此模式不限 `@py`；System VISA 沿用既有正式支援
+連線，未增加任何僅供驗證的組合。`@bt` 與自訂後端沒有已登記的驗證連線。
+後端與傳輸方式沒有已登記組合時，在開啟 VISA 前拒絕；儀器操作前再核對實際 `*IDN?` 型號。
+驗證模式保留型號能力、已安裝選配、儀器狀態與安全限制。WebUI 與 Worker 不可選此模式。
+Identify 與 Resource Discovery 仍是診斷；Dry-run 與模擬不開啟 Live VISA Session。
+
+新增僅供驗證的功能時，必須先具備實作與安全檢查，在 Core 登記精確的型號、傳輸方式、
+後端與功能，並在 Core 操作入口檢查准入。一般操作必須拒絕這些功能；
+只有中繼資料不能授予執行權限。
+驗證結果不會擴大正式支援。擴大支援前，必須由維護者審查硬體證據、取得操作人員明確核准，
+更新 Core 支援宣告與公開文件，並執行相關政策測試。硬體證據應保留在私人或另外分享的審查資料中。
 直接 Python 使用 `Oscilloscope.open()` 是低階 Session 介面，不是 Product 支援入口。
 確切連線及型號功能限制請見[支援型號](supported-models.zh-TW.md)。
 
