@@ -42,9 +42,15 @@ real hardware access. JSON payloads include `schema_version: 2` and
 
 Scopes Worker uses Common schema `3` with `v3-only` compatibility and
 `multi_job` / `startup` execution. Manifest and ordinary CLI JSON retain schema
-`2`; only `common.async_jobs` version `1` is declared. Integrations must migrate
-v2 requests and response handling to the [Worker contract](../contracts/scopes-worker-contract.md);
-there is no v2 fallback. Common cancellation and streaming are not advertised.
+`2`. The Manifest declares `common.async_jobs` version 1 and the optional
+`common.streaming` version 1. Ordinary Workers adopt only Async Jobs and
+retain their existing behavior. `scopes-tool worker --streaming --simulate
+--model keysight-dsox4024a --format jsonl` enables a one-time deferred
+read-only numeric Measure Stream via the existing `POST /command`, followed
+by continuous multi-channel `sample` JSONL events; the command and payload
+are described in the [Worker contract](../contracts/scopes-worker-contract.md).
+Finite cycles or indefinite measurement until `POST /stop` are supported.
+There is no v2 fallback or Common job cancellation.
 
 Shared machine contracts remain at root:
 

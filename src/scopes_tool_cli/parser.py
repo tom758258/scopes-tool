@@ -126,6 +126,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     worker_parser.add_argument("--queue-max", type=_positive_int, default=32)
     worker_parser.add_argument("--format", choices=("jsonl", "text"), default="jsonl")
+    worker_parser.add_argument("--streaming", action="store_true", help="enable deferred native numeric measurement streaming")
 
     send_parser = subparsers.add_parser(
         "send-command", help="enqueue a command in a running Scopes worker"
