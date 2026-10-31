@@ -142,7 +142,9 @@ def run_measure_stream(
                 result = scope.query_measurement(
                     request.channel, request.item, **kwargs,
                 )
-            native_status = getattr(scope, "_measurement_status", None)
+            native_status = getattr(scope, "_stream_measurement_status", None)
+            if native_status is None:
+                native_status = getattr(scope, "_measurement_status", None)
             if native_status is not None:
                 measurement_statuses.append(native_status(result))
                 if not measurement_statuses[-1].complete:

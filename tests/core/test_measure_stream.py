@@ -118,3 +118,56 @@ def test_measure_stream_invalid_value_and_partial_cycle_are_not_published():
 def test_stream_request_invalid_fields_are_rejected_before_hardware(arguments):
     with pytest.raises((OscilloscopeError, ValueError)):
         validate_measure_stream_options(arguments, capabilities_for_model_id(MODEL))
+
+
+def _tektronix_scope():
+    from scopes_tool_core.run_config import (
+        ResolvedRunConfig, RunModeOptions, open_scope_for_run,
+    )
+
+    model = "tektronix-tbs2074"
+    return open_scope_for_run(ResolvedRunConfig(
+        mode="simulate", planning_physical_model_id=model,
+        expected_physical_model_id=None, capabilities=None,
+        resource=f"SIM::{model}::INSTR",
+        options=RunModeOptions(simulate=True, planning_physical_model_id=model),
+    ))
+
+
+def test_tektronix_stream_keeps_clean_invalid_item_and_next_cycles():
+    with _tektronix_scope() as scope:
+        scope.query_idn()
+        scope.set_channel_display(2, False)
+        samples = []
+        completed, invalid, reason = run_measure_stream(
+            scope, _options(count=2, interval_seconds=0),
+            stop_requested=lambda: False,
+            wait_or_stop=lambda _seconds: False,
+            sample_reporter=samples.append,
+        )
+    assert (completed, invalid, reason) == (2, 2, "count_reached")
+    assert [sample["index"] for sample in samples] == [1, 2]
+    for sample in samples:
+        assert sample["values"]["frequency"]["valid"] is True
+        assert sample["values"]["frequency"]["value"] is not None
+        missing = sample["values"]["vpp"]
+        assert missing["valid"] is False
+        assert missing["value"] is None
+        assert missing["reason"]
+
+
+def test_tektronix_stream_true_query_failure_still_fails_closed():
+    with _tektronix_scope() as scope:
+        scope.query_idn()
+        scope.backend.query_failures[
+            "MEASUrement:IMMed:VALue?"
+        ] = OscilloscopeError("measurement failed")
+        samples = []
+        with pytest.raises(OscilloscopeError, match="measurement failed"):
+            run_measure_stream(
+                scope, _options(count=2, interval_seconds=0),
+                stop_requested=lambda: False,
+                wait_or_stop=lambda _seconds: False,
+                sample_reporter=samples.append,
+            )
+    assert samples == []

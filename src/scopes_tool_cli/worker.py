@@ -390,15 +390,21 @@ def _make_handler(runtime: WorkerRuntime):
                     reason = None
                     runtime.stream_started = True
                     runtime.stream_options = options
+                    thread = threading.Thread(
+                        target=_stream_loop, args=(runtime,), daemon=True,
+                    )
+                    try:
+                        thread.start()
+                    except Exception:
+                        runtime.stream_started = False
+                        runtime.stream_options = None
+                        raise
+                    runtime.stream_thread = thread
             if reason is not None:
                 self._send(409, _command_rejected_envelope(
                     reason, command, job_id, kind="control",
                 ))
                 return
-            runtime.stream_thread = threading.Thread(
-                target=_stream_loop, args=(runtime,), daemon=True,
-            )
-            runtime.stream_thread.start()
             self._send(202, {
                 "status": "accepted", "command": command, "job_id": job_id,
                 "kind": "control", "worker_job_id": None, "error": None,

@@ -40,11 +40,11 @@ def _status(url):
 
 
 @contextmanager
-def _streaming_worker():
+def _streaming_worker(model="keysight-dsox4024a"):
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2] / "src"))
     proc = subprocess.Popen(
         [sys.executable, "-m", "scopes_tool_cli", "worker", "--simulate",
-         "--model", "keysight-dsox4024a", "--port", "0",
+         "--model", model, "--port", "0",
          "--format", "jsonl", "--streaming"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
     )
@@ -268,3 +268,105 @@ def test_stream_start_is_control_only_without_changing_domain_command_inventory(
     assert command == "measure-stream-start"
     assert arguments == {"measurements": MEASUREMENTS}
     assert job_id == "control-one"
+
+
+def test_tektronix_worker_setup_is_reused_by_finite_multi_measure_stream():
+    with _streaming_worker("tektronix-tbs2074") as (ready, events, records, proc):
+        code, job = _post(ready["command_url"], "channel-display", {
+            "channel": 2, "off": True,
+        })
+        assert code == 202 and job["kind"] == "async_job"
+        setup = _event(events, "job_finished")
+        assert setup["state"] == "succeeded"
+        code, response = _post(ready["command_url"], "measure-stream-start", {
+            "measurements": MEASUREMENTS, "count": 2, "interval_seconds": 0,
+        })
+        assert code == 202 and response["kind"] == "control"
+        while True:
+            status = _event(events, "status")
+            if status["stream"]["state"] == "active":
+                break
+        samples = [_event(events, "sample") for _ in range(2)]
+        assert [sample["index"] for sample in samples] == [1, 2]
+        for sample in samples:
+            assert sample["values"]["ch1_frequency"]["valid"] is True
+            missing = sample["values"]["ch2_vpp"]
+            assert missing["valid"] is False and missing["value"] is None
+            assert missing["reason"]
+        ended = _event(events, "status")
+        assert ended["stream"]["state"] == "ended"
+        assert _post(ready["stop_url"])[0] == 202
+        summary = _event(events, "summary")
+        assert summary["ok"] is True
+        assert summary["stream_summary"]["completed_cycles"] == 2
+        assert summary["stream_summary"]["invalid_measurements"] == 2
+        assert summary["stream_summary"]["stop_reason"] == "count_reached"
+        proc.wait(timeout=8)
+        assert proc.returncode == 0
+        assert not [e for e in records[records.index(ended) + 1:]
+                    if e["event"] == "sample"]
+
+
+def test_start_stop_interleaving_never_exposes_unstarted_stream_thread(monkeypatch):
+    from http.server import ThreadingHTTPServer
+    from scopes_tool_cli import worker
+
+    runtime = worker.WorkerRuntime(
+        host="127.0.0.1", port=0, mode="simulate",
+        model="keysight-dsox4024a", resource=None,
+        queue_max=32, output_format="jsonl", streaming=True,
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), worker._make_handler(runtime))
+    runtime.port = server.server_port
+    runtime.server = server
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    reached_start = threading.Event()
+    release_start = threading.Event()
+    original_start = threading.Thread.start
+
+    def controlled_start(thread):
+        if getattr(thread, "_target", None) is worker._stream_loop:
+            reached_start.set()
+            assert release_start.wait(timeout=5)
+        return original_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", controlled_start)
+    start_response = []
+    stop_response = []
+    stop_done = threading.Event()
+
+    def request_start():
+        start_response.append(_post(runtime.control_urls()["command_url"],
+                                    "measure-stream-start", {
+                                        "measurements": MEASUREMENTS, "count": 1,
+                                    }))
+
+    def request_stop():
+        try:
+            stop_response.append(_post(runtime.control_urls()["stop_url"]))
+        finally:
+            stop_done.set()
+
+    first = threading.Thread(target=request_start)
+    second = threading.Thread(target=request_stop)
+    try:
+        first.start()
+        assert reached_start.wait(timeout=5)
+        second.start()
+        assert not stop_done.wait(timeout=0.2)
+        release_start.set()
+        first.join(timeout=6)
+        second.join(timeout=6)
+        assert not first.is_alive() and not second.is_alive()
+        assert start_response[0][0] == 202
+        assert stop_response[0][0] == 202
+        assert runtime.stream_thread is not None
+        runtime.stream_thread.join(timeout=5)
+        assert not runtime.stream_thread.is_alive()
+        assert runtime.stream_state == "ended"
+    finally:
+        release_start.set()
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=5)
