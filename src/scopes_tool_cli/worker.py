@@ -21,6 +21,10 @@ from scopes_tool_core.identity import physical_model_for_id
 from scopes_tool_core.simulator_backend import SimulatorInstrumentState
 
 from . import cli as scope_cli
+from . import runtime as cli_runtime
+from scopes_tool_core.measure_stream import (
+    MeasureStreamOptions, run_measure_stream, validate_measure_stream_options,
+)
 
 from .worker_client import (
     client_get,
@@ -74,6 +78,7 @@ class WorkerRuntime:
     resource: str | None
     queue_max: int
     output_format: str
+    streaming: bool = False
     visa_library: str | None = None
     run_id: str = field(default_factory=lambda: uuid4().hex)
     queue: Queue[WorkerJob] = field(init=False)
@@ -88,16 +93,37 @@ class WorkerRuntime:
     failed: int = 0
     cancelled: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
+    emit_lock: threading.Lock = field(default_factory=threading.Lock)
+    stream_state: str | None = None
+    stream_started: bool = False
+    stream_thread: threading.Thread | None = None
+    stream_stop: threading.Event = field(default_factory=threading.Event)
+    stream_options: MeasureStreamOptions | None = None
+    stream_completed: int = 0
+    stream_invalid: int = 0
+    stream_reason: str | None = None
+    server: ThreadingHTTPServer | None = None
 
     def __post_init__(self) -> None:
         self.queue = Queue(maxsize=self.queue_max)
+        if self.streaming:
+            self.stream_state = "waiting"
+
+    def runtime_features(self) -> dict[str, Any]:
+        features = deepcopy(WORKER_FEATURES)
+        if self.streaming:
+            features["common.streaming"] = {
+                "contract_version": 1, "lifecycles": ["deferred_start"],
+            }
+        return features
 
     def emit(self, event: str, **values: Any) -> None:
         payload = _event_payload(self, event, **values)
-        if self.output_format == "jsonl":
-            print(json.dumps(payload, sort_keys=True), flush=True)
-        else:
-            print(f"{event}: {payload}", flush=True)
+        with self.emit_lock:
+            if self.output_format == "jsonl":
+                print(json.dumps(payload, sort_keys=True, allow_nan=not self.streaming), flush=True)
+            else:
+                print(f"{event}: {payload}", flush=True)
 
     def base_url(self) -> str:
         return f"http://{self.host}:{self.port}"
@@ -122,6 +148,10 @@ class WorkerRuntime:
                 for job in self.jobs.values()
                 if job.state == "queued"
             ]
+        stream = (
+            {"stream": {"lifecycle": "deferred_start", "state": self.stream_state}}
+            if self.streaming else {}
+        )
         return {
             "schema_version": WORKER_SCHEMA_VERSION,
             "service": "scopes-tool",
@@ -142,9 +172,10 @@ class WorkerRuntime:
             "last_job": last_snapshot,
             **self.control_urls(),
             "urls": self.control_urls(),
-            "features": deepcopy(WORKER_FEATURES),
+            "features": self.runtime_features(),
             "fatal_error": self.fatal_error,
             "timestamp_utc": _now(),
+            **stream,
         }
 
 
@@ -164,6 +195,9 @@ def dispatch_lifecycle_command(args: argparse.Namespace) -> int:
 
 def run_worker(args: argparse.Namespace) -> int:
     mode = "simulate" if args.simulate else "live"
+    streaming = bool(getattr(args, "streaming", False))
+    if streaming and args.format != "jsonl":
+        raise OscilloscopeError("streaming worker requires --format jsonl")
     if mode == "live" and not args.resource:
         raise OscilloscopeError("worker --live requires --resource")
     physical_model_for_id(args.model)
@@ -177,6 +211,7 @@ def run_worker(args: argparse.Namespace) -> int:
         queue_max=args.queue_max,
         output_format=args.format,
         visa_library=args.visa_library,
+        streaming=streaming,
     )
     handler = _make_handler(runtime)
     try:
@@ -189,9 +224,12 @@ def run_worker(args: argparse.Namespace) -> int:
     summary_emitted = False
     try:
         runtime.port = server.server_port
+        runtime.server = server
         worker_thread = threading.Thread(target=_job_loop, args=(runtime,), daemon=True)
         worker_thread.start()
         runtime.emit("ready")
+        if runtime.streaming:
+            runtime.emit("status")
         server.serve_forever()
     except KeyboardInterrupt:
         runtime.stopping = True
@@ -215,11 +253,41 @@ def run_worker(args: argparse.Namespace) -> int:
                 runtime.emit("summary", ok=False, fatal_error=runtime.fatal_error, exit_code=3)
             return 3
     runtime.queue.join()
+    if runtime.streaming:
+        runtime.stream_stop.set()
+        if runtime.stream_thread is not None:
+            runtime.stream_thread.join(timeout=30)
+            if runtime.stream_thread.is_alive():
+                runtime.fatal_error = _common_error(
+                    "worker", "stream_stop_timeout",
+                    "stream query did not stop within the bounded shutdown window",
+                )
+                runtime.emit("error", scope="worker", fatal=True, error=runtime.fatal_error)
+        elif runtime.stream_state != "ended":
+            _mark_stream_ended(runtime, "stopped_before_start")
     runtime.emit(
         "summary",
         ok=runtime.fatal_error is None,
         fatal_error=runtime.fatal_error,
         exit_code=0 if runtime.fatal_error is None else 3,
+        **({
+            "stream_summary": {
+                "completed_cycles": runtime.stream_completed,
+                "expected_cycles": (
+                    runtime.stream_options.count if runtime.stream_options else None
+                ),
+                "invalid_measurements": runtime.stream_invalid,
+                "stop_reason": runtime.stream_reason,
+                "data_integrity": (
+                    "unknown" if runtime.stream_options is None
+                    else "incomplete" if runtime.fatal_error is not None or (
+                        runtime.stream_options is not None
+                        and runtime.stream_options.count is not None
+                        and runtime.stream_completed < runtime.stream_options.count
+                    ) else "no_loss_detected"
+                ),
+            },
+        } if runtime.streaming else {}),
     )
     return 0 if runtime.fatal_error is None else 3
 
@@ -262,7 +330,14 @@ def _make_handler(runtime: WorkerRuntime):
                 body = json.loads(raw.decode("utf-8") if raw else "{}")
                 command_echo, job_id_echo = _command_identity(body)
                 command, arguments, job_id = validate_command_request(body)
-                parse_domain_command(command, arguments, runtime)
+                if command == "measure-stream-start":
+                    if not runtime.streaming:
+                        raise OscilloscopeError("measure-stream-start requires --streaming")
+                    stream_options = validate_measure_stream_options(
+                        arguments, capabilities_for_model_id(runtime.model),
+                    )
+                else:
+                    parse_domain_command(command, arguments, runtime)
             except json.JSONDecodeError as exc:
                 self._send(
                     400,
@@ -287,62 +362,84 @@ def _make_handler(runtime: WorkerRuntime):
                 ))
                 return
             try:
-                self._admit_command(command, arguments, job_id)
+                if command == "measure-stream-start":
+                    self._admit_stream_start(command, job_id, stream_options)
+                else:
+                    self._admit_command(command, arguments, job_id)
             except Exception as exc:
                 self._send(500, _command_error_envelope(
                     str(exc), command_echo, job_id_echo, exc,
                     category="worker", code="command_failed",
                 ))
 
+        def _admit_stream_start(
+            self, command: str, job_id: str | None, options: MeasureStreamOptions,
+        ) -> None:
+            with runtime.lock:
+                if runtime.stopping:
+                    reason = "worker_stopping"
+                elif runtime.stream_started or runtime.stream_state != "waiting":
+                    reason = "stream_already_started"
+                elif (
+                    runtime.active_job_id is not None
+                    or not runtime.queue.empty()
+                    or any(job.state in {"queued", "running"} for job in runtime.jobs.values())
+                ):
+                    reason = "worker_busy"
+                else:
+                    reason = None
+                    runtime.stream_started = True
+                    runtime.stream_options = options
+            if reason is not None:
+                self._send(409, _command_rejected_envelope(
+                    reason, command, job_id, kind="control",
+                ))
+                return
+            runtime.stream_thread = threading.Thread(
+                target=_stream_loop, args=(runtime,), daemon=True,
+            )
+            runtime.stream_thread.start()
+            self._send(202, {
+                "status": "accepted", "command": command, "job_id": job_id,
+                "kind": "control", "worker_job_id": None, "error": None,
+            })
+
         def _admit_command(
             self, command: str, arguments: dict[str, Any], job_id: str | None
         ) -> None:
-            if runtime.stopping:
-                self._send(
-                    409,
-                    _command_rejected_envelope(
-                        "worker_stopping", command, job_id
-                    ),
-                )
-                return
-            if runtime.queue.full():
-                self._send(
-                    429,
-                    _command_rejected_envelope("queue_full", command, job_id),
-                )
-                return
-            worker_job_id = uuid4().hex
-            job = WorkerJob(
-                command=command,
-                arguments=arguments,
-                job_id=job_id,
-                worker_job_id=worker_job_id,
-                request_time=_now(),
-                accepted_time=_now(),
-            )
-            try:
-                with runtime.lock:
+            with runtime.lock:
+                if runtime.stopping:
+                    reason = "worker_stopping"
+                elif runtime.streaming and runtime.stream_started:
+                    reason = "stream_owns_session"
+                elif runtime.queue.full():
+                    reason = "queue_full"
+                else:
+                    reason = None
+                if reason is None:
+                    worker_job_id = uuid4().hex
+                    job = WorkerJob(
+                        command=command, arguments=arguments, job_id=job_id,
+                        worker_job_id=worker_job_id, request_time=_now(),
+                        accepted_time=_now(),
+                    )
                     runtime.jobs[worker_job_id] = job
-                runtime.queue.put_nowait(job)
-                with runtime.lock:
-                    runtime.accepted += 1
-            except Full:
-                with runtime.lock:
-                    runtime.jobs.pop(worker_job_id, None)
+                    try:
+                        runtime.queue.put_nowait(job)
+                        runtime.accepted += 1
+                    except Full:
+                        runtime.jobs.pop(worker_job_id, None)
+                        reason = "queue_full"
+            if reason is not None:
                 self._send(
-                    429,
-                    _command_rejected_envelope("queue_full", command, job_id),
+                    429 if reason == "queue_full" else 409,
+                    _command_rejected_envelope(reason, command, job_id),
                 )
                 return
-            response = {
-                "status": "accepted",
-                "command": command,
-                "job_id": job_id,
-                "worker_job_id": worker_job_id,
-                "kind": "async_job",
-                "error": None,
-            }
-            self._send(202, response)
+            self._send(202, {
+                "status": "accepted", "command": command, "job_id": job_id,
+                "worker_job_id": worker_job_id, "kind": "async_job", "error": None,
+            })
 
         def _handle_stop(self) -> None:
             try:
@@ -374,6 +471,7 @@ def _make_handler(runtime: WorkerRuntime):
                 with runtime.lock:
                     first_stop = not runtime.stopping
                     runtime.stopping = True
+                    runtime.stream_stop.set()
                     if first_stop:
                         for job in list(runtime.jobs.values()):
                             if job.state == "queued":
@@ -396,6 +494,8 @@ def _make_handler(runtime: WorkerRuntime):
                     "error": None,
                 },
             )
+            if runtime.streaming and not runtime.stream_started:
+                _mark_stream_ended(runtime, "stopped_before_start")
             if first_stop:
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
 
@@ -410,6 +510,65 @@ def _make_handler(runtime: WorkerRuntime):
             self.wfile.write(data)
 
     return Handler
+
+
+def _mark_stream_ended(runtime: WorkerRuntime, reason: str) -> None:
+    with runtime.lock:
+        if runtime.stream_state == "ended":
+            return
+        runtime.stream_state = "ended"
+        runtime.stream_reason = reason
+    runtime.emit("status")
+
+
+def _stream_loop(runtime: WorkerRuntime) -> None:
+    options = runtime.stream_options
+    if options is None:
+        return
+    if runtime.stream_stop.is_set():
+        _mark_stream_ended(runtime, "stopped_before_start")
+        return
+    args = argparse.Namespace(
+        command="measure", simulate=runtime.mode == "simulate",
+        live=runtime.mode == "live", model=runtime.model,
+        resource=runtime.resource, visa_library=runtime.visa_library,
+        _worker_live_validation=runtime.mode == "live",
+        _simulator_state=runtime.simulator_state,
+        _simulator_state_reporter=lambda state: None,
+    )
+    resource = runtime.resource or f"SIM::{runtime.model}::INSTR"
+    try:
+        with cli_runtime._open_scope(args, resource) as scope:
+            scope.query_idn()
+            with runtime.lock:
+                can_activate = not runtime.stopping and not runtime.stream_stop.is_set()
+                if can_activate:
+                    runtime.stream_state = "active"
+            if not can_activate:
+                _mark_stream_ended(runtime, "stop_requested")
+                return
+            runtime.emit("status")
+
+            def report_sample(sample: dict[str, Any]) -> None:
+                runtime.emit("sample", **sample)
+                with runtime.lock:
+                    runtime.stream_completed = int(sample["index"])
+                    runtime.stream_invalid += sum(
+                        not value["valid"] for value in sample["values"].values()
+                    )
+
+            _count, _invalid, reason = run_measure_stream(
+                scope, options, stop_requested=runtime.stream_stop.is_set,
+                wait_or_stop=runtime.stream_stop.wait,
+                sample_reporter=report_sample,
+            )
+        _mark_stream_ended(runtime, reason)
+    except Exception as exc:
+        runtime.fatal_error = _common_error("worker", "stream_failed", str(exc), exc)
+        runtime.emit("error", scope="worker", fatal=True, error=runtime.fatal_error)
+        _mark_stream_ended(runtime, "error")
+        if runtime.server is not None:
+            threading.Thread(target=runtime.server.shutdown, daemon=True).start()
 
 
 def _job_loop(runtime: WorkerRuntime) -> None:
@@ -522,7 +681,8 @@ def _event_payload(runtime: WorkerRuntime, event: str, **values: Any) -> dict[st
                 "model": runtime.model,
                 "resource": runtime.resource,
                 **runtime.control_urls(),
-                "features": deepcopy(WORKER_FEATURES),
+                "features": runtime.runtime_features(),
+                **({"stream": {"lifecycle": "deferred_start"}} if runtime.streaming else {}),
             }
         )
         payload.pop("trigger_url", None)
@@ -749,7 +909,10 @@ def _command_error_envelope(
         "status": "error",
         "command": command,
         "job_id": job_id,
-        "kind": "async_job" if command in DOMAIN_COMMANDS else None,
+        "kind": (
+            "control" if command == "measure-stream-start"
+            else "async_job" if command in DOMAIN_COMMANDS else None
+        ),
         "worker_job_id": None,
         "error": _common_error(category, code, message, exc),
         "message": message,
@@ -761,14 +924,15 @@ def _command_error_envelope(
 
 
 def _command_rejected_envelope(
-    reason: str, command: str | None, job_id: str | None
+    reason: str, command: str | None, job_id: str | None,
+    *, kind: str = "async_job",
 ) -> dict[str, Any]:
     return {
         "status": "rejected",
         "command": command,
         "job_id": job_id,
         "reason": reason,
-        "kind": "async_job",
+        "kind": kind,
         "worker_job_id": None,
         "error": _common_error("admission", reason, reason),
     }

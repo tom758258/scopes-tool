@@ -18,10 +18,54 @@ behavior is defined in [Scopes Worker Contract](scopes-worker-contract.md).
 Scopes Worker uses Common schema 3 only. Send exact integer token
 `schema_version: 3`; missing versions, old versions, `"3"`, `true`, `3.0`,
 and `3e0` fail closed without fallback or version negotiation. Manifest
-schema 2 declares `v3-only`, `[3]`, `multi_job`/`startup`, and only
-`common.async_jobs` version 1. All inventory commands are Async Jobs, including
-`stop-acquisition`; lifecycle `POST /stop` remains separate. Ordinary CLI JSON,
-capabilities, and domain artifacts retain their independent contracts.
+schema 2 declares `v3-only`, `[3]`, `multi_job`/`startup`,
+`common.async_jobs` version 1, plus optional `common.streaming` version 1
+with `deferred_start`. Ordinary Workers still adopt only Async Jobs. With
+`worker --streaming --format jsonl`, the one-time
+`measure-stream-start` command is a control, not a Job. Existing
+`stop-acquisition` and all inventory commands remain Async Jobs;
+lifecycle `POST /stop` is separate. Ordinary CLI JSON, capabilities, and
+domain artifacts retain their independent contracts.
+
+## Native Background Measure Stream (opt-in)
+
+Use `scopes-tool worker --simulate --model keysight-dsox4024a
+--streaming --format jsonl --port 0` or the Live equivalent with the
+operator-supplied `--live --resource <RESOURCE>`. The Stream source is not
+enabled on ordinary Worker startup. Observe the ready event and `waiting`
+status, run any required Scopes Setup Async Jobs to terminal completion, then
+send exactly one `POST /command` with
+`{"schema_version":3,"command":"measure-stream-start",
+"arguments":{"measurements":[{"id":"ch1_frequency","channel":1,
+"item":"frequency"},{"id":"ch2_vpp","channel":2,"item":"vpp"}],
+"count":null,"interval_seconds":1.0}}`.
+The command's HTTP 202 response is a control acceptance, not a sample or
+active-source acknowledgement. Source `active` appears in a later JSONL
+status before the first data event.
+
+Each `sample` event represents one completed ordered multi-item Measure
+cycle and contains source-local `index`, `elapsed_seconds` and
+`values` with per-ID `value` (number/null), `valid`, `unit`,
+`reason`. Finite Count counts entire cycles; omitted/null Count is native
+unlimited. Invalid readings remain null rather than zero. The wait interval
+is applied **after** cycle completion and does not guarantee a fixed sample
+rate or simultaneous measurements. No Measure Log files are necessary;
+the Orchestrator may independently control Capture/Dataset/CSV retention.
+
+Setup jobs are allowed only **before** the source-start control is accepted,
+and no ordinary job may be queued/running at acceptance. After acceptance
+the source owns the instrument Session; competing command admission fails 409
+and subsequent starts always fail 409, even after natural source end. To stop
+a streaming source or release a naturally ended Worker, send existing
+`POST /stop`. Ended precedes Summary and never permits further samples.
+Use Tool-specific `stream_summary.completed_cycles`,
+`expected_cycles`, `invalid_measurements`, `stop_reason` and
+`data_integrity`, along with EOF, actual exit and cleanup evidence, to
+assess completion. Do not infer the Worker has exited merely because the
+source reached `ended`; do not treat `HTTP 202` as sample completion.
+An interrupted finite stream is incomplete unless its original count was
+actually reached. Background waveform capture and screenshots are not
+supported by this feature.
 
 ## Periodic Capture Mapping
 

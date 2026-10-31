@@ -41,9 +41,13 @@ Agent／自動化應先 Dry-run、Simulate，再要求實機存取。
 JSON 含 `schema_version: 2` 與 `timestamp_utc`。
 
 Scopes Worker 使用 Common schema `3`、`v3-only` 相容性與
-`multi_job` / `startup` 執行模式。Manifest 與一般 CLI JSON 維持 schema `2`，
-僅宣告 `common.async_jobs` 版本 `1`。整合端須依[Worker 契約](../contracts/scopes-worker-contract.md)
-遷移 v2 請求與回應處理；不提供 v2 fallback，也不宣告 Common 取消或串流功能。
+`multi_job` / `startup` 執行模式。Manifest 與一般 CLI JSON 維持 schema `2`。
+Manifest 宣告 `common.async_jobs` 版本 1 和選配的 `common.streaming` 版本 1；
+一般 Worker 仍僅採用 Async Jobs，原有行為不變。使用
+`scopes-tool worker --streaming --simulate --model keysight-dsox4024a --format jsonl`
+可選擇延後啟動、一次性開始的唯讀數值 Measure Stream，透過既有 `POST /command`
+控制，持續以 JSONL `sample` 輸出多通道數值；詳見[Worker 契約](../contracts/scopes-worker-contract.md)。
+支援有限 Cycle 數及真正無限量測直到 `POST /stop`；不提供 v2 fallback 或 Common Job Cancel。
 
 共用機器契約仍在根目錄：
 

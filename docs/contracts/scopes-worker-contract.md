@@ -11,11 +11,14 @@ This Scopes-specific contract follows
 the domain command model, queue, sessions, stop, cleanup, and artifacts.
 Worker HTTP and JSONL enforce exact integer schema 3 without fallback or
 version negotiation. Execution is `multi_job` with `startup` context binding.
-The Manifest and runtime adopt only `common.async_jobs`, `contract_version: 1`.
-Neither `common.job_cancel` nor `common.streaming` is declared.
+The Manifest declares `common.async_jobs` and the optional
+`common.streaming` version 1 with lifecycle `deferred_start`. Without
+`--streaming`, runtime adoption remains **only** `common.async_jobs`.
+Neither mode adopts `common.job_cancel`.
 
-Every existing `/command` entry in the Command Inventory is an `async_job`,
-including `stop-acquisition`. The Manifest need not enumerate these commands.
+Every preexisting `/command` entry in the Command Inventory is an
+`async_job`, including `stop-acquisition`. The opt-in
+`measure-stream-start` command is a **control**, not an Async Job.
 HTTP `POST /stop` is separate lifecycle control.
 
 ## Contents
@@ -115,6 +118,114 @@ Different Workers have isolated simulation states. Restarting a Worker uses
 the default simulation state; no instrument state is persisted to disk. Live
 sessions and standalone CLI simulation retain their existing behavior.
 
+## Native Measure Streaming (optional)
+
+Run `scopes-tool worker --simulate --model keysight-dsox4024a --streaming
+--format jsonl` to opt in. Ordinary Worker invocations retain their exact
+existing multi-job behavior, job queue and outputs. Manifest schema 2 declares
+`common.streaming` version 1 / `deferred_start`; opted-in runtime Ready
+declares that feature and `stream: {"lifecycle": "deferred_start"}` with no
+state. JSONL and HTTP status include the same lifecycle with `stream.state`
+`waiting`, `active` or `ended`; normal Workers do not report `stream`.
+
+A streaming Worker may execute existing setup Async Jobs while `waiting`.
+After these jobs finish, send the **one-time** Tool-specific control through
+the existing `POST /command` (exact integer schema version 3):
+
+```json
+{
+  "schema_version": 3,
+  "command": "measure-stream-start",
+  "arguments": {
+    "measurements": [
+      {"id": "ch1_freq", "channel": 1, "item": "frequency"},
+      {"id": "ch2_vpp", "channel": 2, "item": "vpp"}
+    ],
+    "count": null,
+    "interval_seconds": 1.0
+  },
+  "job_id": "source-start"
+}
+```
+
+`measurements` is a nonempty ordered list of distinct, stable IDs with
+ordinary Core Measure items, channels and optional
+`reference_channel`, `time_s`, `level`, `slope`, `occurrence` as
+supported by the selected model. Unknown keys, duplicate IDs, invalid item
+or parameters, invalid channels, invalid numbers or missing measurements
+return HTTP 400 before device I/O. `count` is an optional positive integer
+number of **complete cycles**, or `null`/omitted for native unlimited
+streaming. `interval_seconds` defaults to 1.0 and is a nonnegative finite
+wait **after** the preceding completed cycle. There is no precision timing
+guarantee; measurements within a cycle are sequential, not simultaneous.
+The source uses one persistent Core simulator/VISA session and reads only
+existing measurement values; it does not implicitly run, stop, single,
+force-trigger, reset or change acquisition setup.
+
+The accepted HTTP 202 response has `kind: "control"`,
+`worker_job_id: null`, normal Common command identity and `run_id`.
+Acceptance is **not** Active. A source may start at most once per Runtime;
+a repeated start, start while the ordinary Job Queue has unfinished work,
+or a start after Stop is rejected HTTP 409 with Tool-specific reason
+`stream_already_started`, `worker_busy` or `worker_stopping`.
+Once accepted, all ordinary commands are rejected HTTP 409
+`stream_owns_session`, including after natural source end, until a
+new Worker Runtime is created. No new HTTP routes or a second Job queue
+are introduced. `POST /stop` is the same Worker lifecycle stop and may be
+called while waiting or active; it does not force-interrupt an in-flight VISA
+read. An opted-in Worker without source start can be stopped without data.
+
+After the Scope session has opened, detected identity and existing model
+capability rules have passed, the Worker publishes JSONL `status` with
+`stream.state: "active"` **before** any `sample` events. One complete
+read-only measurement cycle emits one data event:
+
+```json
+{
+  "event": "sample",
+  "schema_version": 3,
+  "run_id": "<runtime-id>",
+  "timestamp_utc": "<UTC ISO 8601>",
+  "index": 1,
+  "elapsed_seconds": 0.006,
+  "values": {
+    "ch1_freq": {"value": 1000.0, "unit": "Hz", "valid": true, "reason": null},
+    "ch2_vpp": {"value": null, "unit": "V", "valid": false, "reason": "invalid measurement"}
+  }
+}
+```
+
+The source-specific `index` starts at 1 and increments for each complete
+emitted cycle. It is **not** a Common sequence field. Invalid items retain
+`valid: false` with `value: null` and a reason; unaffected valid items
+are retained in the same cycle. A Stop observed partway through a cycle
+discards that incomplete cycle. Query/transport errors fail the source
+instead of silently replacing measurements with zero. Source sample events
+need no `output_dir` and do not create a Measure Log CSV or manifest.
+
+After the final sample, source termination or source failure, the Worker
+publishes an `ended` status before Summary (if normal structured output is
+still possible). No sample follows Ended. Finite natural completion does
+not itself terminate the HTTP Worker: the first `POST /stop` still closes
+the process. Summary contains the existing job counters and an additional
+`stream_summary` with `completed_cycles`, `expected_cycles` (number or
+null), `invalid_measurements`, `stop_reason` and `data_integrity`.
+Possible reasons include `count_reached`, `stop_requested`,
+`stopped_before_start` and `error`. A finite shortfall or fatal error
+yields `data_integrity: "incomplete"`; a completed finite count or
+controlled unlimited stop with emitted cycles accounted for yields
+`"no_loss_detected"`; a Worker stopped before any Source Start reports
+`"unknown"`. Neither is a zero-loss hardware guarantee.
+Consumers must also observe summary, EOF, actual process exit and any
+later cleanup failure; `ended` alone is not proof of a successful run.
+
+This opt-in source uses existing Core capability/driver/identity handling
+and the existing Common v3 Streaming Extension without changing any of the
+four Common documents. Existing Foreground `measure`, finite `measure-log`,
+waveform `capture`, `screenshot` and ordinary Async Jobs are unchanged.
+In particular, no waveform streaming, persistence, restart/pause/resume or
+Common generic start/capture command is provided.
+
 ## Startup-Bound Execution Context
 
 Scopes uses a startup-bound execution context. For live workers, startup
@@ -169,7 +280,8 @@ Missing values, old versions, `"3"`, `true`, `3.0`, and `3e0` are rejected.
 Every command response includes `schema_version`, `run_id`, `status`,
 `command`, `job_id`, `kind`, `worker_job_id`, and `error`. Safely identifiable
 command and job strings are echoed even on failure; other identities are null.
-`kind` is `async_job` for a recognized Scopes command, otherwise null.
+`kind` is `async_job` for existing domain commands, `control` for opted-in
+`measure-stream-start`, otherwise null.
 No created job means `worker_job_id: null`.
 
 Accepted responses use HTTP `202`:
