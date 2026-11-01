@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import math
+import threading
 import time
 from typing import Callable, Mapping
 
@@ -94,8 +95,13 @@ def validate_measure_stream_options(
     if count is not None and (type(count) is not int or count <= 0):
         raise OscilloscopeError("count must be a positive integer or null")
     interval = arguments.get("interval_seconds", 1.0)
-    if type(interval) not in (int, float) or not math.isfinite(interval) or interval < 0:
-        raise OscilloscopeError("interval_seconds must be a finite non-negative number")
+    if (
+        type(interval) not in (int, float) or interval < 0
+        or interval > threading.TIMEOUT_MAX or not math.isfinite(interval)
+    ):
+        raise OscilloscopeError(
+            "interval_seconds must be a finite non-negative number within the wait limit"
+        )
     return MeasureStreamOptions(tuple(fields), count, float(interval))
 
 

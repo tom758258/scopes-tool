@@ -111,6 +111,7 @@ def test_measure_stream_invalid_value_and_partial_cycle_are_not_published():
     {"measurements": [{"id": "x", "channel": 1, "item": "frequency"}], "count": 0},
     {"measurements": [{"id": "x", "channel": 1, "item": "frequency"}], "interval_seconds": -1},
     {"measurements": [{"id": "x", "channel": 1, "item": "frequency"}], "interval_seconds": float("nan")},
+    {"measurements": [{"id": "x", "channel": 1, "item": "frequency"}], "interval_seconds": 1e308},
     {"measurements": [{"id": "x", "channel": 1, "item": "frequency"}, {"id": "x", "channel": 2, "item": "vpp"}]},
     {"measurements": [{"id": "x", "channel": 99, "item": "frequency"}]},
     {"measurements": [{"id": "x", "channel": 1, "item": "not_a_measure"}]},

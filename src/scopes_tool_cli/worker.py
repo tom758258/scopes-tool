@@ -222,25 +222,38 @@ def run_worker(args: argparse.Namespace) -> int:
         runtime.emit("summary", ok=False, fatal_error=runtime.fatal_error, exit_code=3)
         return 3
     summary_emitted = False
+    ready_emitted = False
     try:
         runtime.port = server.server_port
         runtime.server = server
         worker_thread = threading.Thread(target=_job_loop, args=(runtime,), daemon=True)
         worker_thread.start()
         runtime.emit("ready")
+        ready_emitted = True
         if runtime.streaming:
             runtime.emit("status")
         server.serve_forever()
     except KeyboardInterrupt:
         runtime.stopping = True
         runtime.fatal_error = _common_error("worker", "interrupted", "interrupted")
-        runtime.emit("summary", ok=False, fatal_error=runtime.fatal_error, exit_code=130)
+        if runtime.streaming:
+            _stop_stream_before_summary(runtime, ready_emitted=ready_emitted)
+        runtime.emit(
+            "summary", ok=False, fatal_error=runtime.fatal_error, exit_code=130,
+            **_stream_summary_fields(runtime),
+        )
         summary_emitted = True
         return 130
     except Exception as exc:
         runtime.fatal_error = _common_error("worker", "worker_failed", str(exc), exc)
+        if runtime.streaming:
+            runtime.stopping = True
+            _stop_stream_before_summary(runtime, ready_emitted=ready_emitted)
         runtime.emit("error", scope="worker", fatal=True, error=runtime.fatal_error)
-        runtime.emit("summary", ok=False, fatal_error=runtime.fatal_error, exit_code=3)
+        runtime.emit(
+            "summary", ok=False, fatal_error=runtime.fatal_error, exit_code=3,
+            **_stream_summary_fields(runtime),
+        )
         summary_emitted = True
         return 3
     finally:
@@ -249,47 +262,68 @@ def run_worker(args: argparse.Namespace) -> int:
         except Exception as exc:
             runtime.fatal_error = _common_error("worker", "cleanup_failed", str(exc), exc)
             runtime.emit("error", scope="worker", fatal=True, error=runtime.fatal_error)
+            if runtime.streaming:
+                runtime.stopping = True
+                _stop_stream_before_summary(runtime, ready_emitted=ready_emitted)
             if not summary_emitted:
-                runtime.emit("summary", ok=False, fatal_error=runtime.fatal_error, exit_code=3)
+                runtime.emit(
+                    "summary", ok=False, fatal_error=runtime.fatal_error, exit_code=3,
+                    **_stream_summary_fields(runtime),
+                )
             return 3
     runtime.queue.join()
     if runtime.streaming:
-        runtime.stream_stop.set()
-        if runtime.stream_thread is not None:
-            runtime.stream_thread.join(timeout=30)
-            if runtime.stream_thread.is_alive():
-                runtime.fatal_error = _common_error(
-                    "worker", "stream_stop_timeout",
-                    "stream query did not stop within the bounded shutdown window",
-                )
-                runtime.emit("error", scope="worker", fatal=True, error=runtime.fatal_error)
-        elif runtime.stream_state != "ended":
-            _mark_stream_ended(runtime, "stopped_before_start")
+        _stop_stream_before_summary(runtime, ready_emitted=ready_emitted)
     runtime.emit(
         "summary",
         ok=runtime.fatal_error is None,
         fatal_error=runtime.fatal_error,
         exit_code=0 if runtime.fatal_error is None else 3,
-        **({
-            "stream_summary": {
-                "completed_cycles": runtime.stream_completed,
-                "expected_cycles": (
-                    runtime.stream_options.count if runtime.stream_options else None
-                ),
-                "invalid_measurements": runtime.stream_invalid,
-                "stop_reason": runtime.stream_reason,
-                "data_integrity": (
-                    "unknown" if runtime.stream_options is None
-                    else "incomplete" if runtime.fatal_error is not None or (
-                        runtime.stream_options is not None
-                        and runtime.stream_options.count is not None
-                        and runtime.stream_completed < runtime.stream_options.count
-                    ) else "no_loss_detected"
-                ),
-            },
-        } if runtime.streaming else {}),
+        **_stream_summary_fields(runtime),
     )
     return 0 if runtime.fatal_error is None else 3
+
+
+def _stream_summary_fields(runtime: WorkerRuntime) -> dict[str, Any]:
+    if not runtime.streaming:
+        return {}
+    options = runtime.stream_options
+    return {
+        "stream_summary": {
+            "completed_cycles": runtime.stream_completed,
+            "expected_cycles": options.count if options is not None else None,
+            "invalid_measurements": runtime.stream_invalid,
+            "stop_reason": runtime.stream_reason,
+            "data_integrity": (
+                "unknown" if options is None
+                else "incomplete" if runtime.fatal_error is not None or (
+                    options.count is not None and runtime.stream_completed < options.count
+                )
+                else "no_loss_detected"
+            ),
+        },
+    }
+
+
+def _stop_stream_before_summary(
+    runtime: WorkerRuntime, *, ready_emitted: bool,
+) -> None:
+    """Cooperatively stop and account for the streaming source before Summary."""
+    runtime.stream_stop.set()
+    thread = runtime.stream_thread
+    if thread is not None:
+        thread.join(timeout=30)
+        if thread.is_alive():
+            runtime.fatal_error = _common_error(
+                "worker", "stream_stop_timeout",
+                "stream query did not stop within the bounded shutdown window",
+            )
+            runtime.emit("error", scope="worker", fatal=True, error=runtime.fatal_error)
+            return
+    if ready_emitted and runtime.stream_state != "ended":
+        _mark_stream_ended(
+            runtime, "stop_requested" if thread is not None else "stopped_before_start",
+        )
 
 
 def _make_handler(runtime: WorkerRuntime):

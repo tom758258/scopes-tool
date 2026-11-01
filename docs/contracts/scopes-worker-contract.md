@@ -156,7 +156,7 @@ or parameters, invalid channels, invalid numbers or missing measurements
 return HTTP 400 before device I/O. `count` is an optional positive integer
 number of **complete cycles**, or `null`/omitted for native unlimited
 streaming. `interval_seconds` defaults to 1.0 and is a nonnegative finite
-wait **after** the preceding completed cycle. There is no precision timing
+wait **after** the preceding completed cycle, bounded by the platform wait limit. There is no precision timing
 guarantee; measurements within a cycle are sequential, not simultaneous.
 The source uses one persistent Core simulator/VISA session and reads only
 existing measurement values; it does not implicitly run, stop, single,

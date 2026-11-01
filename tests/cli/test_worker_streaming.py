@@ -370,3 +370,72 @@ def test_start_stop_interleaving_never_exposes_unstarted_stream_thread(monkeypat
         server.shutdown()
         server.server_close()
         server_thread.join(timeout=5)
+
+def test_streaming_worker_main_failure_and_close_failure_finalize_source(monkeypatch, capsys):
+    """Controllable main-loop errors must not bypass Stream Ended and Summary."""
+    import argparse
+    import threading
+
+    from scopes_tool_cli import worker
+
+    for failure in ("interrupt", "server_failure", "close_failure"):
+        state = {}
+
+        def build_handler(runtime):
+            state["runtime"] = runtime
+            return object
+
+        class ControlledServer:
+            server_port = 8765
+
+            def __init__(self, *_args):
+                pass
+
+            def serve_forever(self):
+                runtime = state["runtime"]
+                runtime.stream_started = True
+                runtime.stream_state = "active"
+                runtime.stream_options = worker.validate_measure_stream_options(
+                    {"measurements": MEASUREMENTS, "count": 3},
+                    worker.capabilities_for_model_id(runtime.model),
+                )
+                source = threading.Thread(
+                    target=lambda: runtime.stream_stop.wait(5), daemon=True,
+                )
+                runtime.stream_thread = source
+                source.start()
+                if failure == "interrupt":
+                    raise KeyboardInterrupt
+                if failure == "server_failure":
+                    raise RuntimeError("simulated server failure")
+
+            def server_close(self):
+                if failure == "close_failure":
+                    raise RuntimeError("simulated close failure")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(worker, "_make_handler", build_handler)
+            patch.setattr(worker, "ThreadingHTTPServer", ControlledServer)
+            exit_code = worker.run_worker(argparse.Namespace(
+                command="worker", simulate=True, live=False, streaming=True,
+                model="keysight-dsox4024a", host="127.0.0.1", port=0,
+                resource=None, queue_max=32, format="jsonl", visa_library=None,
+            ))
+        events = [
+            json.loads(line) for line in capsys.readouterr().out.splitlines()
+        ]
+        expected_exit = 130 if failure == "interrupt" else 3
+        assert exit_code == expected_exit
+        assert not state["runtime"].stream_thread.is_alive()
+        ended = next(
+            i for i, event in enumerate(events)
+            if event["event"] == "status" and event["stream"]["state"] == "ended"
+        )
+        summary = next(
+            i for i, event in enumerate(events) if event["event"] == "summary"
+        )
+        assert ended < summary
+        assert events[summary]["ok"] is False
+        assert events[summary]["exit_code"] == expected_exit
+        assert events[summary]["stream_summary"]["stop_reason"] == "stop_requested"
+        assert events[summary]["stream_summary"]["data_integrity"] == "incomplete"
