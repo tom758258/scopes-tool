@@ -251,6 +251,7 @@ _NON_MATH_DOMAIN_COMMANDS = {
 
 
 DOMAIN_COMMANDS = _NON_MATH_DOMAIN_COMMANDS | _MATH_DOMAIN_COMMANDS
+STREAM_CONTROL_COMMANDS = frozenset({"measure-stream-start"})
 
 
 def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None]:
@@ -272,7 +273,7 @@ def validate_command_request(body: Any) -> tuple[str, dict[str, Any], str | None
     command = body.get("command")
     if not isinstance(command, str) or not command:
         raise OscilloscopeError("command must be a non-empty string")
-    if command not in DOMAIN_COMMANDS:
+    if command not in DOMAIN_COMMANDS and command not in STREAM_CONTROL_COMMANDS:
         raise OscilloscopeError(f"unknown command: {command}")
     arguments = body.get("arguments", {})
     if not isinstance(arguments, dict):

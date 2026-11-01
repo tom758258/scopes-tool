@@ -67,7 +67,10 @@ def test_manifest_json_reports_static_tool_identity(capsys):
     assert payload["worker_protocol"]["compatibility_policy"] == "v3-only"
     assert WORKER_SCHEMA_VERSION == 3
     assert payload["execution"] == {"model": "multi_job", "context_binding": "startup"}
-    assert payload["features"] == {"common.async_jobs": {"contract_version": 1}}
+    assert payload["features"] == {
+        "common.async_jobs": {"contract_version": 1},
+        "common.streaming": {"contract_version": 1, "lifecycles": ["deferred_start"]},
+    }
     assert "commands" not in payload
 
 

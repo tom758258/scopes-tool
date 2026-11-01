@@ -49,7 +49,8 @@ def build_manifest() -> dict[str, object]:
             "compatibility_policy": WORKER_COMPATIBILITY_POLICY,
         },
         "execution": {"model": "multi_job", "context_binding": "startup"},
-        "features": {name: dict(value) for name, value in WORKER_FEATURES.items()},
+        "features": {**{name: dict(value) for name, value in WORKER_FEATURES.items()},
+                     "common.streaming": {"contract_version": 1, "lifecycles": ["deferred_start"]}},
     }
 
 

@@ -78,6 +78,35 @@ stdout EOF, and actual exit. Neither summary nor exit 0 clears known failure.
 Worker exits retain `0/2/3` and interruption `130`; no additional `stopping`
 event is required on natural completion.
 
+### Optional native numeric stream events
+
+When the Worker is explicitly started with `--streaming`, runtime
+`features` additionally declares `common.streaming` version 1 with exactly
+`["deferred_start"]`. Its ready event contains
+`stream: {"lifecycle":"deferred_start"}` but no state. JSONL status and
+HTTP status contain `stream.state` (`waiting`, `active`, or `ended`).
+Ordinary Workers retain their existing Async Job event shapes with no
+stream metadata.
+
+The Scopes-specific `sample` event is one fully completed Measure cycle:
+`index` is an integer increasing from 1 per runtime, `elapsed_seconds`
+is seconds since this source started its read loop, and `values` maps stable
+measurement IDs to objects with `value` (finite JSON number or null),
+`unit` (string), `valid` (boolean), and `reason` (string or null).
+`timestamp_utc` retains the Common event's UTC requirement. Invalid
+items preserve a null value with a reason; an interrupted partial cycle
+does not generate a sample. A natural or requested source end emits JSONL
+`status` with `stream.state: "ended"` after the final sample and
+before the normal Summary.
+
+Streaming Summary retains Common terminal fields and existing Job counters,
+and adds `stream_summary` with `completed_cycles`, `expected_cycles`
+(integer or null), `invalid_measurements`, `stop_reason`, and
+`data_integrity` (`unknown` before source start, `no_loss_detected` or `incomplete`).
+A natural ended state alone does not prove complete data or worker shutdown.
+See [Scopes Worker Contract](scopes-worker-contract.md#native-measure-streaming-optional)
+for command schema, source readiness, admission, Stop, and process-exit rules.
+
 ## Worker Client JSON
 
 `scopes-tool send-command`, `status`, `stop`, and `wait-ready` emit one

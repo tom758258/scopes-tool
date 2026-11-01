@@ -69,14 +69,23 @@ def client_post(args: argparse.Namespace, path: str, body: dict[str, Any]) -> in
                 and status in ({202} if path == "/command" else {200, 202})
             ):
                 raise OscilloscopeError("invalid worker acknowledgement")
-            if path == "/command" and not (
-                response.get("kind") == "async_job"
-                and isinstance(response.get("worker_job_id"), str)
-                and response["worker_job_id"]
-                and response.get("command") == body["command"]
-                and "job_id" in response and response["job_id"] == body.get("job_id")
-            ):
-                raise OscilloscopeError("invalid worker command acceptance or correlation")
+            if path == "/command":
+                is_control = body.get("command") == "measure-stream-start"
+                correct_kind = (
+                    response.get("kind") == "control"
+                    and response.get("worker_job_id") is None
+                    if is_control else (
+                        response.get("kind") == "async_job"
+                        and isinstance(response.get("worker_job_id"), str)
+                        and bool(response["worker_job_id"])
+                    )
+                )
+                if not (
+                    correct_kind
+                    and response.get("command") == body["command"]
+                    and "job_id" in response and response["job_id"] == body.get("job_id")
+                ):
+                    raise OscilloscopeError("invalid worker command acceptance or correlation")
     except Exception as exc:
         return _client_error(args, 3, "worker request failed", exc)
     _client_print(args, response)
@@ -174,14 +183,26 @@ def _validate_status(payload: dict[str, Any], args: argparse.Namespace) -> None:
     elif payload["worker_state"] == "failed":
         raise OscilloscopeError("failed worker status requires fatal_error")
     features = payload.get("features")
-    if not isinstance(features, dict) or set(features) != set(WORKER_FEATURES):
+    if not isinstance(features, dict) or set(features) not in (
+        set(WORKER_FEATURES), set(WORKER_FEATURES) | {"common.streaming"}
+    ):
         raise OscilloscopeError("invalid worker runtime features")
     for name, declaration in features.items():
         if not isinstance(declaration, dict) or (
             type(declaration.get("contract_version")) is not int
-            or declaration["contract_version"] != WORKER_FEATURES[name]["contract_version"]
+            or declaration["contract_version"] != 1
         ):
             raise OscilloscopeError("unsupported worker feature version")
+    if "common.streaming" in features:
+        if features["common.streaming"].get("lifecycles") != ["deferred_start"]:
+            raise OscilloscopeError("invalid streaming lifecycle declaration")
+        if payload.get("stream") not in (
+            {"lifecycle": "deferred_start", "state": state}
+            for state in ("waiting", "active", "ended")
+        ):
+            raise OscilloscopeError("invalid worker streaming status")
+    elif "stream" in payload:
+        raise OscilloscopeError("unexpected stream state without adoption")
     origin = urlsplit(f"http://{args.host}:{args.port}")
     for name in ("status_url", "command_url", "stop_url"):
         value = payload.get(name)

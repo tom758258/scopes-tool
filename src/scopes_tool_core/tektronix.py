@@ -576,6 +576,13 @@ class TektronixOscilloscope(Oscilloscope):
             raise OscilloscopeError("Tek measurement status does not match the result")
         return cached[1]
 
+    def _stream_measurement_status(self, measurement: MeasurementResult) -> TekPostStatus:
+        """Preserve a clean invalid reading as missing data in native streaming."""
+        status = self._measurement_status(measurement)
+        if not measurement.valid and status.complete and status.value == 0 and not status.events:
+            return replace(status, _measurement_is_error=False)
+        return status
+
     def _measurement_cycle_status(self, statuses: Sequence[TekPostStatus]) -> TekPostStatus:
         # The final checkpoint is strict: trigger/acquisition and other work never
         # inherit the measurement-only exception. Keep all measured cohorts.
