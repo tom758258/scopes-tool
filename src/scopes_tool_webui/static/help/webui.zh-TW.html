@@ -66,6 +66,39 @@
 <p>瀏覽器 WebUI 與 Electron Desktop 共用相同控制介面及本指南，使用 Core 的型號、
 能力與安全規則。確切支援的型號／Backend／Transport 組合及選配功能限制，
 請查閱<a href="supported-models.zh-TW.html">支援型號</a>。</p>
+<h2 id="選擇操作介面">選擇操作介面</h2>
+<p>Windows 發行包提供三種一般使用者可啟動的執行檔，皆共用相同的 Core；
+瀏覽器 WebUI 與 Desktop 也共用圖形操作介面。</p>
+<table>
+<thead>
+<tr>
+<th>執行檔</th>
+<th>操作介面</th>
+<th>適合用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scopes-tool.exe</code></td>
+<td>CLI 命令列</td>
+<td>命令操作、腳本與自動化</td>
+</tr>
+<tr>
+<td><code>scopes-tool-webui-launcher.exe</code></td>
+<td>瀏覽器 WebUI</td>
+<td>在本機瀏覽器中使用圖形介面</td>
+</tr>
+<tr>
+<td><code>Scopes Tool.exe</code></td>
+<td>Desktop</td>
+<td>在獨立應用程式視窗中使用圖形介面</td>
+</tr>
+</tbody>
+</table>
+<p>本指南說明瀏覽器 WebUI 與 Desktop。若要開啟隨附的 CLI 指南，
+請在解壓後的發行包資料夾中開啟 PowerShell 並執行
+<code>.\scopes-tool.exe user-guide --lang zh-TW</code>。若是 Python 安裝，請使用
+<code>scopes-tool user-guide --lang zh-TW</code>。</p>
 <h2 id="啟動與關閉應用程式">啟動與關閉應用程式</h2>
 <p>Windows 目錄封裝請保留所有解壓縮檔案，包括唯一共用的 <code>_internal</code> 目錄。
 Desktop 啟動 <code>Scopes Tool.exe</code>；瀏覽器 Launcher 啟動
@@ -87,8 +120,7 @@ Launcher 本身僅提供英文。Command ID、Model ID、SCPI、VISA Resource、
 <p><strong>Help</strong> 依目前介面語言開啟已封裝的指南，並傳遞目前主題偏好。
 瀏覽器 WebUI 開啟新分頁；Desktop 使用系統預設瀏覽器開啟相同的本地 WebUI Help，
 閱讀時請保持 Desktop 執行。沒有獨立的 Desktop Help Bundle。
-Help 不需要網際網路，但由 WebUI 提供的頁面需要本地 Server 持續執行。
-CLI Help 也可透過 <code>scopes-tool user-guide --lang zh-TW</code> 獨立開啟。</p>
+Help 不需要網際網路，但由 WebUI 提供的頁面需要本地 Server 持續執行。</p>
 <h2 id="選擇模式與裝置">選擇模式與裝置</h2>
 <p>先使用 <strong>Simulate</strong> 在無硬體環境練習。選擇已註冊的規劃型號，Core 模擬器會提供
 其身分及能力；啟用儲存時，模擬輸出仍會寫入檔案。

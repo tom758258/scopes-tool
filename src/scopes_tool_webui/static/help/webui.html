@@ -67,6 +67,39 @@
 They use Core's model, capability, and safety rules. Check
 <a href="supported-models.html">Supported Models</a> for the exact supported
 model/backend/transport combinations and optional feature limits.</p>
+<h2 id="choose-your-interface">Choose Your Interface</h2>
+<p>The Windows release includes three user-facing executables. They share the same
+Core; Browser WebUI and Desktop use the same graphical interface.</p>
+<table>
+<thead>
+<tr>
+<th>Executable</th>
+<th>Interface</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scopes-tool.exe</code></td>
+<td>CLI</td>
+<td>Commands, scripts, and automation</td>
+</tr>
+<tr>
+<td><code>scopes-tool-webui-launcher.exe</code></td>
+<td>Browser WebUI</td>
+<td>Graphical operation in a local browser</td>
+</tr>
+<tr>
+<td><code>Scopes Tool.exe</code></td>
+<td>Desktop</td>
+<td>Graphical operation in an application window</td>
+</tr>
+</tbody>
+</table>
+<p>This guide covers Browser WebUI and Desktop. To open the bundled CLI guide,
+open PowerShell in the extracted release folder and run
+<code>.\scopes-tool.exe user-guide --lang en</code>. For a Python installation, use
+<code>scopes-tool user-guide --lang en</code>.</p>
 <h2 id="start-and-close-the-application">Start and close the application</h2>
 <p>For a Windows directory package, keep all extracted files together, including
 the single shared <code>_internal</code> directory. Start <code>Scopes Tool.exe</code> for Desktop,
@@ -94,8 +127,7 @@ the current theme preference. Browser WebUI opens a new tab. Desktop opens
 the same local WebUI Help in the system default browser; keep the Desktop
 running while reading it. No separate Desktop Help bundle exists. Help needs
 no Internet connection, but WebUI-served pages need the local server to remain
-running. CLI Help can also be opened independently with
-<code>scopes-tool user-guide --lang zh-TW</code>.</p>
+running.</p>
 <h2 id="select-a-mode-and-device">Select a mode and device</h2>
 <p>Start with <strong>Simulate</strong> to practice without hardware. Choose a registered
 planning model; the Core simulator supplies its identity and capabilities.

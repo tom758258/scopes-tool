@@ -8,6 +8,21 @@ backend, transport, and installed instrument options in
 [Supported Models](../core/supported-models.md). For each command's arguments,
 use `scopes-tool <command> --help`.
 
+## Choose Your Interface
+
+The Windows release includes three user-facing executables. They share the same
+Core; Browser WebUI and Desktop use the same graphical interface.
+
+| Executable | Interface | Best for |
+| --- | --- | --- |
+| `scopes-tool.exe` | CLI | Commands, scripts, and automation |
+| `scopes-tool-webui-launcher.exe` | Browser WebUI | Graphical operation in a local browser |
+| `Scopes Tool.exe` | Desktop | Graphical operation in an application window |
+
+This guide covers the CLI. For a graphical interface, start
+`scopes-tool-webui-launcher.exe` or `Scopes Tool.exe` from the extracted release
+folder, then select **Help** in that interface to open its bundled offline guide.
+
 ## Start and open Help
 
 Open PowerShell in the extracted application directory. Keep the executable

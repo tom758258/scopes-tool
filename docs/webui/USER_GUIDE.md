@@ -7,6 +7,22 @@ They use Core's model, capability, and safety rules. Check
 [Supported Models](../core/supported-models.md) for the exact supported
 model/backend/transport combinations and optional feature limits.
 
+## Choose Your Interface
+
+The Windows release includes three user-facing executables. They share the same
+Core; Browser WebUI and Desktop use the same graphical interface.
+
+| Executable | Interface | Best for |
+| --- | --- | --- |
+| `scopes-tool.exe` | CLI | Commands, scripts, and automation |
+| `scopes-tool-webui-launcher.exe` | Browser WebUI | Graphical operation in a local browser |
+| `Scopes Tool.exe` | Desktop | Graphical operation in an application window |
+
+This guide covers Browser WebUI and Desktop. To open the bundled CLI guide,
+open PowerShell in the extracted release folder and run
+`.\scopes-tool.exe user-guide --lang en`. For a Python installation, use
+`scopes-tool user-guide --lang en`.
+
 ## Start and close the application
 
 For a Windows directory package, keep all extracted files together, including
@@ -40,8 +56,7 @@ the current theme preference. Browser WebUI opens a new tab. Desktop opens
 the same local WebUI Help in the system default browser; keep the Desktop
 running while reading it. No separate Desktop Help bundle exists. Help needs
 no Internet connection, but WebUI-served pages need the local server to remain
-running. CLI Help can also be opened independently with
-`scopes-tool user-guide --lang zh-TW`.
+running.
 
 ## Select a mode and device
 

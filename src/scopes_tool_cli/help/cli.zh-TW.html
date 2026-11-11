@@ -67,6 +67,38 @@
 功能取決於<a href="supported-models.zh-TW.html">支援型號</a>所列的確切型號、
 Backend、Transport 及儀器已安裝選配。個別命令的參數請使用
 <code>scopes-tool &lt;command&gt; --help</code> 查詢。</p>
+<h2 id="選擇操作介面">選擇操作介面</h2>
+<p>Windows 發行包提供三種一般使用者可啟動的執行檔，皆共用相同的 Core；
+瀏覽器 WebUI 與 Desktop 也共用圖形操作介面。</p>
+<table>
+<thead>
+<tr>
+<th>執行檔</th>
+<th>操作介面</th>
+<th>適合用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scopes-tool.exe</code></td>
+<td>CLI 命令列</td>
+<td>命令操作、腳本與自動化</td>
+</tr>
+<tr>
+<td><code>scopes-tool-webui-launcher.exe</code></td>
+<td>瀏覽器 WebUI</td>
+<td>在本機瀏覽器中使用圖形介面</td>
+</tr>
+<tr>
+<td><code>Scopes Tool.exe</code></td>
+<td>Desktop</td>
+<td>在獨立應用程式視窗中使用圖形介面</td>
+</tr>
+</tbody>
+</table>
+<p>本指南說明 CLI。若要使用圖形介面，請在解壓後的發行包資料夾中啟動
+<code>scopes-tool-webui-launcher.exe</code> 或 <code>Scopes Tool.exe</code>，再點選該介面的
+<strong>Help</strong>，開啟隨附的離線使用指南。</p>
 <h2 id="啟動與開啟-help">啟動與開啟 Help</h2>
 <p>在解壓縮後的應用程式目錄開啟 PowerShell。執行檔與共用 <code>_internal</code>
 目錄必須放在一起，不可只複製執行檔。</p>
