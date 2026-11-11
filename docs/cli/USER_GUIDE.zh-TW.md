@@ -7,6 +7,21 @@
 Backend、Transport 及儀器已安裝選配。個別命令的參數請使用
 `scopes-tool <command> --help` 查詢。
 
+## 選擇操作介面
+
+Windows 發行包提供三種一般使用者可啟動的執行檔，皆共用相同的 Core；
+瀏覽器 WebUI 與 Desktop 也共用圖形操作介面。
+
+| 執行檔 | 操作介面 | 適合用途 |
+| --- | --- | --- |
+| `scopes-tool.exe` | CLI 命令列 | 命令操作、腳本與自動化 |
+| `scopes-tool-webui-launcher.exe` | 瀏覽器 WebUI | 在本機瀏覽器中使用圖形介面 |
+| `Scopes Tool.exe` | Desktop | 在獨立應用程式視窗中使用圖形介面 |
+
+本指南說明 CLI。若要使用圖形介面，請在解壓後的發行包資料夾中啟動
+`scopes-tool-webui-launcher.exe` 或 `Scopes Tool.exe`，再點選該介面的
+**Help**，開啟隨附的離線使用指南。
+
 ## 啟動與開啟 Help
 
 在解壓縮後的應用程式目錄開啟 PowerShell。執行檔與共用 `_internal`

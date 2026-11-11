@@ -68,6 +68,38 @@ the Windows CLI executable. Feature availability depends on the exact model,
 backend, transport, and installed instrument options in
 <a href="supported-models.html">Supported Models</a>. For each command's arguments,
 use <code>scopes-tool &lt;command&gt; --help</code>.</p>
+<h2 id="choose-your-interface">Choose Your Interface</h2>
+<p>The Windows release includes three user-facing executables. They share the same
+Core; Browser WebUI and Desktop use the same graphical interface.</p>
+<table>
+<thead>
+<tr>
+<th>Executable</th>
+<th>Interface</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scopes-tool.exe</code></td>
+<td>CLI</td>
+<td>Commands, scripts, and automation</td>
+</tr>
+<tr>
+<td><code>scopes-tool-webui-launcher.exe</code></td>
+<td>Browser WebUI</td>
+<td>Graphical operation in a local browser</td>
+</tr>
+<tr>
+<td><code>Scopes Tool.exe</code></td>
+<td>Desktop</td>
+<td>Graphical operation in an application window</td>
+</tr>
+</tbody>
+</table>
+<p>This guide covers the CLI. For a graphical interface, start
+<code>scopes-tool-webui-launcher.exe</code> or <code>Scopes Tool.exe</code> from the extracted release
+folder, then select <strong>Help</strong> in that interface to open its bundled offline guide.</p>
 <h2 id="start-and-open-help">Start and open Help</h2>
 <p>Open PowerShell in the extracted application directory. Keep the executable
 and its shared <code>_internal</code> directory together; do not copy only the executable.</p>

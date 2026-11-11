@@ -6,6 +6,22 @@
 能力與安全規則。確切支援的型號／Backend／Transport 組合及選配功能限制，
 請查閱[支援型號](../core/supported-models.zh-TW.md)。
 
+## 選擇操作介面
+
+Windows 發行包提供三種一般使用者可啟動的執行檔，皆共用相同的 Core；
+瀏覽器 WebUI 與 Desktop 也共用圖形操作介面。
+
+| 執行檔 | 操作介面 | 適合用途 |
+| --- | --- | --- |
+| `scopes-tool.exe` | CLI 命令列 | 命令操作、腳本與自動化 |
+| `scopes-tool-webui-launcher.exe` | 瀏覽器 WebUI | 在本機瀏覽器中使用圖形介面 |
+| `Scopes Tool.exe` | Desktop | 在獨立應用程式視窗中使用圖形介面 |
+
+本指南說明瀏覽器 WebUI 與 Desktop。若要開啟隨附的 CLI 指南，
+請在解壓後的發行包資料夾中開啟 PowerShell 並執行
+`.\scopes-tool.exe user-guide --lang zh-TW`。若是 Python 安裝，請使用
+`scopes-tool user-guide --lang zh-TW`。
+
 ## 啟動與關閉應用程式
 
 Windows 目錄封裝請保留所有解壓縮檔案，包括唯一共用的 `_internal` 目錄。
@@ -34,7 +50,6 @@ Launcher 本身僅提供英文。Command ID、Model ID、SCPI、VISA Resource、
 瀏覽器 WebUI 開啟新分頁；Desktop 使用系統預設瀏覽器開啟相同的本地 WebUI Help，
 閱讀時請保持 Desktop 執行。沒有獨立的 Desktop Help Bundle。
 Help 不需要網際網路，但由 WebUI 提供的頁面需要本地 Server 持續執行。
-CLI Help 也可透過 `scopes-tool user-guide --lang zh-TW` 獨立開啟。
 
 ## 選擇模式與裝置
 
