@@ -1,10 +1,12 @@
 # Scopes Tool WebUI
 
-[繁體中文](README.zh-TW.md) | [User Guide](USER_GUIDE.md) | [使用指南](USER_GUIDE.zh-TW.md)
-
 The Scopes Tool WebUI is a localhost-only browser adapter over
 `scopes_tool_core`. It does not import or depend on the CLI adapter, and it
 does not own VISA, SCPI, instrument identity, capability, or safety behavior.
+
+For step-by-step browser and Desktop operation, use the
+[WebUI / Desktop User Guide](USER_GUIDE.md). This README covers WebUI behavior,
+API, development, and maintainer boundaries.
 
 Import package: `scopes_tool_webui`
 

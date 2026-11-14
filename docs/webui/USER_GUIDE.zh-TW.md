@@ -1,7 +1,5 @@
 # Scopes Tool WebUI 與 Desktop 使用指南
 
-[English](USER_GUIDE.md)
-
 瀏覽器 WebUI 與 Electron Desktop 共用相同控制介面及本指南，使用 Core 的型號、
 能力與安全規則。確切支援的型號／Backend／Transport 組合及選配功能限制，
 請查閱[支援型號](../core/supported-models.zh-TW.md)。
@@ -75,6 +73,13 @@ Bluetooth、GPIB、ASRL、自訂 Backend 不會因此取得支援。
 
 變更模式、Resource 或規劃型號會改變結果情境，不可將前一情境的數值當成目前儀器狀態。
 選擇支援的裝置後可能自動讀取一次 Live Data Snapshot；Live Data 不會持續輪詢或串流波形。
+
+## 第一次模擬操作
+
+1. 啟動 Desktop 或瀏覽器 Launcher，並在 Device / Resource 選擇 **Simulate**。
+2. 選擇已註冊的規劃型號。這項無硬體練習不需要使用 Scan Device。
+3. 在 Command Browser 選擇可用的唯讀量測，依畫面提供的 **Read** 或 **Run** 動作執行。
+4. 到 **Workspace Result** 查看結果，並在 **Result History** 確認工作已完成。日後若要儲存擷取，先設定 **PC output folder**，再用 **Open Folder** 查看。
 
 ## 命令與設定
 

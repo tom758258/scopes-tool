@@ -1,10 +1,11 @@
 # Scopes Tool CLI
 
-[繁體中文](README.zh-TW.md) | [User Guide](USER_GUIDE.md) | [使用指南](USER_GUIDE.zh-TW.md)
-
 Command-line adapter for the registered Keysight InfiniiVision and Tektronix
 oscilloscopes through Core and PyVISA. Model-specific limits are defined in
 [Supported Models](../core/supported-models.md).
+
+For normal operation, start with the [CLI User Guide](USER_GUIDE.md). This README
+covers commands, development, automation, and maintainer-facing behavior.
 
 Distribution: `scopes-tool`
 

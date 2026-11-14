@@ -1,7 +1,5 @@
 # Scopes Tool Core
 
-[English](README.md)
-
 透過 PyVISA 相容 Backend 控制示波器的廠商中立 Core Runtime 套件。
 
 Distribution：`scopes-tool`

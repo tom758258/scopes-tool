@@ -2,10 +2,11 @@
 
 # Scopes Tool CLI
 
-[English](README.md) | [User Guide](USER_GUIDE.md) | [使用指南](USER_GUIDE.zh-TW.md)
-
 透過 Core 與 PyVISA 操作已註冊 Keysight InfiniiVision 與 Tektronix 示波器的 CLI Adapter。
 型號限制以[支援型號](../core/supported-models.zh-TW.md)為準。
+
+一般操作請先閱讀 [CLI 使用指南](USER_GUIDE.zh-TW.md)。本 README 保留命令、
+開發、自動化與維護者相關的詳細技術資訊。
 
 Distribution：`scopes-tool`
 

@@ -1,7 +1,5 @@
 # Scopes Tool WebUI and Desktop User Guide
 
-[繁體中文](USER_GUIDE.zh-TW.md)
-
 The browser WebUI and Electron Desktop share the same controls and this guide.
 They use Core's model, capability, and safety rules. Check
 [Supported Models](../core/supported-models.md) for the exact supported
@@ -90,6 +88,13 @@ Changing mode, resource, or planning model changes the result context. A
 previous context's values must not be used as the current instrument state.
 An initial Live Data snapshot can run after a supported device is selected;
 Live Data does not continuously poll or stream waveforms.
+
+## First simulated run
+
+1. Open the Desktop app or browser Launcher and select **Simulate** in Device / Resource.
+2. Choose a registered planning model. Do not use Scan Device for this hardware-free check.
+3. In Command Browser, select an available read-only measurement and use its **Read** or **Run** action.
+4. Check **Workspace Result** for the result and **Result History** for completion. If you later save a capture, set **PC output folder** and use **Open Folder** to find it.
 
 ## Commands and settings
 

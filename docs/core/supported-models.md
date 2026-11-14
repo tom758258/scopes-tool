@@ -1,7 +1,5 @@
 # Supported Models
 
-[繁體中文](supported-models.zh-TW.md)
-
 This guide lists the models, connections, operations, and limits available to
 Scopes Tool users. Capability profiles describe possible operations but do not
 confirm installed instrument options or licenses; instrument errors remain

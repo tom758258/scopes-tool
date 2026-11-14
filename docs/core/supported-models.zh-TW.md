@@ -2,8 +2,6 @@
 
 # 支援型號
 
-[English](supported-models.md)
-
 本指南說明 Scopes Tool 使用者可操作的型號、連線、功能及限制。
 Capability Profile 僅描述可用功能，不代表儀器已安裝對應選配或授權；
 實際不可用時仍以儀器回報的錯誤為準。

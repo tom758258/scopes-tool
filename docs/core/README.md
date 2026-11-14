@@ -1,7 +1,5 @@
 # Scopes Tool Core
 
-[繁體中文](README.zh-TW.md)
-
 Core runtime package for vendor-neutral oscilloscope control through
 PyVISA-compatible backends.
 

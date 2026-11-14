@@ -62,7 +62,6 @@
 
   <main class="help-content" id="help-content">
 <h1 id="scopes-tool-webui-與-desktop-使用指南">Scopes Tool WebUI 與 Desktop 使用指南</h1>
-<p><a href="webui.html">English</a></p>
 <p>瀏覽器 WebUI 與 Electron Desktop 共用相同控制介面及本指南，使用 Core 的型號、
 能力與安全規則。確切支援的型號／Backend／Transport 組合及選配功能限制，
 請查閱<a href="supported-models.zh-TW.html">支援型號</a>。</p>
@@ -142,6 +141,13 @@ Bluetooth、GPIB、ASRL、自訂 Backend 不會因此取得支援。
 識別與搜尋是診斷，不代表授權其他操作。</p>
 <p>變更模式、Resource 或規劃型號會改變結果情境，不可將前一情境的數值當成目前儀器狀態。
 選擇支援的裝置後可能自動讀取一次 Live Data Snapshot；Live Data 不會持續輪詢或串流波形。</p>
+<h2 id="第一次模擬操作">第一次模擬操作</h2>
+<ol>
+<li>啟動 Desktop 或瀏覽器 Launcher，並在 Device / Resource 選擇 <strong>Simulate</strong>。</li>
+<li>選擇已註冊的規劃型號。這項無硬體練習不需要使用 Scan Device。</li>
+<li>在 Command Browser 選擇可用的唯讀量測，依畫面提供的 <strong>Read</strong> 或 <strong>Run</strong> 動作執行。</li>
+<li>到 <strong>Workspace Result</strong> 查看結果，並在 <strong>Result History</strong> 確認工作已完成。日後若要儲存擷取，先設定 <strong>PC output folder</strong>，再用 <strong>Open Folder</strong> 查看。</li>
+</ol>
 <h2 id="命令與設定">命令與設定</h2>
 <p>透過 Command Browser 選擇命令，必要時篩選或顯示 Advanced 命令。
 不支援的命令保持停用並提供原因。選擇命令或瀏覽編輯器不會執行儀器 I/O。</p>

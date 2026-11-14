@@ -2,10 +2,12 @@
 
 # Scopes Tool WebUI
 
-[English](README.md) | [User Guide](USER_GUIDE.md) | [使用指南](USER_GUIDE.zh-TW.md)
-
 Scopes Tool WebUI 是 `scopes_tool_core` 的 Localhost-only 瀏覽器 Adapter。
 不匯入或依賴 CLI Adapter，也不擁有 VISA、SCPI、儀器身分、能力或安全行為。
+
+瀏覽器 WebUI 與 Desktop 的逐步操作請參閱
+[WebUI／Desktop 使用指南](USER_GUIDE.zh-TW.md)。本 README 說明 WebUI 行為、
+API、開發及維護邊界。
 
 Import Package：`scopes_tool_webui`
 

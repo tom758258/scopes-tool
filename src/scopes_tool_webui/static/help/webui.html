@@ -62,7 +62,6 @@
 
   <main class="help-content" id="help-content">
 <h1 id="scopes-tool-webui-and-desktop-user-guide">Scopes Tool WebUI and Desktop User Guide</h1>
-<p><a href="webui.zh-TW.html">繁體中文</a></p>
 <p>The browser WebUI and Electron Desktop share the same controls and this guide.
 They use Core's model, capability, and safety rules. Check
 <a href="supported-models.html">Supported Models</a> for the exact supported
@@ -157,6 +156,13 @@ not authorize other operations.</p>
 previous context's values must not be used as the current instrument state.
 An initial Live Data snapshot can run after a supported device is selected;
 Live Data does not continuously poll or stream waveforms.</p>
+<h2 id="first-simulated-run">First simulated run</h2>
+<ol>
+<li>Open the Desktop app or browser Launcher and select <strong>Simulate</strong> in Device / Resource.</li>
+<li>Choose a registered planning model. Do not use Scan Device for this hardware-free check.</li>
+<li>In Command Browser, select an available read-only measurement and use its <strong>Read</strong> or <strong>Run</strong> action.</li>
+<li>Check <strong>Workspace Result</strong> for the result and <strong>Result History</strong> for completion. If you later save a capture, set <strong>PC output folder</strong> and use <strong>Open Folder</strong> to find it.</li>
+</ol>
 <h2 id="commands-and-settings">Commands and settings</h2>
 <p>Select commands through the Command Browser; filter or show Advanced commands
 when needed. Unsupported commands remain disabled with an explanation.
