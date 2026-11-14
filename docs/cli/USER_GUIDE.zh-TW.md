@@ -1,7 +1,5 @@
 # Scopes Tool CLI 使用指南
 
-[English](USER_GUIDE.md)
-
 本指南適用於已安裝的 `scopes-tool` 命令或 Windows CLI 執行檔的一般操作。
 功能取決於[支援型號](../core/supported-models.zh-TW.md)所列的確切型號、
 Backend、Transport 及儀器已安裝選配。個別命令的參數請使用
@@ -61,6 +59,13 @@ stderr 會顯示錯誤並回傳 Exit Code `1`；無效參數回傳 `2`。
 每次儲存請使用新的輸出檔名。模擬結果不代表實機支援。
 獨立命令的模擬設定只存在於該次呼叫；Worker 模擬會在同一個 Worker Session
 保留成功操作後的狀態。
+
+## 第一次模擬量測
+
+1. 在 PowerShell 執行 `.\scopes-tool.exe identify --simulate --json`，確認模擬器可以使用。
+2. 執行 `.\scopes-tool.exe measure --channel 1 --item vpp --simulate --json`，讀取模擬量測值。
+3. 檢查 JSON 結果與結束碼。若要嘗試 `capture`，請使用新的輸出檔名，因為模擬擷取也會寫入檔案。
+4. 改用 Live 前請先閱讀下一節的連線與安全檢查；模擬成功不代表實機已受支援。
 
 ## 連接儀器
 

@@ -62,7 +62,6 @@
 
   <main class="help-content" id="help-content">
 <h1 id="scopes-tool-cli-user-guide">Scopes Tool CLI User Guide</h1>
-<p><a href="cli.zh-TW.html">繁體中文</a></p>
 <p>This guide covers normal operation of an installed <code>scopes-tool</code> command or
 the Windows CLI executable. Feature availability depends on the exact model,
 backend, transport, and installed instrument options in
@@ -134,6 +133,13 @@ Help follows the system color scheme when opened from the CLI.</p>
 <p>Use a new output filename for each saved run. Simulator results do not establish
 hardware support. Simulator settings are local to a standalone invocation;
 Worker simulation retains successful state within that Worker session.</p>
+<h2 id="first-simulated-measurement">First simulated measurement</h2>
+<ol>
+<li>In PowerShell, run <code>.\scopes-tool.exe identify --simulate --json</code> to confirm the simulator is available.</li>
+<li>Run <code>.\scopes-tool.exe measure --channel 1 --item vpp --simulate --json</code> to read a simulated measurement.</li>
+<li>Check the JSON result and exit code. If you try <code>capture</code>, choose a new output filename because simulated captures still write files.</li>
+<li>Before switching to Live, review the connection and safety checks in the next section; a simulator result is not evidence of instrument support.</li>
+</ol>
 <h2 id="connect-to-an-instrument">Connect to an instrument</h2>
 <p>System VISA is the default and requires separately installed Keysight IO
 Libraries or NI-VISA. Scopes Tool does not bundle that runtime and does not

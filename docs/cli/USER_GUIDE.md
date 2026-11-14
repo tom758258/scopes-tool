@@ -1,7 +1,5 @@
 # Scopes Tool CLI User Guide
 
-[繁體中文](USER_GUIDE.zh-TW.md)
-
 This guide covers normal operation of an installed `scopes-tool` command or
 the Windows CLI executable. Feature availability depends on the exact model,
 backend, transport, and installed instrument options in
@@ -65,6 +63,13 @@ Start without hardware:
 Use a new output filename for each saved run. Simulator results do not establish
 hardware support. Simulator settings are local to a standalone invocation;
 Worker simulation retains successful state within that Worker session.
+
+## First simulated measurement
+
+1. In PowerShell, run `.\scopes-tool.exe identify --simulate --json` to confirm the simulator is available.
+2. Run `.\scopes-tool.exe measure --channel 1 --item vpp --simulate --json` to read a simulated measurement.
+3. Check the JSON result and exit code. If you try `capture`, choose a new output filename because simulated captures still write files.
+4. Before switching to Live, review the connection and safety checks in the next section; a simulator result is not evidence of instrument support.
 
 ## Connect to an instrument
 
