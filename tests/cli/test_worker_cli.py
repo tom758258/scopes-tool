@@ -83,6 +83,108 @@ def test_worker_maps_single_wait_arguments_to_domain_command():
     assert parsed.force_trigger_on_timeout is True
 
 
+@pytest.mark.parametrize(
+    ("model", "command", "system_error", "include_status", "outcome"),
+    (
+        pytest.param(
+            "keysight-dsox4024a",
+            "single-wait",
+            {"code": 0, "message": "No error", "raw": '+0,"No error"', "is_error": False},
+            True,
+            "natural",
+            id="keysight-natural-no-instrument-error",
+        ),
+        pytest.param(
+            "keysight-dsox4024a",
+            "single-wait",
+            {"code": 0, "message": "No error", "raw": '+0,"No error"', "is_error": False},
+            True,
+            "timeout",
+            id="keysight-timeout-no-instrument-error",
+        ),
+        pytest.param(
+            "keysight-dsox4024a",
+            "single-wait",
+            {
+                "code": -222,
+                "message": "Data out of range",
+                "raw": '-222,"Data out of range"',
+                "is_error": True,
+            },
+            True,
+            "timeout",
+            id="keysight-timeout-with-instrument-error",
+        ),
+        pytest.param(
+            "tektronix-tbs2074",
+            "single-wait",
+            None,
+            True,
+            "timeout",
+            id="tektronix-native-status-unchanged",
+        ),
+        pytest.param(
+            "keysight-dsox4024a",
+            "single-wait",
+            None,
+            False,
+            "timeout",
+            id="missing-cli-system-error-unchanged",
+        ),
+        pytest.param(
+            "keysight-dsox4024a",
+            "identify",
+            {"code": 0, "message": "No error", "raw": '+0,"No error"', "is_error": False},
+            True,
+            None,
+            id="other-command-unchanged",
+        ),
+    ),
+)
+def test_worker_single_wait_preserves_cli_system_error_in_terminal(
+    monkeypatch, model, command, system_error, include_status, outcome
+):
+    runtime = _runtime(model=model)
+    result = (
+        {
+            "operation": "single-wait",
+            "outcome": outcome,
+            "timed_out": outcome == "timeout",
+        }
+        if command == "single-wait"
+        else {"idn": {"model_id": model}}
+    )
+    native_status = {"source": "tektronix-sesr", "is_error": False}
+    if model.startswith("tektronix"):
+        result["post_command_status"] = native_status
+    exit_code = 1 if outcome == "timeout" else 0
+    payload = {"ok": exit_code == 0, "result": result, "files": [], "error": None}
+    if include_status:
+        payload["system_error"] = system_error
+
+    def fake_execute(_parsed, *, stop_requested=None):
+        return payload, exit_code
+
+    monkeypatch.setattr(worker.scope_cli, "_execute_json_command", fake_execute)
+    _, terminal = _execute_worker_job(runtime, command, {})
+
+    assert terminal["state"] == ("failed" if exit_code else "succeeded")
+    assert terminal["ok"] is (exit_code == 0)
+    assert terminal["exit_code"] == exit_code
+    if command == "single-wait":
+        assert terminal["result"]["outcome"] == outcome
+        assert terminal["result"]["timed_out"] is (outcome == "timeout")
+        if include_status:
+            assert terminal["result"]["system_error"] == system_error
+        else:
+            assert "system_error" not in terminal["result"]
+        if model.startswith("tektronix"):
+            assert terminal["result"]["post_command_status"] == native_status
+    else:
+        assert terminal["result"] == {"idn": {"model_id": model}}
+    assert runtime.status_payload()["last_job"]["result"] == terminal["result"]
+
+
 @pytest.mark.parametrize("model", ("keysight-dsox2004a", "keysight-dsox3024a"))
 def test_worker_rejects_record_length_on_unsupported_series(model):
     with pytest.raises(ParameterValidationError, match="4000X"):

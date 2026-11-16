@@ -865,9 +865,16 @@ All three arguments are optional and default to the values shown. Timeout and
 poll interval must be positive, and poll interval cannot exceed timeout. The
 command sends `:SINGle`, polls Operation Condition, and conditionally uses
 `:TRIGger:FORCe` only when force-on-timeout is enabled. It returns the existing
-trigger-wait result schema and creates no artifacts. It uses the normal domain
-command dispatch and does not add an endpoint or change the Worker schema
-version.
+trigger-wait result schema and creates no artifacts. For `single-wait` only,
+the Worker copies the CLI's outer `system_error` field, when present, into
+`job_finished.result.system_error` (including `null`). Keysight thus retains
+the post-command system-error queue entry alongside the trigger outcome.
+Tektronix retains its native `result.post_command_status`; its
+`system_error` may be `null`. A missing or null `system_error` does not
+establish a clean instrument status. This result mapping does not change
+Worker job state, exit code, stop behavior, or terminal events. It uses the
+normal domain command dispatch and does not add an endpoint or change the
+Worker schema version.
 
 `trigger-edge` is accepted only as the canonical Edge trigger command. It uses
 the underlying Keysight `:TRIGger:MODE EDGE` and `:TRIGger:EDGE:*` SCPI family:
