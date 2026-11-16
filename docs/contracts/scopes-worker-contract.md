@@ -439,6 +439,13 @@ Worker `/command` supports the existing Scopes capability surface:
   `math-operator`, `math-composite-source`, `math-transform`, `math-filter`,
   `math-visualization`, `math-clear`
 
+For foreground `measure`, the Worker copies the CLI's outer `system_error`
+field, when present, into `job_finished.result.system_error` (including `null`).
+The existing `valid`, `value`, `reason`, and Tektronix native
+`result.post_command_status` fields remain unchanged. Missing or null
+`system_error` does not establish a clean instrument status. This result mapping
+does not change job state, exit code, cancellation, or Worker lifecycle behavior.
+
 `measure-results` reuses the CLI/Core read-only `:MEASure:RESults?` path and
 may return `statistics_items`. It is unrelated to Counter or
 `measure-counter`.
@@ -865,7 +872,7 @@ All three arguments are optional and default to the values shown. Timeout and
 poll interval must be positive, and poll interval cannot exceed timeout. The
 command sends `:SINGle`, polls Operation Condition, and conditionally uses
 `:TRIGger:FORCe` only when force-on-timeout is enabled. It returns the existing
-trigger-wait result schema and creates no artifacts. For `single-wait` only,
+trigger-wait result schema and creates no artifacts. For `single-wait`,
 the Worker copies the CLI's outer `system_error` field, when present, into
 `job_finished.result.system_error` (including `null`). Keysight thus retains
 the post-command system-error queue entry alongside the trigger outcome.

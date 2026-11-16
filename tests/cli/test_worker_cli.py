@@ -185,6 +185,75 @@ def test_worker_single_wait_preserves_cli_system_error_in_terminal(
     assert runtime.status_payload()["last_job"]["result"] == terminal["result"]
 
 
+@pytest.mark.parametrize(
+    ("model", "valid", "system_error", "include_status"),
+    (
+        pytest.param(
+            "keysight-dsox4024a", True,
+            {"code": 0, "is_error": False}, True,
+            id="keysight-valid",
+        ),
+        pytest.param(
+            "keysight-dsox4024a", False,
+            {"code": 0, "is_error": False}, True,
+            id="keysight-invalid-sentinel-no-instrument-error",
+        ),
+        pytest.param(
+            "keysight-dsox4024a", False,
+            {"code": -222, "is_error": True}, True,
+            id="keysight-invalid-with-instrument-error",
+        ),
+        pytest.param(
+            "tektronix-tbs2074", False, None, True,
+            id="tektronix-native-status",
+        ),
+        pytest.param(
+            "keysight-dsox4024a", False, None, False,
+            id="missing-cli-system-error",
+        ),
+    ),
+)
+def test_worker_measure_preserves_cli_system_error_in_terminal(
+    monkeypatch, model, valid, system_error, include_status
+):
+    runtime = _runtime(model=model)
+    result = {
+        "item": "vpp", "channel": 1, "value": 1.2 if valid else None,
+        "unit": "V", "valid": valid,
+        "raw_value": "1.2" if valid else "9.9E+37",
+        "reason": None if valid else "invalid measurement sentinel",
+    }
+    if model.startswith("tektronix"):
+        result["post_command_status"] = {
+            "source": "tektronix-sesr", "complete": True, "is_error": False,
+        }
+    exit_code = 0 if valid else 1
+    payload = {"ok": valid, "result": result, "files": [], "error": None}
+    if include_status:
+        payload["system_error"] = system_error
+    expected_result = {
+        **result, **({"system_error": system_error} if include_status else {}),
+    }
+
+    def fake_execute(_parsed, *, stop_requested=None):
+        return payload, exit_code
+
+    monkeypatch.setattr(worker.scope_cli, "_execute_json_command", fake_execute)
+    emitted = []
+    runtime.emit = lambda event, **values: emitted.append(
+        worker._event_payload(runtime, event, **values)
+    )
+    _, terminal = _execute_worker_job(runtime, "measure", {"channel": 1, "item": "vpp"})
+    assert terminal["result"] == expected_result
+    assert terminal["state"] == ("succeeded" if valid else "failed")
+    assert terminal["ok"] is valid
+    assert terminal["exit_code"] == exit_code
+    assert (terminal["error"] is None) is valid
+    finished = next(event for event in emitted if event["event"] == "job_finished")
+    assert finished["result"] == runtime.status_payload()["last_job"]["result"] == expected_result
+    assert finished["state"] == terminal["state"]
+    assert finished["exit_code"] == exit_code
+
 @pytest.mark.parametrize("model", ("keysight-dsox2004a", "keysight-dsox3024a"))
 def test_worker_rejects_record_length_on_unsupported_series(model):
     with pytest.raises(ParameterValidationError, match="4000X"):
