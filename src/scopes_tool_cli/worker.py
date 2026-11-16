@@ -641,6 +641,10 @@ def _job_loop(runtime: WorkerRuntime) -> None:
                 parsed,
                 stop_requested=lambda: job.cancel_requested or runtime.stopping,
             )
+            if job.command == "single-wait":
+                result = payload.get("result")
+                if isinstance(result, dict) and "system_error" in payload:
+                    result["system_error"] = deepcopy(payload["system_error"])
             job.result = payload
             job.exit_code = exit_code
             workflow_status = _core_workflow_result_status(job.command, payload)
