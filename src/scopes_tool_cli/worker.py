@@ -641,7 +641,7 @@ def _job_loop(runtime: WorkerRuntime) -> None:
                 parsed,
                 stop_requested=lambda: job.cancel_requested or runtime.stopping,
             )
-            if job.command == "single-wait":
+            if job.command in {"single-wait", "measure"}:
                 result = payload.get("result")
                 if isinstance(result, dict) and "system_error" in payload:
                     result["system_error"] = deepcopy(payload["system_error"])
