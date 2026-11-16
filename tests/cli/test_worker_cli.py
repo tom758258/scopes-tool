@@ -84,13 +84,22 @@ def test_worker_maps_single_wait_arguments_to_domain_command():
 
 
 @pytest.mark.parametrize(
-    ("model", "command", "system_error", "include_status"),
+    ("model", "command", "system_error", "include_status", "outcome"),
     (
         pytest.param(
             "keysight-dsox4024a",
             "single-wait",
             {"code": 0, "message": "No error", "raw": '+0,"No error"', "is_error": False},
             True,
+            "natural",
+            id="keysight-natural-no-instrument-error",
+        ),
+        pytest.param(
+            "keysight-dsox4024a",
+            "single-wait",
+            {"code": 0, "message": "No error", "raw": '+0,"No error"', "is_error": False},
+            True,
+            "timeout",
             id="keysight-timeout-no-instrument-error",
         ),
         pytest.param(
@@ -103,6 +112,7 @@ def test_worker_maps_single_wait_arguments_to_domain_command():
                 "is_error": True,
             },
             True,
+            "timeout",
             id="keysight-timeout-with-instrument-error",
         ),
         pytest.param(
@@ -110,6 +120,7 @@ def test_worker_maps_single_wait_arguments_to_domain_command():
             "single-wait",
             None,
             True,
+            "timeout",
             id="tektronix-native-status-unchanged",
         ),
         pytest.param(
@@ -117,6 +128,7 @@ def test_worker_maps_single_wait_arguments_to_domain_command():
             "single-wait",
             None,
             False,
+            "timeout",
             id="missing-cli-system-error-unchanged",
         ),
         pytest.param(
@@ -124,23 +136,28 @@ def test_worker_maps_single_wait_arguments_to_domain_command():
             "identify",
             {"code": 0, "message": "No error", "raw": '+0,"No error"', "is_error": False},
             True,
+            None,
             id="other-command-unchanged",
         ),
     ),
 )
 def test_worker_single_wait_preserves_cli_system_error_in_terminal(
-    monkeypatch, model, command, system_error, include_status
+    monkeypatch, model, command, system_error, include_status, outcome
 ):
     runtime = _runtime(model=model)
     result = (
-        {"operation": "single-wait", "outcome": "timeout", "timed_out": True}
+        {
+            "operation": "single-wait",
+            "outcome": outcome,
+            "timed_out": outcome == "timeout",
+        }
         if command == "single-wait"
         else {"idn": {"model_id": model}}
     )
     native_status = {"source": "tektronix-sesr", "is_error": False}
     if model.startswith("tektronix"):
         result["post_command_status"] = native_status
-    exit_code = 1 if command == "single-wait" else 0
+    exit_code = 1 if outcome == "timeout" else 0
     payload = {"ok": exit_code == 0, "result": result, "files": [], "error": None}
     if include_status:
         payload["system_error"] = system_error
@@ -152,10 +169,11 @@ def test_worker_single_wait_preserves_cli_system_error_in_terminal(
     _, terminal = _execute_worker_job(runtime, command, {})
 
     assert terminal["state"] == ("failed" if exit_code else "succeeded")
+    assert terminal["ok"] is (exit_code == 0)
     assert terminal["exit_code"] == exit_code
     if command == "single-wait":
-        assert terminal["result"]["outcome"] == "timeout"
-        assert terminal["result"]["timed_out"] is True
+        assert terminal["result"]["outcome"] == outcome
+        assert terminal["result"]["timed_out"] is (outcome == "timeout")
         if include_status:
             assert terminal["result"]["system_error"] == system_error
         else:
