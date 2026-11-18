@@ -187,6 +187,14 @@ Stop cancels queued work and requests cooperative cancellation of active work;
 wait for cleanup and the final summary before treating shutdown as complete.
 Do not expose Worker or WebUI ports to untrusted networks.
 
+For optional read-only numeric Measure Streaming, start a separate Worker with
+`--streaming` (for example,
+`scopes-tool worker --simulate --model keysight-dsox4024a --streaming --format jsonl`).
+After any setup jobs finish, send the one-time `measure-stream-start` control via
+`POST /command`. It supports finite cycles or unlimited cycles until `POST /stop`;
+it does not stream waveforms, persist samples, or support restart/pause/resume.
+This opt-in mode is distinct from ordinary queued Async Jobs.
+
 ## Errors and troubleshooting
 
 | Symptom | Action |
