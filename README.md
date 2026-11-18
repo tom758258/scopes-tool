@@ -47,6 +47,8 @@ Scopes Worker uses Common Worker Protocol v3 only (`schema 3`, `v3-only`) with
   and segmented-memory operations.
 - Run finite measurement, logging, periodic and triggered capture workflows,
   capture-until, capture-monitor, and Generic Sequence v1.
+- Opt in to deferred, read-only multi-channel numeric Measure Streaming through
+  `worker --streaming`, with finite or unlimited cycles (not waveform streaming).
 - Use hardware-free simulation and Core-planned dry-run where supported, with
   JSON, JSONL, CSV, and host-side capture artifacts for automation.
 - Switch the WebUI/Desktop language between English and Traditional Chinese and
