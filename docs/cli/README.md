@@ -460,7 +460,11 @@ ASRL/RS-232 live checks use a bounded best-effort discovery path with a 1000 ms
 open/query timeout so a stale serial port does not prevent later USB or TCPIP
 resources from being checked. This compatibility check is only for live
 discovery and does not mean the Scope runtime supports full RS-232 acquisition
-or control workflows.
+or control workflows. These 1000 ms timeouts apply to per-resource verification,
+not to the underlying `ResourceManager.list_resources()` enumeration. If the
+VISA backend itself fails to enumerate, the entire listing reports an error;
+there is no guaranteed fallback scan. Hardware mixed-transport behavior still
+depends on the installed VISA runtime and drivers.
 
 For ASRL live discovery only, serial termination can be set when needed for a
 specific adapter or instrument:
