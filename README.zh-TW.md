@@ -40,6 +40,8 @@ v2 整合端必須遷移，不提供 fallback。Feature 宣告與遷移細節請
   與分段記憶體操作。
 - 執行有限次量測、記錄、週期及觸發擷取工作流程，以及 capture-until、
   capture-monitor 與 Generic Sequence v1。
+- 透過 `worker --streaming` 明確啟用延後開始、唯讀的多通道數值量測串流，
+  可指定有限循環或持續量測直到 Stop；不提供波形串流。
 - 在支援的操作中使用無硬體模擬與 Core dry-run 規劃，並產生供自動化使用的
   JSON、JSONL、CSV 與主機端擷取產物。
 - WebUI/Desktop 可切換英文與繁體中文、選擇 System、Light 或 Dark 外觀，
