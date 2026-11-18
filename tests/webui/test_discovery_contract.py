@@ -145,7 +145,6 @@ def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch
     ]
 
 
-
 @pytest.mark.parametrize("selector", [None, "@py"])
 def test_webui_live_scan_continues_after_stale_asrl(monkeypatch, tmp_path, selector) -> None:
     listing = VisaResourceListing(
@@ -195,6 +194,7 @@ def test_webui_live_scan_continues_after_stale_asrl(monkeypatch, tmp_path, selec
         ("asrl", "ASRL7::INSTR"),
         ("usb", "USB0::LIVE::INSTR"),
     ]
+
 
 def test_webui_list_resources_defaults_to_raw_mode(monkeypatch, tmp_path) -> None:
     calls = []
