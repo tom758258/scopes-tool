@@ -314,6 +314,10 @@ Payload 見 [Scopes CLI JSONL Contract](../contracts/scopes-cli-jsonl-contract.m
 
 ASRL/RS-232 Discovery 採盡力而為且有界限 1000 ms Open/Query，避免過期 Port 阻止後續 USB/TCPIP。
 此相容檢查僅 Discovery，不代表 Runtime 支援完整 RS-232 擷取／控制。
+上述 1000 ms 逾時僅適用個別 Resource 驗證，不涵蓋底層
+`ResourceManager.list_resources()` 列舉階段。若 VISA Backend 本身列舉失敗，
+整次清單操作仍會回報錯誤，不會保證自動退回另一種掃描方式。
+實體 USB／RS-232 混合環境的結果仍取決於安裝的 VISA Runtime 與驅動程式。
 
 僅 ASRL Live Discovery，可依特定 Adapter／儀器設定 Serial Termination：
 
