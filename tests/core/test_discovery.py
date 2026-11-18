@@ -92,6 +92,47 @@ def test_live_discovery_keeps_responders_and_skips_failed_candidates(monkeypatch
     ]
 
 
+def test_live_discovery_continues_after_stale_asrl_to_usb_and_tcpip(monkeypatch) -> None:
+    listing = VisaResourceListing(
+        resources=(
+            "ASRL7::INSTR",
+            "USB0::LIVE::INSTR",
+            "TCPIP0::192.0.2.1::INSTR",
+        ),
+        backend="fake backend",
+    )
+    calls = []
+
+    def verify_asrl(resource, **_kwargs):
+        calls.append(("asrl", resource))
+        return VisaLiveVerification(resource, False, None, "timed out")
+
+    def verify_other(resource, **_kwargs):
+        calls.append(("generic", resource))
+        return VisaLiveVerification(
+            resource, True, "KEYSIGHT TECHNOLOGIES,DSOX4024A,MY123,01.00", None
+        )
+
+    monkeypatch.setattr(discovery, "list_visa_resources", lambda **_: listing)
+    monkeypatch.setattr(discovery, "verify_asrl_resource_live", verify_asrl)
+    monkeypatch.setattr(discovery, "verify_visa_resource_live", verify_other)
+
+    result = discovery.discover_visa_resources(live_only=True)
+
+    assert result.backend == "fake backend"
+    assert [resource.name for resource in result.resources] == [
+        "USB0::LIVE::INSTR",
+        "TCPIP0::192.0.2.1::INSTR",
+    ]
+    assert all(resource.reachable for resource in result.resources)
+    assert all(resource.model_id == "keysight-dsox4024a" for resource in result.resources)
+    assert calls == [
+        ("asrl", "ASRL7::INSTR"),
+        ("generic", "USB0::LIVE::INSTR"),
+        ("generic", "TCPIP0::192.0.2.1::INSTR"),
+    ]
+
+
 def test_live_discovery_zero_responders_is_successful_empty_result(monkeypatch) -> None:
     listing = VisaResourceListing(resources=("USB0::A::INSTR",), backend="fake backend")
     monkeypatch.setattr(discovery, "list_visa_resources", lambda **_: listing)

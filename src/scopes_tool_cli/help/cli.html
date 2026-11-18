@@ -231,6 +231,13 @@ terminal <code>last_job</code>. Output-producing Worker jobs require explicit de
 Stop cancels queued work and requests cooperative cancellation of active work;
 wait for cleanup and the final summary before treating shutdown as complete.
 Do not expose Worker or WebUI ports to untrusted networks.</p>
+<p>For optional read-only numeric Measure Streaming, start a separate Worker with
+<code>--streaming</code> (for example,
+<code>scopes-tool worker --simulate --model keysight-dsox4024a --streaming --format jsonl</code>).
+After any setup jobs finish, send the one-time <code>measure-stream-start</code> control via
+<code>POST /command</code>. It supports finite cycles or unlimited cycles until <code>POST /stop</code>;
+it does not stream waveforms, persist samples, or support restart/pause/resume.
+This opt-in mode is distinct from ordinary queued Async Jobs.</p>
 <h2 id="errors-and-troubleshooting">Errors and troubleshooting</h2>
 <table>
 <thead>

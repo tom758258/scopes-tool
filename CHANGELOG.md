@@ -16,8 +16,10 @@
   in the [workflow contract](docs/contracts/scopes-orchestrator-workflows.md).
 - Worker HTTP and JSONL use schema 3; Manifest and ordinary CLI JSON remain
   schema 2. Do not upgrade all schemas together. The Manifest declares
-  `multi_job` / `startup` and only `common.async_jobs` contract version 1;
-  `common.job_cancel` and `common.streaming` are not declared.
+  `multi_job` / `startup`, `common.async_jobs` contract version 1, and
+  optional `common.streaming` version 1 (`deferred_start`). Ordinary Workers
+  adopt only Async Jobs; `--streaming` opts in to numeric Measure Streaming.
+  `common.job_cancel` is not adopted.
 
 ### Added
 
@@ -35,6 +37,9 @@
   structured results, artifacts, progress, and cooperative cancellation.
 - Provides hardware-free simulation for registered Keysight and Tektronix models
   and Core-backed dry-run planning for supported operations.
+- Adds optional deferred, read-only multi-channel numeric Measure Streaming through
+  `worker --streaming`, with a one-time `measure-stream-start` control, finite or
+  unlimited cycles, and termination through `POST /stop`.
 - Includes an Electron Desktop shell and Windows onedir packaging with the
   Desktop, CLI, WebUI Launcher, and private Host sharing one `_internal`, plus
   versioned release archives, SHA-256 checksums, and no-hardware acceptance checks.
@@ -77,9 +82,11 @@
   options remain model-dependent. Tektronix supports a documented subset;
   normalized `check-error` and simulator signal presets/error injection are
   unavailable for those models. Simulation does not establish live support.
-- The Worker uses startup-bound context and serialized jobs, with no common
-  per-job cancel or streaming extension, history, or replay. Existing cooperative
-  Worker stop and workflow cancellation retain their tool-specific semantics.
+- The Worker uses startup-bound context and serialized jobs, without common
+  per-job cancellation, history, or replay. Opt-in Streaming covers read-only
+  numeric measurements only: no waveform streaming, sample persistence, or
+  stream restart/pause/resume. Existing cooperative Worker stop and workflow
+  cancellation retain their tool-specific semantics.
 - Generic Sequence v1 composes supported Core operations, not arbitrary SCPI.
   WebUI is localhost-only; Desktop packages target Windows x64. No-hardware
   acceptance does not validate GUI interaction or live instruments.
