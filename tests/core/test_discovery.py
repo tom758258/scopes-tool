@@ -92,7 +92,6 @@ def test_live_discovery_keeps_responders_and_skips_failed_candidates(monkeypatch
     ]
 
 
-
 def test_live_discovery_continues_after_stale_asrl_to_usb_and_tcpip(monkeypatch) -> None:
     listing = VisaResourceListing(
         resources=(
@@ -132,6 +131,7 @@ def test_live_discovery_continues_after_stale_asrl_to_usb_and_tcpip(monkeypatch)
         ("generic", "USB0::LIVE::INSTR"),
         ("generic", "TCPIP0::192.0.2.1::INSTR"),
     ]
+
 
 def test_live_discovery_zero_responders_is_successful_empty_result(monkeypatch) -> None:
     listing = VisaResourceListing(resources=("USB0::A::INSTR",), backend="fake backend")
