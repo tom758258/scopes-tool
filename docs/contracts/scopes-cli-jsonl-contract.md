@@ -211,11 +211,16 @@ exactly one JSON object on stdout with exit code `0`.
   `schema_versions` (from the existing Worker schema version source) and the
   fixed `compatibility_policy: "v3-only"`, with `schema_versions: [3]`.
 - `execution`: `model: "multi_job"`, `context_binding: "startup"`.
-- `features`: `common.async_jobs` with `contract_version: 1`.
+- `features`: `common.async_jobs` with `contract_version: 1`, plus optional
+  `common.streaming` with `contract_version: 1` and
+  `lifecycles: ["deferred_start"]`.
 
-The domain Command Inventory explicitly defines every `/command` as an
-`async_job`, including `stop-acquisition`; the Manifest does not enumerate it.
-No Cancel or Streaming feature is advertised.
+The domain Command Inventory defines ordinary `/command` entries as
+`async_job`, including `stop-acquisition`. In an opted-in Streaming Worker,
+`measure-stream-start` is a one-time `control`, not an Async Job. The Manifest
+itself does not enumerate commands. `common.job_cancel` is not advertised.
+Manifest support for `common.streaming` does not imply runtime adoption;
+only a Worker explicitly started with `--streaming` adopts the feature.
 
 It does not report per-model capabilities; use `capabilities` for that.
 
