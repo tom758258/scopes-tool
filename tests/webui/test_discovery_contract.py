@@ -145,6 +145,57 @@ def test_webui_live_resource_result_preserves_asrl_and_usb_discovery(monkeypatch
     ]
 
 
+
+@pytest.mark.parametrize("selector", [None, "@py"])
+def test_webui_live_scan_continues_after_stale_asrl(monkeypatch, tmp_path, selector) -> None:
+    listing = VisaResourceListing(
+        resources=("ASRL7::INSTR", "USB0::LIVE::INSTR"),
+        backend="fake backend",
+    )
+    calls = []
+
+    def verify_asrl(resource, **_kwargs):
+        calls.append(("asrl", resource))
+        return VisaLiveVerification(resource, False, None, "timed out")
+
+    def verify_usb(resource, **_kwargs):
+        calls.append(("usb", resource))
+        return VisaLiveVerification(
+            resource, True, "AGILENT TECHNOLOGIES,DSO-X 4034A,MY456,2.0", None
+        )
+
+    monkeypatch.setattr(discovery, "list_visa_resources", lambda **_: listing)
+    monkeypatch.setattr(discovery, "verify_asrl_resource_live", verify_asrl)
+    monkeypatch.setattr(discovery, "verify_visa_resource_live", verify_usb)
+
+    request = command_validation_module.validate_job_request({
+        "command": "list-resources",
+        "mode": "live",
+        "parameters": {"live_only": True},
+        "visa_library": selector,
+    })
+    response = command_execution_module.execute_command(
+        request["command"],
+        mode=request["mode"],
+        resource=request["resource"],
+        visa_library=request["visa_library"],
+        model_id=request["model_id"],
+        parameters=request["parameters"],
+        artifact_dir=tmp_path,
+    )
+
+    resources = response["result"]["resources"]
+    assert response["exit_code"] == 0
+    assert len(resources) == 1
+    assert resources[0]["name"] == "USB0::LIVE::INSTR"
+    assert resources[0]["interface"] == "USB"
+    assert resources[0]["reachable"] is True
+    assert resources[0]["model_id"] == "keysight-dsox4034a"
+    assert calls == [
+        ("asrl", "ASRL7::INSTR"),
+        ("usb", "USB0::LIVE::INSTR"),
+    ]
+
 def test_webui_list_resources_defaults_to_raw_mode(monkeypatch, tmp_path) -> None:
     calls = []
 
