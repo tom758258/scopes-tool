@@ -170,6 +170,12 @@ Live Worker 必須同時提供 `--live --resource <RESOURCE>` 及正確的預期
 Stop 取消佇列工作並要求執行中的工作合作式取消；請等待清理及最後 Summary，
 才視為關閉完成。不要將 Worker 或 WebUI 連接埠暴露至不受信任的網路。
 
+若要選用唯讀數值量測串流，請以 `--streaming` 啟動獨立 Worker，例如
+`scopes-tool worker --simulate --model keysight-dsox4024a --streaming --format jsonl`。
+完成必要設定工作後，透過 `POST /command` 傳送一次性 `measure-stream-start` 控制命令。
+可指定有限循環或持續量測直到 `POST /stop`；不支援波形串流、資料持久化或
+重新開始／暫停／恢復串流。此選用模式與一般排隊的 Async Job 不同。
+
 ## 錯誤與疑難排解
 
 | 現象 | 處理方式 |
