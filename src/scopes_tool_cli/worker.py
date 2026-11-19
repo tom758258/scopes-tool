@@ -888,7 +888,7 @@ def _instrument_failure_message(payload: dict[str, Any]) -> str | None:
     if isinstance(status, dict) and status.get("is_error") is True:
         code = status.get("code")
         detail = status.get("message")
-        if type(code) is int and code != 0:
+        if isinstance(code, int) and not isinstance(code, bool) and code != 0:
             if isinstance(detail, str) and detail.strip():
                 return f"SCPI error {code}: {detail}"
             return f"SCPI error {code}"
@@ -899,7 +899,7 @@ def _instrument_failure_message(payload: dict[str, Any]) -> str | None:
     if not isinstance(status, dict):
         return None
     value = status.get("value")
-    error_bits = value & 0x3C if type(value) is int else 0
+    error_bits = value & 0x3C if isinstance(value, int) and not isinstance(value, bool) else 0
     events = status.get("events")
     error_events = (
         [event for event in events if isinstance(event, dict) and event.get("category") == "error"]
