@@ -878,6 +878,50 @@ def _existing_files(files: list[Any]) -> list[Any]:
     return existing
 
 
+def _instrument_failure_message(payload: dict[str, Any]) -> str | None:
+    """Summarize an existing instrument error without querying hardware."""
+    result = payload.get("result")
+    result = result if isinstance(result, dict) else {}
+    status = payload.get("system_error")
+    if not isinstance(status, dict):
+        status = result.get("system_error")
+    if isinstance(status, dict) and status.get("is_error") is True:
+        code = status.get("code")
+        detail = status.get("message")
+        if type(code) is int and code != 0:
+            if isinstance(detail, str) and detail.strip():
+                return f"SCPI error {code}: {detail}"
+            return f"SCPI error {code}"
+        if isinstance(detail, str) and detail.strip():
+            return f"SCPI error: {detail.strip()}"
+
+    status = result.get("post_command_status")
+    if not isinstance(status, dict):
+        return None
+    value = status.get("value")
+    error_bits = value & 0x3C if type(value) is int else 0
+    events = status.get("events")
+    error_events = (
+        [event for event in events if isinstance(event, dict) and event.get("category") == "error"]
+        if isinstance(events, list) else []
+    )
+    if not (error_bits or error_events or status.get("complete") is False):
+        return None
+    raw = status.get("raw")
+    label = (
+        f"Tektronix SESR {raw.strip()}"
+        if isinstance(raw, str) and raw.strip()
+        else "Tektronix status error"
+    )
+    if error_events:
+        message = error_events[0].get("message")
+        if isinstance(message, str) and message.strip():
+            return f"{label}: {message.strip()}"
+    if status.get("complete") is False:
+        return f"{label}: incomplete status"
+    return f"{label}: error bits {error_bits}"
+
+
 def _terminal_job_view(job: WorkerJob) -> dict[str, Any]:
     if job.terminal_snapshot is not None:
         return deepcopy(job.terminal_snapshot)
@@ -887,6 +931,8 @@ def _terminal_job_view(job: WorkerJob) -> dict[str, Any]:
     error = None
     if job.state != "succeeded":
         message = domain_error.get("message") if isinstance(domain_error, dict) else None
+        if (not isinstance(message, str) or not message.strip()) and job.state == "failed":
+            message = _instrument_failure_message(payload)
         error = _common_error(
             "execution", "job_cancelled" if job.state == "cancelled" else "job_failed",
             message or f"job {job.state}", domain_error=domain_error,
