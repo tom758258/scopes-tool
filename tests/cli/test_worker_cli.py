@@ -1014,6 +1014,98 @@ def test_worker_failed_job_exposes_terminal_error_in_status_last_job(
 
 
 @pytest.mark.parametrize(
+    ("model", "system_error", "post_status", "cli_error", "expected_parts"),
+    (
+        pytest.param(
+            "keysight-dsox4024a",
+            {"is_error": True, "code": -222, "message": "Data out of range"},
+            None, None, ("-222", "Data out of range"),
+            id="keysight-queue-error",
+        ),
+        pytest.param(
+            "tektronix-tbs2074", None,
+            {"raw": "32", "value": 32, "is_error": True},
+            None, ("SESR 32", "error"),
+            id="tektronix-sesr-error",
+        ),
+        pytest.param(
+            "tektronix-tbs2074", None,
+            {"source": "tektronix-sesr", "raw": "32", "value": 32, "complete": True,
+             "events": [{"category": "error", "message": "Unknown command"}]},
+            None, ("SESR 32", "Unknown command"),
+            id="tektronix-native-event",
+        ),
+        pytest.param(
+            "tektronix-tbs2074", None,
+            {"source": "tektronix-sesr", "raw": "0", "value": 0, "complete": False,
+             "is_error": True, "events": []},
+            None, ("SESR 0", "incomplete"),
+            id="tektronix-incomplete-status",
+        ),
+        pytest.param(
+            "tektronix-tbs2074", None,
+            {"source": "tektronix-sesr", "raw": "0", "value": 0,
+             "complete": True, "is_error": True, "events": []},
+            None, ("job failed",),
+            id="tektronix-clean-sesr-does-not-imply-command-error",
+        ),
+        pytest.param(
+            "keysight-dsox4024a", {"is_error": False, "code": 0}, None,
+            None, ("job failed",),
+            id="no-instrument-error-fallback",
+        ),
+        pytest.param(
+            "keysight-dsox4024a",
+            {"is_error": True, "code": -222, "message": "Data out of range"},
+            None, {"type": "OscilloscopeError", "message": "specific CLI error"},
+            ("specific CLI error",),
+            id="existing-cli-error-keeps-priority",
+        ),
+    ),
+)
+def test_worker_failed_job_instrument_diagnostic_reaches_terminal_and_status(
+    monkeypatch, model, system_error, post_status, cli_error, expected_parts
+):
+    runtime = _runtime(model=model)
+    result = {"channel": 1, "operation": "set", "display": False}
+    if post_status is not None:
+        result["post_command_status"] = post_status
+    payload = {"ok": False, "result": result, "files": [], "error": cli_error}
+    if system_error is not None:
+        payload["system_error"] = system_error
+
+    def fake_execute(_parsed, *, stop_requested=None):
+        return payload, 1
+
+    monkeypatch.setattr(worker.scope_cli, "_execute_json_command", fake_execute)
+    events = []
+    runtime.emit = lambda event, **values: events.append(
+        worker._event_payload(runtime, event, **values)
+    )
+    _, terminal = _execute_worker_job(
+        runtime, "channel-display", {"channel": 1, "off": True}
+    )
+
+    assert terminal["state"] == "failed"
+    assert terminal["ok"] is False
+    assert terminal["exit_code"] == 1
+    assert terminal["result"] == result
+    assert terminal["error"]["category"] == "execution"
+    assert terminal["error"]["code"] == "job_failed"
+    message = terminal["error"]["message"]
+    assert isinstance(message, str)
+    assert all(fragment in message for fragment in expected_parts)
+    if expected_parts == ("job failed",) or cli_error is not None:
+        assert message == expected_parts[0]
+    if cli_error is None:
+        assert terminal["error"]["details"] == {}
+    else:
+        assert terminal["error"]["details"]["domain_error"] == cli_error
+    finished = next(event for event in events if event["event"] == "job_finished")
+    assert finished["error"] == runtime.status_payload()["last_job"]["error"] == terminal["error"]
+
+
+@pytest.mark.parametrize(
     ("command", "arguments", "missing_key"),
     (
         ("screenshot", {"format": "png"}, "output"),
